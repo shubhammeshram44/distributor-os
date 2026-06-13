@@ -22,8 +22,8 @@ class GeminiService:
         if self.enabled:
             try:
                 genai.configure(api_key=self.api_key)
-                # Using gemini-1.5-flash for fast NLP parsing
-                self.model = genai.GenerativeModel("gemini-1.5-flash")
+                # Using gemini-2.5-flash for fast NLP parsing
+                self.model = genai.GenerativeModel("gemini-2.5-flash")
                 logger.info("Gemini Service initialized successfully.")
             except Exception as e:
                 logger.error(f"Failed to initialize Gemini Client: {e}")
