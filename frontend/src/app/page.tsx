@@ -11,6 +11,7 @@ import InventorySummary from "@/components/InventorySummary";
 import ActivityFeed from "@/components/ActivityFeed";
 import { useDashboardData } from "@/hooks/useDashboardData";
 import { ChevronDown, SlidersHorizontal, RefreshCw } from "lucide-react";
+import WhatsAppSimulator from "@/components/WhatsAppSimulator";
 
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState("Dashboard");
@@ -104,6 +105,68 @@ export default function DashboardPage() {
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
             {/* Left Col: Recent Orders Table (60% width) */}
             <div className="lg:col-span-3 min-h-[380px]">
+              
+              {/* WhatsApp Ingestion Simulator Card Widget */}
+              <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm mb-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="text-xl">📱</span>
+                  <h3 className="font-semibold text-slate-800 text-lg">WhatsApp Ingestion Simulator</h3>
+                </div>
+                
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 mb-1">Select Simulating Customer Node</label>
+                    <select id="mock-sender-phone" className="w-full p-2.5 rounded-lg border border-slate-200 text-sm bg-slate-50 text-slate-700 bg-white">
+                      <option value="+919999888877">Kaveri Provision Store (+91 99998 88877)</option>
+                      <option value="+919999777766">Maruthi Stores (+91 99997 77766)</option>
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 mb-1">Type Incoming WhatsApp Text (Hinglish/Unstructured)</label>
+                    <textarea 
+                      id="mock-message-text" 
+                      rows={3} 
+                      className="w-full p-2.5 rounded-lg border border-slate-200 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-brand-blue"
+                      placeholder="e.g., Bhaiya, Kaveri store se bol raha hu. 50 piece Tata Soap urgently route kar do..."
+                    />
+                  </div>
+                  
+                  <button 
+                    onClick={async () => {
+                      const phone = (document.getElementById('mock-sender-phone') as HTMLSelectElement).value;
+                      const text = (document.getElementById('mock-message-text') as HTMLTextAreaElement).value;
+                      if(!text.trim()) return alert('Please enter a mock message string.');
+                      
+                      try {
+                        const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
+                        const res = await fetch(`${apiBase}/api/v1/whatsapp/webhook`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ 
+                            tenant_id: activeTenantId, 
+                            phone_number: phone, 
+                            sender_phone: phone, 
+                            message_text: text 
+                          })
+                        });
+                        if(res.ok) {
+                          alert('Order processed successfully via AI engine pipeline!');
+                          window.location.reload(); // Hard refresh grid context
+                        } else {
+                          alert('Pipeline execution failed: ' + res.statusText);
+                        }
+                      } catch(err) {
+                        alert('Network connection breakdown.');
+                      }
+                    }}
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm p-2.5 rounded-lg transition-colors shadow-sm cursor-pointer"
+                  >
+                    ⚡ Simulate Webhook Ingestion
+                  </button>
+                </div>
+              </div>
+
               <RecentOrders
                 orders={recentOrders}
                 fetchOrderDetails={fetchOrderDetails}
@@ -133,6 +196,12 @@ export default function DashboardPage() {
           </div>
         </main>
       </div>
+
+      {/* WhatsApp Ingestion Live testing simulator */}
+      <WhatsAppSimulator
+        activeTenantId={activeTenantId}
+        onSuccess={refreshAll}
+      />
     </div>
   );
 }
