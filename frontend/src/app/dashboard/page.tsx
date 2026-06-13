@@ -11,6 +11,7 @@ import InventorySummary from "@/components/InventorySummary";
 import ActivityFeed from "@/components/ActivityFeed";
 import { useDashboardData } from "@/hooks/useDashboardData";
 import { ChevronDown, SlidersHorizontal, RefreshCw } from "lucide-react";
+import WhatsAppSimulator from "@/components/WhatsAppSimulator";
 
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState("Dashboard");
@@ -133,6 +134,12 @@ export default function DashboardPage() {
           </div>
         </main>
       </div>
+
+      {/* WhatsApp Ingestion Live testing simulator */}
+      <WhatsAppSimulator
+        activeTenantId={activeTenantId}
+        onSuccess={refreshAll}
+      />
     </div>
   );
 }
