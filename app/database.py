@@ -1,4 +1,5 @@
 import contextvars
+import os
 import uuid
 from typing import Generator
 from sqlalchemy import create_engine, event, text, ForeignKey
@@ -7,7 +8,8 @@ from sqlalchemy.orm import sessionmaker, Session, DeclarativeBase, with_loader_c
 # Context variable to hold tenant ID of the current request/session
 tenant_context: contextvars.ContextVar[uuid.UUID | None] = contextvars.ContextVar("tenant_id", default=None)
 
-DATABASE_URL = "sqlite:///./distributor_os.db"  # Change to PostgreSQL connection string in production
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATABASE_URL = f"sqlite:///{os.path.join(BASE_DIR, 'distributor_os.db')}"
 
 engine = create_engine(
     DATABASE_URL,
