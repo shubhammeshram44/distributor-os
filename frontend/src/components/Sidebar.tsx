@@ -32,7 +32,7 @@ export default function Sidebar({ activeTab, setActiveTab, tenantName }: Sidebar
     { name: "Inventory", icon: Box, href: "/dashboard/inventory" },
     { name: "Products", icon: Layers, href: "/dashboard/products" },
     { name: "Customers", icon: Users, href: "/dashboard/customers" },
-    { name: "Shipments", icon: Truck },
+    { name: "Shipments", icon: Truck, href: "/dashboard/shipments" },
     { name: "Collections", icon: CreditCard },
     { name: "Sales Analytics", icon: BarChart3, href: "/dashboard/sales-analytics" },
     { name: "Reports", icon: FileText, href: "/dashboard/reports" },
