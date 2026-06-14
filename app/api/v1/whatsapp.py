@@ -28,6 +28,12 @@ def handle_whatsapp_webhook(
     db: Session = Depends(get_db)
 ):
     try:
+        # 1. Print the raw incoming message
+        print("\n================== INCOMING RAW WHATSAPP MESSAGE ==================")
+        print(f"Sender: {payload.sender_phone}")
+        print(f"Message: {payload.message_text}")
+        print("=====================================================================\n")
+
         # Normalize message text for scanning
         msg = payload.message_text.lower()
         resolved_tenant_id = payload.tenant_id or DEMO_TENANT_ID
@@ -206,7 +212,7 @@ def handle_whatsapp_webhook(
                 unit_price=item["rate"]
             ))
 
-        # 6. Record state transition (maps to Pending status in Recent Orders UI)
+        # Record state transition (maps to Pending status in Recent Orders UI)
         db.add(OrderStateLedger(
             tenant_id=resolved_tenant_id,
             order_id=new_order.id,
@@ -214,6 +220,13 @@ def handle_whatsapp_webhook(
             to_status="Draft",
             updated_by="system_whatsapp_agent"
         ))
+
+        # 2. Print the structured line items before committing
+        print("\n================== GENERATED STRUCTURED DATA ==================")
+        print(f"Assigned Customer: {customer_name}")
+        print(f"Generated Order ID: {generated_order_id}")
+        print(f"Parsed Items Array: {parsed_items}")
+        print("=====================================================================\n")
 
         db.commit()
         db.refresh(new_order)
