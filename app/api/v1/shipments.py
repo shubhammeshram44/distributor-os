@@ -8,14 +8,17 @@ from app.models.order import Order, OrderLineItem, OrderStateLedger
 from app.models.customer import Customer
 from app.models.shipment import Shipment
 from app.models.invoice import Invoice
+from app.models.user import User
 from app.api.v1.dashboard import ensure_demo_data
+
 
 router = APIRouter(prefix="/shipments", tags=["Shipments"])
 
 class ShipmentCreatePayload(BaseModel):
-    driver_name: str
+    driver_id: uuid.UUID
     vehicle_number: str
     order_ids: list[uuid.UUID]
+
 
 class ShipmentStatusPayload(BaseModel):
     status: str
@@ -158,6 +161,14 @@ def create_shipment(
     ensure_demo_data(db)
     tenant_context.set(tenant_id)
 
+    driver = db.get(User, payload.driver_id)
+    if not driver:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Specified driver does not exist in the staff registry"
+        )
+    driver_name = driver.full_name
+
     created_shipments = []
     for order_id in payload.order_ids:
         order = db.get(Order, order_id)
@@ -176,12 +187,13 @@ def create_shipment(
             id=uuid.uuid4(),
             tenant_id=tenant_id,
             order_id=order_id,
-            carrier=payload.driver_name,
+            carrier=driver_name,
             tracking_id=payload.vehicle_number,
             status="Out For Delivery",
             destination=dest
         )
         db.add(new_shipment)
+
 
         # Transition order to Dispatched in ledger
         db.add(OrderStateLedger(

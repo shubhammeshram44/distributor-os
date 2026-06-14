@@ -8,6 +8,7 @@ from app.models.payment import Payment, PaymentInvoiceLink
 from app.models.inventory import Inventory
 from app.models.shipment import Shipment
 from app.models.ingestion import IngestionJob, IngestionStaging
+from app.models.user import User
 
 __all__ = [
     "Base",
@@ -29,4 +30,6 @@ __all__ = [
     "Shipment",
     "IngestionJob",
     "IngestionStaging",
+    "User",
 ]
+

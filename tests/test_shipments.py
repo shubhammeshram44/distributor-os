@@ -7,7 +7,9 @@ from app.models.product import Product
 from app.models.customer import Customer
 from app.models.order import Order, OrderLineItem, OrderStateLedger
 from app.models.shipment import Shipment
+from app.models.user import User
 from app.database import tenant_context
+
 
 @pytest.fixture(name="client")
 def fixture_client():
@@ -54,9 +56,24 @@ def test_shipment_endpoints(db_session, client):
         tenant_id=tenant.id, order_id=order.id, from_status=None, to_status="Confirmed", updated_by="test"
     )
     db_session.add(ledger)
+
+    # Setup Driver User
+    driver = User(
+        tenant_id=tenant.id, full_name="John Doe", phone_number="+919999888877", role="Driver"
+    )
+    db_session.add(driver)
     db_session.commit()
 
+    # 0. Call GET /users?role=Driver
+    response = client.get(f"/api/v1/users?role=Driver&tenant_id={tenant.id}")
+    assert response.status_code == 200
+    drivers_list = response.json()
+    assert len(drivers_list) == 1
+    assert drivers_list[0]["full_name"] == "John Doe"
+    assert drivers_list[0]["phone_number"] == "+919999888877"
+
     # 1. Call GET /pending
+
     response = client.get(f"/api/v1/shipments/pending?tenant_id={tenant.id}")
     assert response.status_code == 200
     pending_data = response.json()
@@ -68,11 +85,12 @@ def test_shipment_endpoints(db_session, client):
     response = client.post(
         f"/api/v1/shipments?tenant_id={tenant.id}",
         json={
-            "driver_name": "John Doe",
+            "driver_id": str(driver.id),
             "vehicle_number": "KA-05-AB-1234",
             "order_ids": [pending_data[0]["order_id"]]
         }
     )
+
     assert response.status_code == 201
     assert response.json()["status"] == "success"
     assert response.json()["count"] == 1

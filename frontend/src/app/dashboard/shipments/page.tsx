@@ -12,8 +12,10 @@ import {
   DollarSign,
   TrendingUp,
   X,
-  CheckCircle2
+  CheckCircle2,
+  ChevronDown
 } from "lucide-react";
+
 
 interface PendingOrder {
   order_id: string;
@@ -34,6 +36,13 @@ interface ActiveShipment {
   is_paid: boolean;
 }
 
+interface Driver {
+  id: string;
+  full_name: string;
+  phone_number: string;
+}
+
+
 export default function ShipmentsPage() {
   const [activeTenantId, setActiveTenantId] = useState("d3b07384-d113-4956-a5d2-64be7357c11d");
   const [pendingOrders, setPendingOrders] = useState<PendingOrder[]>([]);
@@ -41,8 +50,10 @@ export default function ShipmentsPage() {
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
   
   // Form states
-  const [driverName, setDriverName] = useState("");
+  const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [selectedDriverId, setSelectedDriverId] = useState("");
   const [vehicleNumber, setVehicleNumber] = useState("");
+
   
   // Status states
   const [loading, setLoading] = useState(true);
@@ -119,12 +130,49 @@ export default function ShipmentsPage() {
     }
   }, [activeTenantId]);
 
+  const fetchDrivers = useCallback(async (tenantId: string) => {
+    try {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const resp = await fetch(`${apiBase}/api/v1/users?role=Driver&tenant_id=${tenantId}`);
+      if (resp.ok) {
+        const data = await resp.json();
+        setDrivers(data);
+        if (data.length > 0) {
+          setSelectedDriverId(data[0].id);
+        } else {
+          setSelectedDriverId("");
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load drivers", err);
+    }
+  }, []);
+
   useEffect(() => {
     if (activeTenantId) {
       fetchShipmentData(activeTenantId);
+      fetchDrivers(activeTenantId);
       setSelectedOrderIds([]);
     }
-  }, [activeTenantId, fetchShipmentData]);
+  }, [activeTenantId, fetchShipmentData, fetchDrivers]);
+
+  // Tab focus revalidation and background sync to resolve cache lag
+  useEffect(() => {
+    const handleFocus = () => {
+      if (activeTenantId) {
+        fetchShipmentData(activeTenantId);
+        fetchDrivers(activeTenantId);
+      }
+    };
+    window.addEventListener("focus", handleFocus);
+    const interval = setInterval(handleFocus, 10000);
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      clearInterval(interval);
+    };
+  }, [activeTenantId, fetchShipmentData, fetchDrivers]);
+
 
   // Create Delivery Run & Dispatch
   const handleCreateDeliveryRun = async (e: React.FormEvent) => {
@@ -134,8 +182,8 @@ export default function ShipmentsPage() {
       showToast("Select at least one order checklist item to load.", "error");
       return;
     }
-    if (!driverName.trim() || !vehicleNumber.trim()) {
-      showToast("Driver Name and Vehicle Number are required.", "error");
+    if (!selectedDriverId || !vehicleNumber.trim()) {
+      showToast("Driver selection and Vehicle Number are required.", "error");
       return;
     }
 
@@ -146,7 +194,7 @@ export default function ShipmentsPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          driver_name: driverName.trim(),
+          driver_id: selectedDriverId,
           vehicle_number: vehicleNumber.trim(),
           order_ids: selectedOrderIds
         })
@@ -155,7 +203,6 @@ export default function ShipmentsPage() {
       const resData = await resp.json();
       if (resp.ok) {
         showToast(`Delivery Run created with ${selectedOrderIds.length} orders dispatched!`, "success");
-        setDriverName("");
         setVehicleNumber("");
         setSelectedOrderIds([]);
         fetchShipmentData(activeTenantId);
@@ -169,6 +216,7 @@ export default function ShipmentsPage() {
       setSavingRun(false);
     }
   };
+
 
   // Mark Delivered
   const handleMarkDelivered = async (shipmentId: string) => {
@@ -350,15 +398,24 @@ export default function ShipmentsPage() {
                     <div className="space-y-3">
                       <div>
                         <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">Driver Name</label>
-                        <input
-                          type="text"
-                          value={driverName}
-                          onChange={(e) => setDriverName(e.target.value)}
-                          placeholder="e.g. Ramesh Kumar"
-                          className="w-full p-2.5 border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-brand-blue"
-                          required
-                        />
+                        <div className="relative">
+                          <select
+                            value={selectedDriverId}
+                            onChange={(e) => setSelectedDriverId(e.target.value)}
+                            className="w-full p-2.5 pr-8 border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-brand-blue cursor-pointer bg-white appearance-none text-slate-700"
+                            required
+                          >
+                            <option value="" disabled>Select Driver...</option>
+                            {drivers.map((drv) => (
+                              <option key={drv.id} value={drv.id}>
+                                {drv.full_name} ({drv.phone_number})
+                              </option>
+                            ))}
+                          </select>
+                          <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                        </div>
                       </div>
+
                       <div>
                         <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">Vehicle Number</label>
                         <input

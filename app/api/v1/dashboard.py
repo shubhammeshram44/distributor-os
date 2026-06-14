@@ -12,8 +12,10 @@ from app.models.invoice import Invoice
 from app.models.payment import Payment, PaymentInvoiceLink
 from app.models.inventory import Inventory
 from app.models.ingestion import IngestionJob, IngestionStaging
+from app.models.user import User
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
+
 
 # Static Tenant ID for demo/default distributor
 DEMO_TENANT_ID = uuid.UUID("d3b07384-d113-4956-a5d2-64be7357c11d")
@@ -189,7 +191,26 @@ def ensure_demo_data(db: Session):
         )
         db.add(invoice)
 
+    # Seed Staff / Users with Driver Role
+    user_count = db.query(User).count()
+    if user_count == 0:
+        drivers_data = [
+            {"id": uuid.UUID("d1010000-0000-0000-0000-000000000001"), "full_name": "Ramesh Kumar", "phone_number": "+919876543210", "role": "Driver"},
+            {"id": uuid.UUID("d1010000-0000-0000-0000-000000000002"), "full_name": "Suresh Singh", "phone_number": "+919876543211", "role": "Driver"},
+            {"id": uuid.UUID("d1010000-0000-0000-0000-000000000003"), "full_name": "Amit Patel", "phone_number": "+919876543212", "role": "Driver"},
+        ]
+        for d in drivers_data:
+            drv = User(
+                id=d["id"],
+                tenant_id=DEMO_TENANT_ID,
+                full_name=d["full_name"],
+                phone_number=d["phone_number"],
+                role=d["role"]
+            )
+            db.add(drv)
+
     db.commit()
+
 
 
 @router.get("/metrics")
