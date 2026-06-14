@@ -380,7 +380,11 @@ export default function CustomersPage() {
                   <AlertCircle className="w-8 h-8" />
                   <span className="text-sm font-semibold">{error}</span>
                   <button
-                    onClick={fetchCustomers}
+                    onClick={() => {
+                      if (activeTenantId) {
+                        fetchCustomers(activeTenantId);
+                      }
+                    }}
                     className="mt-2 px-4 py-2 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg text-xs font-bold hover:bg-rose-100 transition-all cursor-pointer"
                   >
                     Try Again
