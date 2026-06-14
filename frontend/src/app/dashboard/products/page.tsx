@@ -16,7 +16,7 @@ interface Product {
 }
 
 export default function ProductsPage() {
-  const [activeTenantId, setActiveTenantId] = useState("d3b07384-d113-4956-a5d2-64be7357c11d");
+  const [activeTenantId, setActiveTenantId] = useState("");
   const [products, setProducts] = useState<Product[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
@@ -48,6 +48,8 @@ export default function ProductsPage() {
     const stored = localStorage.getItem("activeTenantId");
     if (stored) {
       setActiveTenantId(stored);
+    } else {
+      setActiveTenantId("d3b07384-d113-4956-a5d2-64be7357c11d");
     }
   }, []);
 
@@ -166,6 +168,9 @@ export default function ProductsPage() {
       maximumFractionDigits: 2
     }).format(val);
   };
+  if (!activeTenantId) {
+    return <div className="flex h-full items-center justify-center p-8">Loading Workspace Context...</div>;
+  }
 
   return (
     <div className="flex bg-dashboard-bg min-h-screen text-slate-800">

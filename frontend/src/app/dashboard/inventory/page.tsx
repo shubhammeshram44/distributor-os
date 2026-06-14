@@ -13,7 +13,7 @@ interface InventoryItem {
 }
 
 export default function InventoryPage() {
-  const [activeTenantId, setActiveTenantId] = useState("d3b07384-d113-4956-a5d2-64be7357c11d");
+  const [activeTenantId, setActiveTenantId] = useState("");
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [skuList, setSkuList] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -43,6 +43,8 @@ export default function InventoryPage() {
     const stored = localStorage.getItem("activeTenantId");
     if (stored) {
       setActiveTenantId(stored);
+    } else {
+      setActiveTenantId("d3b07384-d113-4956-a5d2-64be7357c11d");
     }
   }, []);
 
@@ -163,6 +165,9 @@ export default function InventoryPage() {
   // Calculate statistics
   const lowStockCount = filteredInventory.filter(item => item.stock_quantity > 0 && item.stock_quantity < 10).length;
   const outOfStockCount = filteredInventory.filter(item => item.stock_quantity <= 0).length;
+  if (!activeTenantId) {
+    return <div className="flex h-full items-center justify-center p-8">Loading Workspace Context...</div>;
+  }
 
   return (
     <div className="flex bg-dashboard-bg min-h-screen text-slate-800">

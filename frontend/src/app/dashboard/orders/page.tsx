@@ -41,7 +41,7 @@ interface OrderRow {
 }
 
 export default function OrdersPage() {
-  const [activeTenantId, setActiveTenantId] = useState("d3b07384-d113-4956-a5d2-64be7357c11d");
+  const [activeTenantId, setActiveTenantId] = useState("");
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedStatus, setSelectedStatus] = useState<"All" | "Pending" | "Confirmed" | "Needs Review">("All");
@@ -75,6 +75,8 @@ export default function OrdersPage() {
     const stored = localStorage.getItem("activeTenantId");
     if (stored) {
       setActiveTenantId(stored);
+    } else {
+      setActiveTenantId("d3b07384-d113-4956-a5d2-64be7357c11d");
     }
   }, []);
 
@@ -246,6 +248,9 @@ export default function OrdersPage() {
       maximumFractionDigits: 0
     }).format(val);
   };
+  if (!activeTenantId) {
+    return <div className="flex h-full items-center justify-center p-8">Loading Workspace Context...</div>;
+  }
 
   return (
     <div className="flex bg-dashboard-bg min-h-screen text-slate-800">

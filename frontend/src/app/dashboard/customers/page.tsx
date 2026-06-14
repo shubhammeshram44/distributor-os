@@ -31,7 +31,7 @@ interface CustomerRow {
 }
 
 export default function CustomersPage() {
-  const [activeTenantId, setActiveTenantId] = useState("d3b07384-d113-4956-a5d2-64be7357c11d");
+  const [activeTenantId, setActiveTenantId] = useState("");
   const [customers, setCustomers] = useState<CustomerRow[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [totalRetailers, setTotalRetailers] = useState(0);
@@ -80,6 +80,8 @@ export default function CustomersPage() {
     const stored = localStorage.getItem("activeTenantId");
     if (stored) {
       setActiveTenantId(stored);
+    } else {
+      setActiveTenantId("d3b07384-d113-4956-a5d2-64be7357c11d");
     }
   }, []);
 
@@ -285,6 +287,9 @@ export default function CustomersPage() {
       maximumFractionDigits: 0
     }).format(val);
   };
+  if (!activeTenantId) {
+    return <div className="flex h-full items-center justify-center p-8">Loading Workspace Context...</div>;
+  }
 
   return (
     <div className="flex bg-dashboard-bg min-h-screen text-slate-800">
