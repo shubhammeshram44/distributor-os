@@ -163,26 +163,30 @@ def handle_whatsapp_webhook(
                         break
 
             if product:
-                # Found State: Pull catalog values from the database
+                # Found State: Map parameters dynamically from the matching database row
                 parsed_items.append({
                     "product_name": token,
                     "sku_code": product.sku_id,
+                    "sku_id": product.sku_id,
                     "brand": product.brand,
                     "category": product.category,
                     "pack_size": product.pack_size,
                     "qty": qty,
+                    "wholesale_rate": float(product.base_price),
                     "rate": float(product.base_price)
                 })
             else:
-                # Unmatched State
+                # Unmatched State: Assign parameters and flag unmatched
                 has_unmatched = True
                 parsed_items.append({
                     "product_name": f"Unmatched: {token}",
                     "sku_code": "UNMATCHED_SKU",
+                    "sku_id": "UNMATCHED_SKU",
                     "brand": "Generic",
                     "category": "Grocery",
                     "pack_size": "1 unit",
                     "qty": qty,
+                    "wholesale_rate": 0.0,
                     "rate": 0.0
                 })
 
@@ -195,8 +199,10 @@ def handle_whatsapp_webhook(
             tenant_id=resolved_tenant_id,
             internal_order_id=generated_order_id,
             source="WhatsApp",
-            customer_id=customer.id
+            customer_id=customer.id,
+            created_at=datetime.utcnow()
         )
+        new_order.status = "Needs Review" if has_unmatched else "Draft"
         db.add(new_order)
         db.flush()
 

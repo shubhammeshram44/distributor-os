@@ -22,6 +22,11 @@ export default function RecentOrders({
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [selectedOrderNo, setSelectedOrderNo] = useState<string>("");
 
+  const handleClose = () => {
+    setSelectedOrderId(null);
+    closeDetails();
+  };
+
   const handleOrderIdClick = async (order: RecentOrder) => {
     setSelectedOrderId(order.id);
     setSelectedOrderNo(order.order_id);
@@ -57,6 +62,7 @@ export default function RecentOrders({
               <th className="py-3 px-4 text-center">Channel</th>
               <th className="py-3 px-4 text-right">Amount</th>
               <th className="py-3 px-4 text-center">Status</th>
+              <th className="py-3 px-4">Created On</th>
               <th className="py-3 px-4">ETA</th>
             </tr>
           </thead>
@@ -100,6 +106,9 @@ export default function RecentOrders({
                   </span>
                 </td>
                 <td className="py-3.5 px-4 text-xs font-semibold text-slate-500">
+                  {order.created_on || order.eta}
+                </td>
+                <td className="py-3.5 px-4 text-xs font-semibold text-slate-500">
                   {order.eta}
                 </td>
               </tr>
@@ -110,12 +119,12 @@ export default function RecentOrders({
 
       {/* Slide-out Sidebar Drawer for Line Item Details */}
       {selectedOrderId && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 transition-opacity flex justify-end">
-          {/* Backdrop Click */}
-          <div className="flex-1" onClick={closeDetails}></div>
+        <div className="fixed inset-y-0 right-0 z-50 flex justify-end pointer-events-none">
+          {/* Transparent Backdrop that lets clicks pass through to the dashboard */}
+          <div className="flex-1 pointer-events-none"></div>
 
           {/* Drawer Content */}
-          <div className="w-[500px] bg-white h-screen shadow-2xl flex flex-col animate-slide-in relative border-l border-slate-200">
+          <div className="w-[500px] bg-white h-screen shadow-2xl flex flex-col animate-slide-in relative border-l border-slate-200 pointer-events-auto">
             {/* Drawer Header */}
             <div className="p-6 border-b border-dashboard-border flex items-center justify-between bg-brand-dark text-white">
               <div>
@@ -123,7 +132,7 @@ export default function RecentOrders({
                 <p className="text-xs text-brand-textMuted mt-0.5">ID: {selectedOrderNo}</p>
               </div>
               <button
-                onClick={closeDetails}
+                onClick={handleClose}
                 className="p-1.5 rounded-full hover:bg-brand-darkHover text-brand-textMuted hover:text-white transition-all"
               >
                 <X className="w-5 h-5" />
@@ -181,7 +190,7 @@ export default function RecentOrders({
             {/* Close footer button */}
             <div className="p-6 border-t border-dashboard-border bg-slate-50 flex items-center justify-end">
               <button
-                onClick={closeDetails}
+                onClick={handleClose}
                 className="px-5 py-2.5 bg-slate-800 text-white hover:bg-slate-700 text-sm font-bold rounded-lg transition-all"
               >
                 Close Details

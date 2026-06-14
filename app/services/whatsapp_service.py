@@ -119,7 +119,8 @@ class WhatsAppService:
                 tenant_id=tenant_id,
                 internal_order_id=f"WA-{int(datetime.utcnow().timestamp())}",
                 source="WhatsApp",
-                customer_id=customer.id
+                customer_id=customer.id,
+                created_at=datetime.utcnow()
             )
             db.add(order)
             db.flush()

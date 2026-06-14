@@ -22,9 +22,9 @@ export default function CollectionsDonut({ data }: CollectionsDonutProps) {
   };
 
   return (
-    <div className="bg-white p-5 rounded-xl border border-dashboard-border shadow-sm flex flex-col justify-between h-full">
+    <div className="bg-white p-4 rounded-xl border border-dashboard-border shadow-sm flex flex-col justify-between h-full">
       {/* Header */}
-      <div className="flex items-center justify-between pb-4 border-b border-dashboard-border mb-4">
+      <div className="flex items-center justify-between pb-3 border-b border-dashboard-border mb-3">
         <h3 className="font-bold text-slate-800 text-base">Collections Overview</h3>
         <button className="text-xs font-semibold text-brand-blue hover:text-brand-blueHover hover:underline flex items-center gap-1">
           <span>View report</span>
@@ -32,17 +32,17 @@ export default function CollectionsDonut({ data }: CollectionsDonutProps) {
         </button>
       </div>
 
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-6 py-2">
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 py-1">
         {/* Donut Chart with Centered Total */}
-        <div className="relative w-44 h-44 flex items-center justify-center">
+        <div className="relative w-36 h-36 flex items-center justify-center">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
                 data={data}
                 cx="50%"
                 cy="50%"
-                innerRadius={60}
-                outerRadius={80}
+                innerRadius={48}
+                outerRadius={66}
                 paddingAngle={3}
                 dataKey="value"
               >
@@ -55,26 +55,26 @@ export default function CollectionsDonut({ data }: CollectionsDonutProps) {
           
           {/* Centered label */}
           <div className="absolute text-center flex flex-col items-center">
-            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Total Outstanding</span>
-            <span className="text-base font-extrabold text-slate-800 tracking-tight mt-0.5">
+            <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Total Outstanding</span>
+            <span className="text-sm font-extrabold text-slate-800 tracking-tight mt-0.5">
               {formatLakhs(totalOutstanding)}
             </span>
           </div>
         </div>
 
         {/* Legend */}
-        <div className="flex-1 space-y-3 w-full">
+        <div className="flex-1 space-y-2 w-full">
           {data.map((item, index) => (
-            <div key={item.name} className="flex items-center justify-between text-sm">
+            <div key={item.name} className="flex items-center justify-between text-xs">
               <div className="flex items-center gap-2">
                 <div
-                  className="w-3 h-3 rounded-full"
+                  className="w-2.5 h-2.5 rounded-full"
                   style={{ backgroundColor: COLORS[index % COLORS.length] }}
                 />
                 <span className="text-slate-600 font-semibold">{item.name}</span>
               </div>
               <span className="font-bold text-slate-800">
-                {formatLakhs(item.value)} <span className="text-xs text-slate-400 font-normal">({item.percentage}%)</span>
+                {formatLakhs(item.value)} <span className="text-[10px] text-slate-400 font-normal">({item.percentage}%)</span>
               </span>
             </div>
           ))}
@@ -82,9 +82,9 @@ export default function CollectionsDonut({ data }: CollectionsDonutProps) {
       </div>
 
       {/* Warnings Card */}
-      <div className="mt-4 p-3.5 bg-amber-50/70 border border-amber-200 rounded-xl flex items-center justify-between text-xs gap-3">
+      <div className="mt-3 p-2.5 bg-amber-50/70 border border-amber-200 rounded-xl flex items-center justify-between text-[11px] gap-2">
         <div className="flex items-center gap-2 text-amber-800">
-          <AlertTriangle className="w-4.5 h-4.5 text-amber-600 shrink-0" />
+          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
           <span className="font-semibold">12 customers have outstanding balances &gt; 60 days</span>
         </div>
         <button className="text-brand-blue hover:text-brand-blueHover font-bold shrink-0 hover:underline">

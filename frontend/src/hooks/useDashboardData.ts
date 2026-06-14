@@ -20,6 +20,7 @@ export interface RecentOrder {
   channel: string;
   amount: number;
   status: string;
+  created_on?: string;
   eta: string;
 }
 

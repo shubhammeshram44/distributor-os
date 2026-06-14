@@ -10,12 +10,24 @@ import LiveDeliveries from "@/components/LiveDeliveries";
 import InventorySummary from "@/components/InventorySummary";
 import ActivityFeed from "@/components/ActivityFeed";
 import { useDashboardData } from "@/hooks/useDashboardData";
-import { ChevronDown, SlidersHorizontal, RefreshCw } from "lucide-react";
+import { ChevronDown, SlidersHorizontal, RefreshCw, CheckCircle2, AlertCircle, X } from "lucide-react";
 import WhatsAppSimulator from "@/components/WhatsAppSimulator";
 
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState("Dashboard");
   const [activeTenantId, setActiveTenantId] = useState("d3b07384-d113-4956-a5d2-64be7357c11d");
+  const [toast, setToast] = useState<{ show: boolean; message: string; type: "success" | "error" }>({
+    show: false,
+    message: "",
+    type: "success"
+  });
+
+  const showToast = (message: string, type: "success" | "error") => {
+    setToast({ show: true, message, type });
+    setTimeout(() => {
+      setToast(prev => ({ ...prev, show: false }));
+    }, 4000);
+  };
 
   // Get active tenant name
   const getTenantName = () => {
@@ -136,7 +148,10 @@ export default function DashboardPage() {
                     onClick={async () => {
                       const phone = (document.getElementById('mock-sender-phone') as HTMLSelectElement).value;
                       const text = (document.getElementById('mock-message-text') as HTMLTextAreaElement).value;
-                      if(!text.trim()) return alert('Please enter a mock message string.');
+                      if(!text.trim()) {
+                        showToast('Please enter a mock message string.', 'error');
+                        return;
+                      }
                       
                       try {
                         const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
@@ -151,13 +166,13 @@ export default function DashboardPage() {
                           })
                         });
                         if(res.ok) {
-                          alert('Order processed successfully via AI engine pipeline!');
-                          window.location.reload(); // Hard refresh grid context
+                          showToast('Order processed successfully via AI engine pipeline!', 'success');
+                          refreshAll(); // Silent background refetch
                         } else {
-                          alert('Pipeline execution failed: ' + res.statusText);
+                          showToast('Pipeline execution failed: ' + res.statusText, 'error');
                         }
                       } catch(err) {
-                        alert('Network connection breakdown.');
+                        showToast('Network connection breakdown.', 'error');
                       }
                     }}
                     className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm p-2.5 rounded-lg transition-colors shadow-sm cursor-pointer"
@@ -202,6 +217,31 @@ export default function DashboardPage() {
         activeTenantId={activeTenantId}
         onSuccess={refreshAll}
       />
+
+      {/* Sleek Floating Toast Notification */}
+      {toast.show && (
+        <div className="fixed top-5 right-5 z-50 flex items-center gap-3 bg-white/95 backdrop-blur-md border border-slate-100 shadow-2xl px-4 py-3.5 rounded-xl animate-slide-in pointer-events-auto max-w-sm">
+          {toast.type === "success" ? (
+            <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0 shadow-sm">
+              <CheckCircle2 className="w-4.5 h-4.5" />
+            </div>
+          ) : (
+            <div className="w-8 h-8 rounded-full bg-rose-50 flex items-center justify-center text-rose-600 shrink-0 shadow-sm">
+              <AlertCircle className="w-4.5 h-4.5" />
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-bold text-slate-800">{toast.type === "success" ? "Success" : "Error"}</p>
+            <p className="text-[11px] text-slate-500 font-semibold mt-0.5 break-words">{toast.message}</p>
+          </div>
+          <button 
+            onClick={() => setToast(prev => ({ ...prev, show: false }))}
+            className="text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-50 transition-all shrink-0"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

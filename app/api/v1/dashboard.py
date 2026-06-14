@@ -267,7 +267,7 @@ def get_recent_orders(
     ensure_demo_data(db)
     tenant_context.set(tenant_id)
 
-    orders = db.query(Order).order_by(desc(Order.created_at)).limit(5).all()
+    orders = db.query(Order).order_by(Order.created_at.desc()).limit(5).all()
     results = []
     
     for o in orders:
@@ -290,6 +290,7 @@ def get_recent_orders(
             "channel": o.source,
             "amount": float(amount),
             "status": status_resolved,
+            "created_on": o.created_at.strftime("%d %b, %I:%M %p"),
             "eta": o.created_at.strftime("%d %b, %I:%M %p")
         })
 
@@ -403,7 +404,7 @@ def get_recent_activity(
     activity = []
 
     # 1. Fetch newest Order Ledger logs
-    ledgers = db.query(OrderStateLedger).order_by(desc(OrderStateLedger.timestamp)).limit(5).all()
+    ledgers = db.query(OrderStateLedger).order_by(OrderStateLedger.timestamp.desc()).limit(5).all()
     for l in ledgers:
         order = db.get(Order, l.order_id)
         if not order:
@@ -433,7 +434,7 @@ def get_recent_activity(
         })
 
     # 2. Fetch newest Ingestion Job logs
-    jobs = db.query(IngestionJob).order_by(desc(IngestionJob.created_at)).limit(5).all()
+    jobs = db.query(IngestionJob).order_by(IngestionJob.created_at.desc()).limit(5).all()
     for j in jobs:
         minutes_ago = int((datetime.utcnow() - j.created_at).total_seconds() / 60)
         time_text = f"{minutes_ago} min ago" if minutes_ago < 60 else f"{minutes_ago//60} hr ago" if minutes_ago < 1440 else "1 day ago"
