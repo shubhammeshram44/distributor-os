@@ -28,7 +28,7 @@ export default function Sidebar({ activeTab, setActiveTab, tenantName }: Sidebar
 
   const menuItems = [
     { name: "Dashboard", icon: LayoutDashboard, href: "/dashboard" },
-    { name: "Orders", icon: ShoppingCart },
+    { name: "Orders", icon: ShoppingCart, href: "/dashboard/orders" },
     { name: "Inventory", icon: Box, href: "/dashboard/inventory" },
     { name: "Products", icon: Layers, href: "/dashboard/products" },
     { name: "Customers", icon: Users },

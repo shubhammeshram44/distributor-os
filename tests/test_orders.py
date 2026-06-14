@@ -248,3 +248,139 @@ def test_resolve_order_item(db_session, client):
     order_db = db_session.get(Order, order.id)
     assert order_db.current_status == "Draft"  # Maps to Pending
 
+
+def test_get_order_invoice_success(db_session, client):
+    # Setup Tenant
+    tenant = DistributorTenant(name="Invoice Test Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+
+    tenant_context.set(tenant.id)
+
+    # Setup Product
+    p = Product(sku_id="PROD-INVOICE", brand="HUL", category="Soap", pack_size="100g", base_price=45.0, stock_quantity=100)
+    db_session.add(p)
+    db_session.flush()
+
+    # Setup Customer
+    cust = Customer(
+        retailer_name="Invoice Stores", customer_id="C-INV-1", address_text="Invoice Street, Delhi",
+        gstin="07AAAAA1111A1Z1", tax_group="GST", payment_terms="COD"
+    )
+    db_session.add(cust)
+    db_session.flush()
+
+    # Setup Order (Confirmed status)
+    order = Order(
+        tenant_id=tenant.id,
+        internal_order_id="ORD-INVOICE-TEST-1",
+        source="Portal",
+        customer_id=cust.id
+    )
+    db_session.add(order)
+    db_session.flush()
+
+    # Add line item
+    db_session.add(OrderLineItem(order_id=order.id, product_id=p.id, quantity=10, unit_price=45.0))
+
+    # Ledger transition: None -> Confirmed
+    db_session.add(OrderStateLedger(order_id=order.id, from_status=None, to_status="Confirmed", updated_by="admin"))
+    db_session.commit()
+
+    # Get PDF invoice
+    response = client.get(f"/api/v1/orders/{order.id}/invoice")
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/pdf"
+    assert "attachment; filename=invoice_" in response.headers["content-disposition"]
+    assert len(response.content) > 0
+
+
+def test_get_order_invoice_not_confirmed(db_session, client):
+    # Setup Tenant
+    tenant = DistributorTenant(name="Invoice Test Tenant 2")
+    db_session.add(tenant)
+    db_session.commit()
+
+    tenant_context.set(tenant.id)
+
+    # Setup Product
+    p = Product(sku_id="PROD-INVOICE-2", brand="HUL", category="Soap", pack_size="100g", base_price=45.0, stock_quantity=100)
+    db_session.add(p)
+    db_session.flush()
+
+    # Setup Customer
+    cust = Customer(
+        retailer_name="Invoice Stores 2", customer_id="C-INV-2", address_text="Invoice Street 2, Delhi",
+        gstin="07AAAAA1111A1Z1", tax_group="GST", payment_terms="COD"
+    )
+    db_session.add(cust)
+    db_session.flush()
+
+    # Setup Order (Draft status, not Confirmed)
+    order = Order(
+        tenant_id=tenant.id,
+        internal_order_id="ORD-INVOICE-TEST-2",
+        source="Portal",
+        customer_id=cust.id
+    )
+    db_session.add(order)
+    db_session.flush()
+
+    # Add line item
+    db_session.add(OrderLineItem(order_id=order.id, product_id=p.id, quantity=10, unit_price=45.0))
+
+    # Ledger transition: None -> Draft
+    db_session.add(OrderStateLedger(order_id=order.id, from_status=None, to_status="Draft", updated_by="admin"))
+    db_session.commit()
+
+    # Attempt to get PDF invoice
+    response = client.get(f"/api/v1/orders/{order.id}/invoice")
+    assert response.status_code == 400
+    assert "Invoices can only be generated for Confirmed orders" in response.json()["detail"]
+
+
+def test_list_orders(db_session, client):
+    # Setup Tenant
+    tenant = DistributorTenant(name="List Orders Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+
+    tenant_context.set(tenant.id)
+
+    # Setup Product
+    p = Product(sku_id="PROD-LIST", brand="HUL", category="Soap", pack_size="100g", base_price=45.0, stock_quantity=100)
+    db_session.add(p)
+    db_session.flush()
+
+    # Setup Customer
+    cust = Customer(
+        retailer_name="List Customer", customer_id="C-LIST-1", address_text="List Street, Delhi",
+        gstin="07AAAAA1111A1Z1", tax_group="GST", payment_terms="COD"
+    )
+    db_session.add(cust)
+    db_session.flush()
+
+    # Setup Order
+    order = Order(
+        tenant_id=tenant.id,
+        internal_order_id="ORD-LIST-TEST-1",
+        source="WhatsApp",
+        customer_id=cust.id
+    )
+    db_session.add(order)
+    db_session.flush()
+
+    # Add line item
+    db_session.add(OrderLineItem(order_id=order.id, product_id=p.id, quantity=5, unit_price=45.0))
+    db_session.commit()
+
+    # List orders via API
+    response = client.get(f"/api/v1/orders?tenant_id={tenant.id}")
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) >= 1
+    assert data[0]["order_id"] == "ORD-LIST-TEST-1"
+    assert data[0]["customer"] == "List Customer"
+    assert data[0]["amount"] == 225.0
+    assert data[0]["status"] == "Pending"  # Draft maps to Pending
+

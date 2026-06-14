@@ -1,12 +1,57 @@
 import uuid
+import io
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.database import get_db, tenant_context
 from app.models.order import Order, OrderLineItem, OrderStateLedger
 from app.models.product import Product
+from app.models.tenant import DistributorTenant
+from app.models.customer import Customer
+
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib import colors
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
+
+@router.get("", status_code=status.HTTP_200_OK)
+def list_orders(
+    tenant_id: uuid.UUID,
+    db: Session = Depends(get_db)
+):
+    """
+    Returns all orders for a tenant.
+    """
+    tenant_context.set(tenant_id)
+    orders = db.query(Order).filter(Order.tenant_id == tenant_id).order_by(Order.created_at.desc()).all()
+    results = []
+    
+    for o in orders:
+        customer = db.get(Customer, o.customer_id)
+        cust_name = customer.retailer_name if customer else "Unknown Retailer"
+
+        # Calculate total amount
+        amount_sum = sum(float(item.quantity * item.unit_price) for item in o.line_items)
+
+        # Status badge conversion: Draft = "Pending", Confirmed = "Confirmed", Needs Review = "Needs Review"
+        status_raw = o.current_status
+        status_resolved = "Pending" if status_raw == "Draft" else status_raw
+
+        results.append({
+            "id": str(o.id),
+            "order_id": o.internal_order_id,
+            "customer": cust_name,
+            "channel": o.source,
+            "amount": amount_sum,
+            "status": status_resolved,
+            "created_on": o.created_at.strftime("%d %b, %Y %I:%M %p"),
+            "eta": o.created_at.strftime("%d %b, %Y %I:%M %p")
+        })
+
+    return results
 
 class StatusUpdatePayload(BaseModel):
     to_status: str
@@ -172,4 +217,238 @@ def resolve_order_item(
         "unit_price": float(product.base_price),
         "order_status": "Pending" if new_status == "Draft" else new_status
     }
+
+
+@router.get("/{order_id}/invoice")
+def get_order_invoice(
+    order_id: uuid.UUID,
+    db: Session = Depends(get_db)
+):
+    """
+    Generates a professional B2B tax invoice PDF for a confirmed order and streams it to the client.
+    """
+    # 1. Fetch the order
+    order = db.get(Order, order_id)
+    if not order:
+        raise HTTPException(
+            status_code=404,
+            detail="Order not found"
+        )
+
+    # Set tenant isolation context
+    tenant_context.set(order.tenant_id)
+
+    # 2. Restrict to Confirmed orders
+    if order.current_status != "Confirmed":
+        raise HTTPException(
+            status_code=400,
+            detail="Invoices can only be generated for Confirmed orders"
+        )
+
+    # 3. Retrieve Tenant Info
+    tenant = db.get(DistributorTenant, order.tenant_id)
+    tenant_name = tenant.name if tenant else "S.V. Distributors"
+
+    # 4. Retrieve Customer Info
+    customer = db.get(Customer, order.customer_id)
+    if not customer:
+        raise HTTPException(
+            status_code=404,
+            detail="Customer not found associated with this order"
+        )
+
+    # 5. Fetch order line items
+    items = db.query(OrderLineItem).filter(OrderLineItem.order_id == order_id).all()
+
+    # 6. Generate PDF with reportlab
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=letter,
+        rightMargin=36,
+        leftMargin=36,
+        topMargin=36,
+        bottomMargin=36
+    )
+    
+    story = []
+    styles = getSampleStyleSheet()
+    
+    # Custom colors
+    primary_color = colors.HexColor("#1E3A8A")   # Navy/Dark Blue
+    text_color = colors.HexColor("#1F2937")      # Slate 800
+    light_bg = colors.HexColor("#F9FAFB")        # Gray 50
+    border_color = colors.HexColor("#E5E7EB")    # Gray 200
+
+    # Custom styles
+    title_style = ParagraphStyle(
+        'InvoiceTitle',
+        parent=styles['Heading1'],
+        fontName='Helvetica-Bold',
+        fontSize=24,
+        leading=28,
+        textColor=primary_color
+    )
+    
+    subtitle_style = ParagraphStyle(
+        'InvoiceSubtitle',
+        parent=styles['Normal'],
+        fontName='Helvetica',
+        fontSize=10,
+        leading=14,
+        textColor=colors.HexColor("#4B5563")
+    )
+
+    section_heading = ParagraphStyle(
+        'SectionHeading',
+        parent=styles['Heading3'],
+        fontName='Helvetica-Bold',
+        fontSize=12,
+        leading=16,
+        textColor=primary_color,
+        spaceAfter=6
+    )
+
+    body_style = ParagraphStyle(
+        'Body',
+        parent=styles['Normal'],
+        fontName='Helvetica',
+        fontSize=9,
+        leading=12,
+        textColor=text_color
+    )
+
+    body_bold = ParagraphStyle(
+        'BodyBold',
+        parent=body_style,
+        fontName='Helvetica-Bold'
+    )
+
+    # Header section (Tenant & Invoice ID/Date)
+    invoice_id = f"INV-{order.internal_order_id}"
+    order_date = order.created_at.strftime("%Y-%m-%d")
+    
+    header_left = f"<b>{tenant_name}</b><br/>B2B Distributor Services<br/>Email: billing@{tenant_name.lower().replace(' ', '').replace('.', '')}.com"
+    header_right = f"<b>TAX INVOICE</b><br/>Invoice ID: {invoice_id}<br/>Date: {order_date}<br/>Status: <b>Confirmed</b>"
+
+    header_table_data = [
+        [Paragraph(header_left, body_style), Paragraph(header_right, ParagraphStyle('RightText', parent=body_style, alignment=2))]
+    ]
+    header_table = Table(header_table_data, colWidths=[270, 270])
+    header_table.setStyle(TableStyle([
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 10),
+    ]))
+    story.append(header_table)
+    story.append(Spacer(1, 10))
+
+    # Divider line
+    divider = Table([[""]], colWidths=[540])
+    divider.setStyle(TableStyle([
+        ('LINEABOVE', (0,0), (-1,-1), 1, primary_color),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 0),
+        ('TOPPADDING', (0,0), (-1,-1), 0),
+    ]))
+    story.append(divider)
+    story.append(Spacer(1, 15))
+
+    # Customer Profile Section
+    cust_left = f"<b>BILL TO:</b><br/>{customer.retailer_name}<br/>{customer.address_text}<br/>GSTIN: {customer.gstin}"
+    cust_right = f"<b>PAYMENT TERMS:</b><br/>{customer.payment_terms}<br/><br/><b>TAX GROUP:</b><br/>{customer.tax_group}"
+    
+    cust_table_data = [
+        [Paragraph(cust_left, body_style), Paragraph(cust_right, body_style)]
+    ]
+    cust_table = Table(cust_table_data, colWidths=[270, 270])
+    cust_table.setStyle(TableStyle([
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 10),
+    ]))
+    story.append(cust_table)
+    story.append(Spacer(1, 15))
+
+    # Itemization Grid Title
+    story.append(Paragraph("ITEMIZED LINE ITEMS", section_heading))
+    
+    # Grid Table
+    grid_header = [
+        Paragraph("<b>SKU ID</b>", body_bold),
+        Paragraph("<b>Item Name</b>", body_bold),
+        Paragraph("<b>Quantity</b>", body_bold),
+        Paragraph("<b>Wholesale Price</b>", body_bold),
+        Paragraph("<b>Line Total</b>", body_bold)
+    ]
+    grid_data = [grid_header]
+    
+    subtotal = 0.0
+    for item in items:
+        product = db.get(Product, item.product_id)
+        sku = product.sku_id if product else item.sku_code or "UNKNOWN"
+        item_name = f"{product.brand} {product.category} ({product.pack_size})" if product else "Unknown Product"
+        qty = item.quantity
+        price = float(item.unit_price)
+        total = qty * price
+        subtotal += total
+        
+        grid_data.append([
+            Paragraph(sku, body_style),
+            Paragraph(item_name, body_style),
+            Paragraph(str(qty), body_style),
+            Paragraph(f"₹ {price:,.2f}", body_style),
+            Paragraph(f"₹ {total:,.2f}", body_style)
+        ])
+
+    grid_table = Table(grid_data, colWidths=[80, 220, 50, 95, 95])
+    grid_table.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,0), light_bg),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 6),
+        ('TOPPADDING', (0,0), (-1,-1), 6),
+        ('LINEBELOW', (0,0), (-1,-1), 0.5, border_color),
+        ('LINEBELOW', (0,0), (-1,0), 1.5, primary_color),
+    ]))
+    story.append(grid_table)
+    story.append(Spacer(1, 15))
+
+    # Tax Summary Block
+    gst_rate = 0.18
+    gst = subtotal * gst_rate
+    grand_total = subtotal + gst
+
+    summary_left = "<b>Declaration:</b><br/>We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct."
+    summary_right_data = [
+        [Paragraph("Subtotal:", body_style), Paragraph(f"₹ {subtotal:,.2f}", ParagraphStyle('RightAlign', parent=body_style, alignment=2))],
+        [Paragraph("GST (18%):", body_style), Paragraph(f"₹ {gst:,.2f}", ParagraphStyle('RightAlign', parent=body_style, alignment=2))],
+        [Paragraph("<b>Total Payable:</b>", body_bold), Paragraph(f"<b>₹ {grand_total:,.2f}</b>", ParagraphStyle('RightAlignBold', parent=body_bold, alignment=2))]
+    ]
+    summary_right_table = Table(summary_right_data, colWidths=[110, 110])
+    summary_right_table.setStyle(TableStyle([
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+        ('TOPPADDING', (0,0), (-1,-1), 4),
+        ('LINEBELOW', (0,0), (-1,-1), 0.5, border_color),
+        ('BACKGROUND', (0,-1), (-1,-1), light_bg),
+    ]))
+
+    final_block_data = [
+        [Paragraph(summary_left, ParagraphStyle('Decl', parent=body_style, textColor=colors.HexColor("#6B7280"))), summary_right_table]
+    ]
+    final_block_table = Table(final_block_data, colWidths=[310, 230])
+    final_block_table.setStyle(TableStyle([
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+    ]))
+    story.append(final_block_table)
+
+    # Build PDF
+    doc.build(story)
+    
+    buffer.seek(0)
+    
+    return StreamingResponse(
+        buffer,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"attachment; filename=invoice_{order_id}.pdf"
+        }
+    )
 

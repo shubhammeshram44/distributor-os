@@ -319,6 +319,17 @@ export default function RecentOrders({
                     <span>Confirm Order</span>
                   )}
                 </button>
+              ) : selectedOrder && selectedOrder.status === "Confirmed" ? (
+                <button
+                  onClick={() => {
+                    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+                    window.open(`${apiBase}/api/v1/orders/${selectedOrderId}/invoice`, "_blank");
+                  }}
+                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-lg transition-all flex items-center gap-2 cursor-pointer"
+                >
+                  <FileSpreadsheet className="w-4 h-4" />
+                  <span>Download B2B Invoice</span>
+                </button>
               ) : (
                 <div></div>
               )}
