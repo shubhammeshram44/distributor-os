@@ -1,6 +1,8 @@
 "use client";
 
 import React from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   ShoppingCart,
@@ -22,11 +24,13 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ activeTab, setActiveTab, tenantName }: SidebarProps) {
+  const pathname = usePathname();
+
   const menuItems = [
-    { name: "Dashboard", icon: LayoutDashboard },
+    { name: "Dashboard", icon: LayoutDashboard, href: "/dashboard" },
     { name: "Orders", icon: ShoppingCart },
-    { name: "Inventory", icon: Box },
-    { name: "Products", icon: Layers },
+    { name: "Inventory", icon: Box, href: "/dashboard/inventory" },
+    { name: "Products", icon: Layers, href: "/dashboard/products" },
     { name: "Customers", icon: Users },
     { name: "Shipments", icon: Truck },
     { name: "Collections", icon: CreditCard },
@@ -49,16 +53,34 @@ export default function Sidebar({ activeTab, setActiveTab, tenantName }: Sidebar
       <nav className="flex-1 px-4 py-6 space-y-1.5 overflow-y-auto">
         {menuItems.map((item) => {
           const Icon = item.icon;
-          const isActive = activeTab === item.name;
+          const isActive = item.href
+            ? (item.href === "/dashboard" ? pathname === "/dashboard" || pathname === "/" : pathname.startsWith(item.href))
+            : activeTab === item.name;
+
+          const className = `w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all text-left ${
+            isActive
+              ? "bg-brand-blue text-white shadow-md shadow-brand-blue/20"
+              : "text-brand-textMuted hover:bg-brand-darkHover hover:text-white"
+          }`;
+
+          if (item.href) {
+            return (
+              <Link
+                key={item.name}
+                href={item.href}
+                className={className}
+              >
+                <Icon className="w-5 h-5" />
+                <span>{item.name}</span>
+              </Link>
+            );
+          }
+
           return (
             <button
               key={item.name}
               onClick={() => setActiveTab(item.name)}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
-                isActive
-                  ? "bg-brand-blue text-white shadow-md shadow-brand-blue/20"
-                  : "text-brand-textMuted hover:bg-brand-darkHover hover:text-white"
-              }`}
+              className={className}
             >
               <Icon className="w-5 h-5" />
               <span>{item.name}</span>
@@ -66,6 +88,7 @@ export default function Sidebar({ activeTab, setActiveTab, tenantName }: Sidebar
           );
         })}
       </nav>
+
 
       {/* Profile & Help Area */}
       <div className="p-4 border-t border-brand-darkHover bg-brand-dark">

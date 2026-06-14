@@ -5,8 +5,55 @@ from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, s
 from sqlalchemy.orm import Session
 from app.database import get_db, tenant_context
 from app.models.product import Product, ProductAlias
+from app.api.v1.dashboard import ensure_demo_data
 
 router = APIRouter(prefix="/products", tags=["Products"])
+
+@router.get("", status_code=status.HTTP_200_OK)
+def get_products(
+    tenant_id: uuid.UUID,
+    db: Session = Depends(get_db)
+):
+    """
+    Retrieves the complete product catalog for a given tenant.
+    """
+    ensure_demo_data(db)
+    tenant_context.set(tenant_id)
+    products = db.query(Product).all()
+    return [
+        {
+            "id": str(p.id),
+            "sku_id": p.sku_id,
+            "brand": p.brand,
+            "category": p.category,
+            "pack_size": p.pack_size,
+            "base_price": float(p.base_price),
+            "stock_quantity": p.stock_quantity
+        }
+        for p in products
+    ]
+
+@router.get("/inventory", status_code=status.HTTP_200_OK)
+def get_inventory_items(
+    tenant_id: uuid.UUID,
+    db: Session = Depends(get_db)
+):
+    """
+    Retrieves inventory levels for all products under the tenant.
+    """
+    ensure_demo_data(db)
+    tenant_context.set(tenant_id)
+    products = db.query(Product).all()
+    return [
+        {
+            "id": str(p.id),
+            "sku_id": p.sku_id,
+            "product_name": f"{p.brand} {p.category}",
+            "stock_quantity": p.stock_quantity
+        }
+        for p in products
+    ]
+
 
 @router.post("/import", status_code=status.HTTP_200_OK)
 def import_products_csv(
