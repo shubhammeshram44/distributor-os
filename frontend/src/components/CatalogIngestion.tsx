@@ -83,7 +83,13 @@ export default function CatalogIngestion({
       const data = await response.json();
 
       if (response.ok) {
-        onSuccess(`Imported ${data.successful_rows} products successfully!`);
+        if (typeof data.inserted_count === "number" && typeof data.updated_count === "number") {
+          onSuccess(
+            `Catalog sync complete! Added ${data.inserted_count} new products and updated ${data.updated_count} existing prices.`
+          );
+        } else {
+          onSuccess(`Imported ${data.successful_rows} products successfully!`);
+        }
         setSelectedFile(null);
         if (fileInputRef.current) fileInputRef.current.value = "";
       } else {

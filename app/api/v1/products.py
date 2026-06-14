@@ -256,6 +256,8 @@ def import_products_csv(
         return {
             "status": "success",
             "successful_rows": success_count,
+            "inserted_count": len(inserted_skus),
+            "updated_count": len(updated_skus),
             "failed_rows": len(error_rows)
         }
 

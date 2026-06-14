@@ -55,6 +55,8 @@ def test_import_products_success(db_session, client):
     data = response.json()
     assert data["status"] == "success"
     assert data["successful_rows"] == 2
+    assert data["inserted_count"] == 1
+    assert data["updated_count"] == 1
     assert data["failed_rows"] == 0
 
     # 5. Assert database state
