@@ -3,7 +3,8 @@
 import React, { useState, useEffect, useCallback } from "react";
 import Sidebar from "@/components/Sidebar";
 import DashboardHeader from "@/components/DashboardHeader";
-import { Search, Loader2, RefreshCw, AlertCircle, Layers } from "lucide-react";
+import CatalogIngestion from "@/components/CatalogIngestion";
+import { Search, Loader2, RefreshCw, AlertCircle, Layers, CheckCircle2, X } from "lucide-react";
 
 interface Product {
   id: string;
@@ -20,6 +21,27 @@ export default function ProductsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const [formData, setFormData] = useState({
+    sku_id: "",
+    brand: "",
+    category: "",
+    pack_size: "",
+    base_price: ""
+  });
+  const [submitting, setSubmitting] = useState(false);
+  const [toast, setToast] = useState<{ show: boolean; message: string; type: "success" | "error" }>({
+    show: false,
+    message: "",
+    type: "success"
+  });
+
+  const showToast = (message: string, type: "success" | "error") => {
+    setToast({ show: true, message, type });
+    setTimeout(() => {
+      setToast(prev => ({ ...prev, show: false }));
+    }, 4000);
+  };
 
   // Sync tenant from localStorage on load
   useEffect(() => {
@@ -68,6 +90,60 @@ export default function ProductsPage() {
   useEffect(() => {
     fetchProducts();
   }, [fetchProducts]);
+
+  const handleManualSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const { sku_id, brand, category, pack_size, base_price } = formData;
+    
+    // Validations
+    if (!sku_id.trim() || !brand.trim() || !category.trim() || !pack_size.trim() || !base_price.trim()) {
+      showToast("All fields are required.", "error");
+      return;
+    }
+    
+    const priceFloat = parseFloat(base_price);
+    if (isNaN(priceFloat) || priceFloat < 0) {
+      showToast("Wholesale Price must be a positive number.", "error");
+      return;
+    }
+    
+    setSubmitting(true);
+    try {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const resp = await fetch(`${apiBase}/api/v1/products?tenant_id=${activeTenantId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sku_id: sku_id.trim(),
+          brand: brand.trim(),
+          category: category.trim(),
+          pack_size: pack_size.trim(),
+          base_price: priceFloat
+        })
+      });
+      
+      const data = await resp.json();
+      if (resp.ok) {
+        showToast("Product added successfully!", "success");
+        setFormData({
+          sku_id: "",
+          brand: "",
+          category: "",
+          pack_size: "",
+          base_price: ""
+        });
+        fetchProducts(); // Refresh local list
+      } else {
+        const detail = data.detail || "Failed to add product manually.";
+        showToast(detail, "error");
+      }
+    } catch (err) {
+      console.error(err);
+      showToast("Network connection breakdown during product creation.", "error");
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   // Handle live catalog filtering
   const filteredProducts = products.filter(p => 
@@ -122,6 +198,106 @@ export default function ProductsPage() {
               <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
               <span>Refresh Catalog</span>
             </button>
+          </div>
+
+          {/* Top Ingestion & Creation Split Layout */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Left Column: Bulk Ingestion */}
+            <CatalogIngestion
+              activeTenantId={activeTenantId}
+              onSuccess={(msg) => {
+                showToast(msg, "success");
+                fetchProducts();
+              }}
+              onError={(msg) => showToast(msg, "error")}
+            />
+
+            {/* Right Column: Manual Entry Form */}
+            <div className="bg-white p-6 rounded-xl border border-dashboard-border shadow-sm flex flex-col justify-between">
+              <div>
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="text-xl">✍️</span>
+                  <h3 className="font-semibold text-slate-800 text-lg">Add Product Manually</h3>
+                </div>
+                
+                <form onSubmit={handleManualSubmit} className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-500 mb-1">SKU ID</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. PROD-HUL-SOAP"
+                        value={formData.sku_id}
+                        onChange={(e) => setFormData(prev => ({ ...prev, sku_id: e.target.value }))}
+                        className="w-full p-2 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-1 focus:ring-brand-blue bg-white"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-xs font-medium text-slate-500 mb-1">Brand</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. HUL"
+                        value={formData.brand}
+                        onChange={(e) => setFormData(prev => ({ ...prev, brand: e.target.value }))}
+                        className="w-full p-2 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-1 focus:ring-brand-blue bg-white"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="col-span-1">
+                      <label className="block text-xs font-medium text-slate-500 mb-1">Category</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Soap"
+                        value={formData.category}
+                        onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value }))}
+                        className="w-full p-2 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-1 focus:ring-brand-blue bg-white"
+                      />
+                    </div>
+
+                    <div className="col-span-1">
+                      <label className="block text-xs font-medium text-slate-500 mb-1">Pack Size</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. 100g"
+                        value={formData.pack_size}
+                        onChange={(e) => setFormData(prev => ({ ...prev, pack_size: e.target.value }))}
+                        className="w-full p-2 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-1 focus:ring-brand-blue bg-white"
+                      />
+                    </div>
+
+                    <div className="col-span-1">
+                      <label className="block text-xs font-medium text-slate-500 mb-1">Wholesale Price</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        placeholder="e.g. 45.00"
+                        value={formData.base_price}
+                        onChange={(e) => setFormData(prev => ({ ...prev, base_price: e.target.value }))}
+                        className="w-full p-2 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-1 focus:ring-brand-blue bg-white"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="w-full mt-2 bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm p-2.5 rounded-lg transition-colors shadow-sm disabled:bg-blue-400 flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    {submitting ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Adding Product...</span>
+                      </>
+                    ) : (
+                      <span>Create Product SKU</span>
+                    )}
+                  </button>
+                </form>
+              </div>
+            </div>
           </div>
 
           {/* Master Grid / Card Panel */}
@@ -207,6 +383,31 @@ export default function ProductsPage() {
           </div>
         </main>
       </div>
+
+      {/* Sleek Floating Toast Notification */}
+      {toast.show && (
+        <div className="fixed top-5 right-5 z-50 flex items-center gap-3 bg-white/95 backdrop-blur-md border border-slate-100 shadow-2xl px-4 py-3.5 rounded-xl animate-slide-in pointer-events-auto max-w-sm">
+          {toast.type === "success" ? (
+            <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0 shadow-sm">
+              <CheckCircle2 className="w-4.5 h-4.5" />
+            </div>
+          ) : (
+            <div className="w-8 h-8 rounded-full bg-rose-50 flex items-center justify-center text-rose-600 shrink-0 shadow-sm">
+              <AlertCircle className="w-4.5 h-4.5" />
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-bold text-slate-800">{toast.type === "success" ? "Success" : "Error"}</p>
+            <p className="text-[11px] text-slate-500 font-semibold mt-0.5 break-words">{toast.message}</p>
+          </div>
+          <button 
+            onClick={() => setToast(prev => ({ ...prev, show: false }))}
+            className="text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-50 transition-all shrink-0"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

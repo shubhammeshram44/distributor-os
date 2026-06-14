@@ -2,12 +2,78 @@ import csv
 import codecs
 import uuid
 from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, status
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from app.database import get_db, tenant_context
 from app.models.product import Product, ProductAlias
 from app.api.v1.dashboard import ensure_demo_data
 
 router = APIRouter(prefix="/products", tags=["Products"])
+
+class ProductCreate(BaseModel):
+    sku_id: str = Field(..., min_length=1)
+    brand: str = Field(..., min_length=1)
+    category: str = Field(..., min_length=1)
+    pack_size: str = Field(..., min_length=1)
+    base_price: float = Field(..., ge=0.0)
+
+@router.post("", status_code=status.HTTP_201_CREATED)
+def create_product(
+    payload: ProductCreate,
+    tenant_id: uuid.UUID,
+    db: Session = Depends(get_db)
+):
+    """
+    Manually inserts a new product and creates default aliases.
+    """
+    tenant_context.set(tenant_id)
+    
+    # Check if SKU already exists
+    existing = db.query(Product).filter(Product.sku_id == payload.sku_id).first()
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Product with SKU '{payload.sku_id}' already exists."
+        )
+        
+    new_product = Product(
+        id=uuid.uuid4(),
+        tenant_id=tenant_id,
+        sku_id=payload.sku_id,
+        brand=payload.brand,
+        category=payload.category,
+        pack_size=payload.pack_size,
+        base_price=payload.base_price,
+        stock_quantity=100  # Default initial stock
+    )
+    db.add(new_product)
+    db.flush()
+    
+    # Create default aliases
+    alias_sku = ProductAlias(
+        id=uuid.uuid4(),
+        tenant_id=tenant_id,
+        product_id=new_product.id,
+        alias_name=payload.sku_id
+    )
+    db.add(alias_sku)
+    
+    friendly_name = f"{payload.brand} {payload.category}"
+    alias_friendly = ProductAlias(
+        id=uuid.uuid4(),
+        tenant_id=tenant_id,
+        product_id=new_product.id,
+        alias_name=friendly_name
+    )
+    db.add(alias_friendly)
+    
+    db.commit()
+    return {
+        "status": "success",
+        "product_id": str(new_product.id),
+        "sku_id": new_product.sku_id
+    }
+
 
 @router.get("", status_code=status.HTTP_200_OK)
 def get_products(

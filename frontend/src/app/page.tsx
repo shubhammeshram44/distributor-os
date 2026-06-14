@@ -12,7 +12,6 @@ import ActivityFeed from "@/components/ActivityFeed";
 import { useDashboardData } from "@/hooks/useDashboardData";
 import { ChevronDown, SlidersHorizontal, RefreshCw, CheckCircle2, AlertCircle, X } from "lucide-react";
 import WhatsAppSimulator from "@/components/WhatsAppSimulator";
-import CatalogIngestion from "@/components/CatalogIngestion";
 
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState("Dashboard");
@@ -200,14 +199,6 @@ export default function DashboardPage() {
             {/* Right Col: Collections Donut Chart (40% width) */}
             <div className="lg:col-span-2 min-h-[380px] flex flex-col gap-6">
               <CollectionsDonut data={donutData} />
-              <CatalogIngestion
-                activeTenantId={activeTenantId}
-                onSuccess={(msg) => {
-                  showToast(msg, "success");
-                  refreshAll();
-                }}
-                onError={(msg) => showToast(msg, "error")}
-              />
             </div>
           </div>
 

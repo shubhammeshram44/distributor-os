@@ -133,3 +133,66 @@ def test_import_products_validation_rollback(db_session, client):
     db_session.expire_all()
     product_count = db_session.query(Product).filter(Product.tenant_id == tenant.id).count()
     assert product_count == 0
+
+
+def test_manual_product_creation(db_session, client):
+    # 1. Setup Tenant
+    tenant = DistributorTenant(name="Manual Creation Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+
+    tenant_context.set(tenant.id)
+
+    # 2. Trigger POST /products manually
+    payload = {
+        "sku_id": "PROD-MANUAL-NEW",
+        "brand": "HUL",
+        "category": "Soap",
+        "pack_size": "150g",
+        "base_price": 55.50
+    }
+
+    response = client.post(
+        f"/api/v1/products?tenant_id={tenant.id}",
+        json=payload
+    )
+
+    assert response.status_code == 201
+    data = response.json()
+    assert data["status"] == "success"
+    assert "product_id" in data
+
+    # 3. Assert database state
+    db_session.expire_all()
+    product = db_session.query(Product).filter_by(sku_id="PROD-MANUAL-NEW").one()
+    assert float(product.base_price) == 55.50
+    assert product.brand == "HUL"
+    assert product.category == "Soap"
+    assert product.pack_size == "150g"
+    assert product.stock_quantity == 100  # Default initial stock
+
+    # Verify default aliases got created
+    aliases = db_session.query(ProductAlias).filter_by(product_id=product.id).all()
+    assert len(aliases) == 2
+    alias_names = {a.alias_name for a in aliases}
+    assert "PROD-MANUAL-NEW" in alias_names
+    assert "HUL Soap" in alias_names
+
+    # 4. Assert duplicate SKU is rejected with 400
+    dup_response = client.post(
+        f"/api/v1/products?tenant_id={tenant.id}",
+        json=payload
+    )
+    assert dup_response.status_code == 400
+    assert "already exists" in dup_response.json()["detail"]
+
+    # 5. Assert validation bounds (negative price)
+    bad_payload = payload.copy()
+    bad_payload["sku_id"] = "PROD-MANUAL-BAD"
+    bad_payload["base_price"] = -5.0
+    bad_response = client.post(
+        f"/api/v1/products?tenant_id={tenant.id}",
+        json=bad_payload
+    )
+    assert bad_response.status_code == 422
+
