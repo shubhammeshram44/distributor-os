@@ -44,6 +44,15 @@ export default function CustomersPage() {
   const [updatedTerms, setUpdatedTerms] = useState("");
   const [savingConfig, setSavingConfig] = useState(false);
 
+  // Onboard Retailer Modal States
+  const [isOnboardModalOpen, setIsOnboardModalOpen] = useState(false);
+  const [storeName, setStoreName] = useState("");
+  const [contactNumber, setContactNumber] = useState("");
+  const [deliveryAddress, setDeliveryAddress] = useState("");
+  const [creditLimit, setCreditLimit] = useState("100000");
+  const [billingTerms, setBillingTerms] = useState("Net 30");
+  const [savingOnboard, setSavingOnboard] = useState(false);
+
   const [toast, setToast] = useState<{ show: boolean; message: string; type: "success" | "error" }>({
     show: false,
     message: "",
@@ -103,7 +112,7 @@ export default function CustomersPage() {
 
   useEffect(() => {
     fetchCustomers();
-  }, [fetchCustomers]);
+  }, [activeTenantId, fetchCustomers]);
 
   // Open Edit Modal
   const handleOpenEditModal = (customer: CustomerRow) => {
@@ -150,6 +159,59 @@ export default function CustomersPage() {
       showToast("Network breakdown during settings update.", "error");
     } finally {
       setSavingConfig(false);
+    }
+  };
+
+  // Submit Customer Onboarding
+  const handleOnboardSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!storeName.trim() || !contactNumber.trim() || !deliveryAddress.trim() || !creditLimit.trim()) {
+      showToast("All fields are required.", "error");
+      return;
+    }
+
+    const limitVal = parseFloat(creditLimit);
+    if (isNaN(limitVal) || limitVal < 0) {
+      showToast("Credit Limit must be a non-negative number.", "error");
+      return;
+    }
+
+    setSavingOnboard(true);
+    try {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const resp = await fetch(`${apiBase}/api/v1/customers?tenant_id=${activeTenantId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          store_name: storeName.trim(),
+          contact_number: contactNumber.trim(),
+          delivery_address: deliveryAddress.trim(),
+          credit_limit: limitVal,
+          billing_terms: billingTerms
+        })
+      });
+
+      const data = await resp.json();
+      if (resp.ok) {
+        showToast("New retailer onboarded successfully!", "success");
+        setIsOnboardModalOpen(false);
+        // Reset form
+        setStoreName("");
+        setContactNumber("");
+        setDeliveryAddress("");
+        setCreditLimit("100000");
+        setBillingTerms("Net 30");
+        fetchCustomers(); // Refresh grid instantly
+      } else {
+        const detail = data.detail || "Failed to onboard customer.";
+        showToast(detail, "error");
+      }
+    } catch (err) {
+      console.error(err);
+      showToast("Network breakdown during customer onboarding.", "error");
+    } finally {
+      setSavingOnboard(false);
     }
   };
 
@@ -208,13 +270,22 @@ export default function CustomersPage() {
               </p>
             </div>
 
-            <button
-              onClick={fetchCustomers}
-              className="flex items-center gap-1.5 px-3 py-2 border border-dashboard-border bg-white rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-all shadow-sm cursor-pointer"
-            >
-              <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
-              <span>Refresh Ledger</span>
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setIsOnboardModalOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm cursor-pointer animate-fade-in"
+              >
+                <span>+ Onboard New Retailer</span>
+              </button>
+
+              <button
+                onClick={fetchCustomers}
+                className="flex items-center gap-1.5 px-3 py-2 border border-dashboard-border bg-white rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-all shadow-sm cursor-pointer"
+              >
+                <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
+                <span>Refresh Ledger</span>
+              </button>
+            </div>
           </div>
 
           {/* Quick Metrics Banners */}
@@ -447,6 +518,135 @@ export default function CustomersPage() {
                     </>
                   ) : (
                     <span>Save Configuration</span>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Onboard New Retailer Modal */}
+      {isOnboardModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-2xl w-full max-w-md p-6 animate-scale-up relative mx-4 animate-slide-in">
+            <button
+              onClick={() => {
+                setIsOnboardModalOpen(false);
+                setStoreName("");
+                setContactNumber("");
+                setDeliveryAddress("");
+                setCreditLimit("100000");
+                setBillingTerms("Net 30");
+              }}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1.5 rounded-full hover:bg-slate-50 transition-all cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="flex items-center gap-2 mb-4">
+              <span className="text-xl">🏪</span>
+              <h3 className="font-bold text-slate-800 text-lg">Onboard New Retailer</h3>
+            </div>
+
+            <p className="text-xs text-slate-400 font-semibold mb-6">
+              Register a new B2B customer retailer under the active tenant context.
+            </p>
+
+            <form onSubmit={handleOnboardSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">Store Name</label>
+                <input
+                  type="text"
+                  value={storeName}
+                  onChange={(e) => setStoreName(e.target.value)}
+                  className="w-full p-2.5 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-1 focus:ring-brand-blue bg-white font-semibold"
+                  placeholder="e.g. Kaveri Provision Store"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">Contact Phone</label>
+                <input
+                  type="text"
+                  value={contactNumber}
+                  onChange={(e) => setContactNumber(e.target.value)}
+                  className="w-full p-2.5 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-1 focus:ring-brand-blue bg-white font-semibold"
+                  placeholder="e.g. +919999888877"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">Delivery Address</label>
+                <textarea
+                  value={deliveryAddress}
+                  onChange={(e) => setDeliveryAddress(e.target.value)}
+                  className="w-full p-2.5 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-1 focus:ring-brand-blue bg-white font-semibold h-20 resize-none"
+                  placeholder="e.g. Bengaluru, Indiranagar"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">Initial Credit Ceiling Limit (₹)</label>
+                <input
+                  type="number"
+                  step="1"
+                  value={creditLimit}
+                  onChange={(e) => setCreditLimit(e.target.value)}
+                  className="w-full p-2.5 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-1 focus:ring-brand-blue bg-white font-semibold"
+                  placeholder="e.g. 100000"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">Billing Terms</label>
+                <select
+                  value={billingTerms}
+                  onChange={(e) => setBillingTerms(e.target.value)}
+                  className="w-full p-2.5 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-1 focus:ring-brand-blue bg-white font-semibold cursor-pointer"
+                  required
+                >
+                  <option value="0-15 Days">0-15 Days</option>
+                  <option value="16-30 Days">16-30 Days</option>
+                  <option value="31-60 Days">31-60 Days</option>
+                  <option value="60+ Days">60+ Days</option>
+                  <option value="Net 15">Net 15</option>
+                  <option value="Net 30">Net 30</option>
+                  <option value="COD">COD</option>
+                </select>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 mt-6">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsOnboardModalOpen(false);
+                    setStoreName("");
+                    setContactNumber("");
+                    setDeliveryAddress("");
+                    setCreditLimit("100000");
+                    setBillingTerms("Net 30");
+                  }}
+                  className="px-4 py-2 border border-slate-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-50 transition-all cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingOnboard}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                >
+                  {savingOnboard ? (
+                    <>
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      <span>Onboarding...</span>
+                    </>
+                  ) : (
+                    <span>Onboard Retailer</span>
                   )}
                 </button>
               </div>
