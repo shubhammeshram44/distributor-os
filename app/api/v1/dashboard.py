@@ -464,3 +464,34 @@ def get_recent_activity(
     # Sort merged list chronologically
     activity = sorted(activity, key=lambda a: a["timestamp"], reverse=True)
     return activity[:6] # Return top 6
+
+
+@router.get("/customers")
+def get_customers(
+    tenant_id: uuid.UUID,
+    db: Session = Depends(get_db)
+):
+    """
+    Returns all customers for a tenant.
+    """
+    ensure_demo_data(db)
+    tenant_context.set(tenant_id)
+    customers = db.query(Customer).filter(Customer.tenant_id == tenant_id).all()
+    results = []
+    for c in customers:
+        # Get alias phone number
+        alias = db.query(CustomerAlias).filter(CustomerAlias.customer_id == c.id).first()
+        phone = alias.alias_value if alias else "N/A"
+        results.append({
+            "id": str(c.id),
+            "customer_id": c.customer_id,
+            "retailer_name": c.retailer_name,
+            "address_text": c.address_text,
+            "gstin": c.gstin,
+            "tax_group": c.tax_group,
+            "payment_terms": c.payment_terms,
+            "phone": phone,
+            "credit_limit": float(c.credit_limit),
+            "outstanding_balance": float(c.outstanding_balance)
+        })
+    return results

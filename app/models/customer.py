@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import String, ForeignKey, Float
+from sqlalchemy import String, ForeignKey, Float, Numeric
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base, TenantMixin
 
@@ -15,6 +15,8 @@ class Customer(Base, TenantMixin):
     gstin: Mapped[str] = mapped_column(String(15), nullable=False)
     tax_group: Mapped[str] = mapped_column(String(100), nullable=False)
     payment_terms: Mapped[str] = mapped_column(String(255), nullable=False)
+    credit_limit: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False, default=100000.0)
+    outstanding_balance: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False, default=0.0)
 
     aliases: Mapped[list["CustomerAlias"]] = relationship(back_populates="customer", cascade="all, delete-orphan")
 

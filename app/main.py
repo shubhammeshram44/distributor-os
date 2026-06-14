@@ -15,6 +15,14 @@ try:
 except Exception:
     pass
 
+try:
+    with engine.connect() as conn:
+        conn.execute(text("ALTER TABLE customers ADD COLUMN credit_limit NUMERIC DEFAULT 100000.0"))
+        conn.execute(text("ALTER TABLE customers ADD COLUMN outstanding_balance NUMERIC DEFAULT 0.0"))
+        conn.commit()
+except Exception:
+    pass
+
 app = FastAPI(
     title="Distributor OS API",
     description="Multi-tenant backend platform for supply chain distributors",

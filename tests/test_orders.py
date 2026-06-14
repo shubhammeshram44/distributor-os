@@ -384,3 +384,70 @@ def test_list_orders(db_session, client):
     assert data[0]["amount"] == 225.0
     assert data[0]["status"] == "Pending"  # Draft maps to Pending
 
+
+def test_credit_limit_guardrail_success_and_failure(db_session, client):
+    # Setup Tenant
+    tenant = DistributorTenant(name="Credit Limit Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+
+    tenant_context.set(tenant.id)
+
+    # Setup Product
+    p = Product(sku_id="PROD-CREDIT", brand="HUL", category="Soap", pack_size="100g", base_price=500.0, stock_quantity=100)
+    db_session.add(p)
+    db_session.flush()
+
+    # Setup Customer with structural credit_limit of 5,000.0
+    cust = Customer(
+        retailer_name="Credit Test Shop", customer_id="C-CREDIT-1", address_text="Credit Street, Delhi",
+        gstin="07AAAAA1111A1Z1", tax_group="GST", payment_terms="COD",
+        credit_limit=5000.0, outstanding_balance=0.0
+    )
+    db_session.add(cust)
+    db_session.flush()
+
+    # Setup Order 1: Total amount = 5 * 500 = 2,500.0
+    order1 = Order(
+        tenant_id=tenant.id,
+        internal_order_id="ORD-CREDIT-TEST-1",
+        source="Portal",
+        customer_id=cust.id
+    )
+    db_session.add(order1)
+    db_session.flush()
+    db_session.add(OrderLineItem(order_id=order1.id, product_id=p.id, quantity=5, unit_price=500.0))
+    db_session.add(OrderStateLedger(order_id=order1.id, from_status=None, to_status="Draft", updated_by="admin"))
+    db_session.commit()
+
+    # Confirm Order 1 (2,500 <= 5,000) -> Should pass
+    response = client.put(f"/api/v1/orders/{order1.id}/status", json={"to_status": "Confirmed"})
+    assert response.status_code == 200
+    db_session.expire_all()
+    cust_db = db_session.get(Customer, cust.id)
+    assert float(cust_db.outstanding_balance) == 2500.0
+
+    # Setup Order 2: Total amount = 6 * 500 = 3,000.0
+    # Combined with Order 1 (2,500) = 5,500.0 which exceeds 5,000.0 credit limit!
+    order2 = Order(
+        tenant_id=tenant.id,
+        internal_order_id="ORD-CREDIT-TEST-2",
+        source="Portal",
+        customer_id=cust.id
+    )
+    db_session.add(order2)
+    db_session.flush()
+    db_session.add(OrderLineItem(order_id=order2.id, product_id=p.id, quantity=6, unit_price=500.0))
+    db_session.add(OrderStateLedger(order_id=order2.id, from_status=None, to_status="Draft", updated_by="admin"))
+    db_session.commit()
+
+    # Confirm Order 2 -> Should fail with 400 Bad Request
+    response = client.put(f"/api/v1/orders/{order2.id}/status", json={"to_status": "Confirmed"})
+    assert response.status_code == 400
+    assert "Credit limit exceeded" in response.json()["detail"]
+
+    # Verify outstanding balance was NOT incremented for Order 2
+    db_session.expire_all()
+    cust_db2 = db_session.get(Customer, cust.id)
+    assert float(cust_db2.outstanding_balance) == 2500.0
+

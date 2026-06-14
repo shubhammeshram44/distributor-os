@@ -81,7 +81,34 @@ def update_order_status(
         items = db.query(OrderLineItem).filter(OrderLineItem.order_id == order_id).all()
 
         if payload.to_status == "Confirmed":
-            # Inventory Guardrail Validation Loop
+            # 1. Fetch Customer
+            customer = db.get(Customer, order.customer_id)
+            if not customer:
+                raise HTTPException(
+                    status_code=404,
+                    detail="Customer not found"
+                )
+
+            # 2. Calculate current order total
+            current_order_total = sum(float(item.quantity * item.unit_price) for item in items)
+
+            # 3. Aggregate Confirmed orders' outstanding balances
+            total_confirmed_outstanding = 0.0
+            confirmed_orders = db.query(Order).filter(Order.customer_id == order.customer_id).all()
+            for co in confirmed_orders:
+                if co.id != order.id and co.current_status == "Confirmed":
+                    order_total = sum(float(line.quantity * line.unit_price) for line in co.line_items)
+                    total_confirmed_outstanding += order_total
+
+            # 4. Check Credit Limit
+            combined_balance = total_confirmed_outstanding + current_order_total
+            if combined_balance > float(customer.credit_limit):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Credit limit exceeded for customer '{customer.retailer_name}'. Combined balance: ₹{combined_balance:,.2f}, Credit Limit: ₹{customer.credit_limit:,.2f}"
+                )
+
+            # 5. Inventory Guardrail Validation Loop
             for item in items:
                 # Resolve product variables dynamically
                 prod_data = db.query(Product).filter(Product.id == item.product_id).first()
@@ -107,6 +134,9 @@ def update_order_status(
                 product = db.query(Product).filter(Product.sku_id == item.sku_code).first()
                 if product:
                     product.stock_quantity -= item.quantity
+
+            # Update Customer outstanding balance
+            customer.outstanding_balance = float(customer.outstanding_balance) + current_order_total
 
         # Record state transition to OrderStateLedger
         current_status = order.current_status
