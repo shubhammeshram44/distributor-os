@@ -87,14 +87,14 @@ def handle_whatsapp_webhook(
                     rate = 1250.0
                     sku = "PROD-STAYFREE-XL"
                     brand = "Stayfree"
-                    category = "Sanitary"
-                    pack_size = "XL"
+                    category = "Personal Care"
+                    pack_size = "Pack of 20"
                 elif "maggi" in p_name.lower():
                     rate = 450.0
-                    sku = "PROD-ITC-MAGGI"
+                    sku = "PROD-MAGGI-PACK"
                     brand = "Nestle"
-                    category = "Noodles"
-                    pack_size = "70g"
+                    category = "Packaged Foods"
+                    pack_size = "Pack of 12"
                 elif "soap" in p_name.lower() or "tata" in p_name.lower():
                     rate = 47.3
                     sku = "PROD-HUL-SOAP"
@@ -118,29 +118,29 @@ def handle_whatsapp_webhook(
                     "rate": rate
                 })
 
-        # Fallback if no items parsed dynamically
+        # Fallback multi-token detection if no items parsed dynamically
         if not parsed_items:
             if "stayfree" in msg or "pad" in msg:
                 parsed_items.append({
                     "product_name": "Stayfree Sanitary Napkins (XL)",
                     "sku_code": "PROD-STAYFREE-XL",
                     "brand": "Stayfree",
-                    "category": "Sanitary",
-                    "pack_size": "XL",
+                    "category": "Personal Care",
+                    "pack_size": "Pack of 20",
                     "qty": 10,
                     "rate": 1250.0
                 })
-            elif "maggi" in msg:
+            if "maggi" in msg:
                 parsed_items.append({
                     "product_name": "Maggi 2-Min Noodles",
-                    "sku_code": "PROD-ITC-MAGGI",
+                    "sku_code": "PROD-MAGGI-PACK",
                     "brand": "Nestle",
-                    "category": "Noodles",
-                    "pack_size": "70g",
+                    "category": "Packaged Foods",
+                    "pack_size": "Pack of 12",
                     "qty": 100,
                     "rate": 450.0
                 })
-            elif "soap" in msg or "tata" in msg:
+            if "soap" in msg or "tata" in msg:
                 parsed_items.append({
                     "product_name": "Tata Premium Soap",
                     "sku_code": "PROD-HUL-SOAP",
@@ -150,7 +150,9 @@ def handle_whatsapp_webhook(
                     "qty": 500,
                     "rate": 47.3
                 })
-            else:
+            
+            # Fallback if absolutely no keywords matched
+            if not parsed_items:
                 parsed_items.append({
                     "product_name": "Wholesale SKU Ingestion",
                     "sku_code": "PROD-GENERIC",
