@@ -24,6 +24,7 @@ interface CustomerRow {
   gstin: string;
   tax_group: string;
   phone: string;
+  payment_terms: string;
   credit_limit: number;
   outstanding_balance: number;
 }
@@ -276,7 +277,7 @@ export default function CustomersPage() {
                           </td>
                           <td className="py-4 px-6 text-xs font-semibold text-slate-500">
                             <span className="bg-slate-100 px-2 py-1 rounded border border-slate-200/50">
-                              {c.payment_terms}
+                              {(c as any).payment_terms || "Net 30"}
                             </span>
                           </td>
                           <td className="py-4 px-6 text-right font-extrabold text-slate-800">
