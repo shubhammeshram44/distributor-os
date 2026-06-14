@@ -97,3 +97,111 @@ def test_create_collection_voucher_customer_not_found(db_session, client):
     )
     assert response.status_code == 404
     assert "Customer not found" in response.json()["detail"]
+
+def test_allocate_payment_fifo_success(db_session, client):
+    from datetime import datetime, timedelta
+    from app.models.invoice import Invoice
+    from app.models.order import Order
+    from app.models.payment import PaymentInvoiceLink
+    
+    # 1. Setup Tenant
+    tenant = DistributorTenant(name="FIFO Test Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+
+    tenant_context.set(tenant.id)
+
+    # 2. Setup Customer with outstanding balance
+    customer = Customer(
+        retailer_name="FIFO Debtor",
+        customer_id="C-FIFO-1",
+        address_text="FIFO Lane, Mumbai",
+        gstin="27BBBBB2222B2Z2",
+        tax_group="GST",
+        payment_terms="Net 30",
+        credit_limit=100000.0,
+        outstanding_balance=35000.0
+    )
+    db_session.add(customer)
+    db_session.commit()
+
+    # 3. Setup two Orders and Invoices (Invoice A: 15,000, created 5 days ago; Invoice B: 20,000, created 2 days ago)
+    order_a = Order(
+        tenant_id=tenant.id,
+        internal_order_id="ORD-FIFO-A",
+        source="Portal",
+        customer_id=customer.id,
+        created_at=datetime.utcnow() - timedelta(days=5)
+    )
+    order_b = Order(
+        tenant_id=tenant.id,
+        internal_order_id="ORD-FIFO-B",
+        source="Portal",
+        customer_id=customer.id,
+        created_at=datetime.utcnow() - timedelta(days=2)
+    )
+    db_session.add(order_a)
+    db_session.add(order_b)
+    db_session.commit()
+
+    invoice_a = Invoice(
+        tenant_id=tenant.id,
+        order_id=order_a.id,
+        customer_id=customer.id,
+        gstin="27BBBBB2222B2Z2",
+        total_amount=15000.00,
+        payment_status="UNPAID",
+        amount_paid=0.00,
+        created_at=order_a.created_at
+    )
+    invoice_b = Invoice(
+        tenant_id=tenant.id,
+        order_id=order_b.id,
+        customer_id=customer.id,
+        gstin="27BBBBB2222B2Z2",
+        total_amount=20000.00,
+        payment_status="UNPAID",
+        amount_paid=0.00,
+        created_at=order_b.created_at
+    )
+    db_session.add(invoice_a)
+    db_session.add(invoice_b)
+    db_session.commit()
+
+    # 4. Call endpoint to create a payment voucher for 25,000
+    response = client.post(
+        f"/api/v1/payments/collection-voucher?tenant_id={tenant.id}",
+        json={
+            "customer_id": str(customer.id),
+            "amount": 25000.0,
+            "method": "CARD",
+            "reference_number": "CARD-TXN-12345"
+        }
+    )
+
+    assert response.status_code == 201
+    data = response.json()
+    assert data["status"] == "success"
+
+    # 5. Verify database mutations
+    db_session.expire_all()
+
+    # Invoice A (15,000) should be fully PAID
+    inv_a_db = db_session.get(Invoice, invoice_a.id)
+    assert inv_a_db.payment_status == "PAID"
+    assert float(inv_a_db.amount_paid) == 15000.00
+
+    # Invoice B (20,000) should be PARTIALLY_PAID (10,000 paid)
+    inv_b_db = db_session.get(Invoice, invoice_b.id)
+    assert inv_b_db.payment_status == "PARTIALLY_PAID"
+    assert float(inv_b_db.amount_paid) == 10000.00
+
+    # PaymentInvoiceLinks should exist
+    links = db_session.query(PaymentInvoiceLink).filter(PaymentInvoiceLink.payment_id == uuid.UUID(data["payment_id"])).all()
+    assert len(links) == 2
+    
+    # Check link amounts
+    link_a = next(l for l in links if l.invoice_id == invoice_a.id)
+    link_b = next(l for l in links if l.invoice_id == invoice_b.id)
+    assert float(link_a.amount_allocated) == 15000.00
+    assert float(link_b.amount_allocated) == 10000.00

@@ -190,7 +190,11 @@ def ensure_demo_data(db: Session):
             gstin="29AAAAA1111A1Z1",
             total_amount=o["amount"],
             irn_status="Cleared",
-            qr_code_status="Generated"
+            qr_code_status="Generated",
+            customer_id=order.customer_id,
+            payment_status="UNPAID",
+            amount_paid=0.0,
+            created_at=order.created_at
         )
         db.add(invoice)
 
