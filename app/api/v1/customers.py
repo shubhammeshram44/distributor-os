@@ -5,6 +5,9 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.database import get_db, tenant_context
 from app.models.customer import Customer, CustomerAlias
+from app.models.ledger import CustomerLedger
+from app.api.v1.dashboard import ensure_demo_data
+
 
 router = APIRouter(prefix="/customers", tags=["Customers"])
 
@@ -102,3 +105,51 @@ def onboard_customer(
         "retailer_name": new_cust.retailer_name,
         "contact_number": new_alias.alias_value
     }
+
+@router.get("/{customer_id}/statement")
+def get_customer_statement(
+    customer_id: uuid.UUID,
+    tenant_id: uuid.UUID,
+    db: Session = Depends(get_db)
+):
+    ensure_demo_data(db)
+    tenant_context.set(tenant_id)
+    
+    customer = db.get(Customer, customer_id)
+    if not customer:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Customer not found"
+        )
+        
+    records = (
+        db.query(CustomerLedger)
+        .filter(CustomerLedger.customer_id == customer_id)
+        .order_by(CustomerLedger.created_at.asc())
+        .all()
+    )
+    
+    statement = []
+    running_balance = 0.0
+    for r in records:
+        if r.type == "DEBIT":
+            running_balance += float(r.amount)
+        elif r.type == "CREDIT":
+            running_balance -= float(r.amount)
+            
+        statement.append({
+            "id": str(r.id),
+            "created_at": r.created_at.isoformat(),
+            "type": r.type,
+            "amount": float(r.amount),
+            "reference_id": r.reference_id,
+            "running_balance": running_balance
+        })
+        
+    return {
+        "customer_id": str(customer_id),
+        "retailer_name": customer.retailer_name,
+        "running_balance": running_balance,
+        "statement": statement
+    }
+

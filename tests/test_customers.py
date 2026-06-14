@@ -138,3 +138,49 @@ def test_onboard_customer_duplicate(db_session, client):
 
     assert response.status_code == 400
     assert "already registered" in response.json()["detail"]
+
+
+def test_customer_statement(db_session, client):
+    # Setup Tenant
+    tenant = DistributorTenant(name="Statement Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+
+    tenant_context.set(tenant.id)
+
+    # Setup Customer
+    cust = Customer(
+        retailer_name="Statement Shop", customer_id="C-STATEMENT", address_text="Statement St",
+        gstin="07AAAAA1111A1Z1", tax_group="GST", payment_terms="COD",
+        credit_limit=50000.0, outstanding_balance=0.0
+    )
+    db_session.add(cust)
+    db_session.flush()
+
+    # Seed Ledger Entries
+    from app.models.ledger import CustomerLedger
+    db_session.add(CustomerLedger(
+        tenant_id=tenant.id, customer_id=cust.id, type="DEBIT", amount=1000.0, reference_id="ORD-1"
+    ))
+    db_session.add(CustomerLedger(
+        tenant_id=tenant.id, customer_id=cust.id, type="CREDIT", amount=400.0, reference_id="PAY-1"
+    ))
+    db_session.commit()
+
+    # Call statement endpoint
+    response = client.get(f"/api/v1/customers/{cust.id}/statement?tenant_id={tenant.id}")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["customer_id"] == str(cust.id)
+    assert data["retailer_name"] == "Statement Shop"
+    assert data["running_balance"] == 600.0
+
+    statement = data["statement"]
+    assert len(statement) == 2
+    assert statement[0]["type"] == "DEBIT"
+    assert statement[0]["amount"] == 1000.0
+    assert statement[0]["running_balance"] == 1000.0
+    assert statement[1]["type"] == "CREDIT"
+    assert statement[1]["amount"] == 400.0
+    assert statement[1]["running_balance"] == 600.0
+

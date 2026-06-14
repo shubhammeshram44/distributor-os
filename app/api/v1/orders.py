@@ -9,6 +9,8 @@ from app.models.order import Order, OrderLineItem, OrderStateLedger
 from app.models.product import Product
 from app.models.tenant import DistributorTenant
 from app.models.customer import Customer
+from app.models.ledger import CustomerLedger
+
 
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
@@ -138,7 +140,18 @@ def update_order_status(
             # Update Customer outstanding balance
             customer.outstanding_balance = float(customer.outstanding_balance) + current_order_total
 
+            # Record a DEBIT transaction in the customer ledger
+            db.add(CustomerLedger(
+                id=uuid.uuid4(),
+                tenant_id=order.tenant_id,
+                customer_id=order.customer_id,
+                type="DEBIT",
+                amount=current_order_total,
+                reference_id=order.internal_order_id
+            ))
+
         # Record state transition to OrderStateLedger
+
         current_status = order.current_status
         db.add(OrderStateLedger(
             tenant_id=order.tenant_id,

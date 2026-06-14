@@ -55,6 +55,13 @@ export default function CustomersPage() {
   const [billingTerms, setBillingTerms] = useState("Net 30");
   const [savingOnboard, setSavingOnboard] = useState(false);
 
+  // Statement Drawer States
+  const [isStatementOpen, setIsStatementOpen] = useState(false);
+  const [activeStatementRows, setActiveStatementRows] = useState<any[]>([]);
+  const [loadingStatement, setLoadingStatement] = useState(false);
+  const [statementCustomerName, setStatementCustomerName] = useState("");
+
+
   const [toast, setToast] = useState<{ show: boolean; message: string; type: "success" | "error" }>({
     show: false,
     message: "",
@@ -129,6 +136,28 @@ export default function CustomersPage() {
       fetchCustomers(activeTenantId);
     }
   }, [activeTenantId, fetchCustomers]);
+
+  const handleOpenStatement = async (customer: CustomerRow) => {
+    setStatementCustomerName(customer.retailer_name);
+    setIsStatementOpen(true);
+    setLoadingStatement(true);
+    try {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const resp = await fetch(`${apiBase}/api/v1/customers/${customer.id}/statement?tenant_id=${activeTenantId}`);
+      if (resp.ok) {
+        const data = await resp.json();
+        setActiveStatementRows(data.statement);
+      } else {
+        showToast("Failed to retrieve statement history.", "error");
+      }
+    } catch (err) {
+      console.error("Statement retrieve failed:", err);
+      showToast("Network connection breakdown during statement fetch.", "error");
+    } finally {
+      setLoadingStatement(false);
+    }
+  };
+
 
   // Open Edit Modal
   const handleOpenEditModal = (customer: CustomerRow) => {
@@ -406,6 +435,7 @@ export default function CustomersPage() {
                       <th className="py-3 px-6 text-right">Credit Ceiling Limit</th>
                       <th className="py-3 px-6 text-right">Current Outstanding</th>
                       <th className="py-3 px-6 text-center">Status Alerts</th>
+                      <th className="py-3 px-6 text-center">Statement</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -457,6 +487,14 @@ export default function CustomersPage() {
                                 <span>Healthy</span>
                               </span>
                             )}
+                          </td>
+                          <td className="py-4 px-6 text-center">
+                            <button
+                              onClick={() => handleOpenStatement(c)}
+                              className="inline-flex items-center gap-1 bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 px-2.5 py-1 rounded-lg text-[10px] font-bold cursor-pointer transition-all shadow-sm"
+                            >
+                              <span>📄 View Statement</span>
+                            </button>
                           </td>
                         </tr>
                       );
@@ -674,6 +712,106 @@ export default function CustomersPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Statement Drawer Overlay */}
+      {isStatementOpen && (
+        <div className="fixed inset-y-0 right-0 z-50 flex justify-end pointer-events-none">
+          <div className="flex-1 pointer-events-none"></div>
+
+          <div className="w-[600px] bg-white h-screen shadow-2xl flex flex-col animate-slide-in relative border-l border-slate-200 pointer-events-auto">
+            {/* Drawer Header */}
+            <div className="p-6 border-b border-dashboard-border flex items-center justify-between bg-brand-dark text-white">
+              <div>
+                <h3 className="font-bold text-lg">Customer Account Statement</h3>
+                <p className="text-xs text-brand-textMuted mt-0.5">
+                  Store: <span className="text-white font-bold">{statementCustomerName}</span>
+                </p>
+              </div>
+              <button
+                onClick={() => setIsStatementOpen(false)}
+                className="p-1.5 rounded-full hover:bg-brand-darkHover text-brand-textMuted hover:text-white transition-all cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Content Area */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              {loadingStatement ? (
+                <div className="flex flex-col items-center justify-center h-48 gap-3">
+                  <Loader2 className="w-8 h-8 text-brand-blue animate-spin" />
+                  <span className="text-sm font-semibold text-slate-500">Retrieving statement history...</span>
+                </div>
+              ) : activeStatementRows.length === 0 ? (
+                <div className="text-center text-slate-400 py-12 font-medium text-xs">
+                  No transaction history recorded on this account ledger.
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {/* Summary Metric inside Statement Drawer */}
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/50 flex justify-between items-center">
+                    <span className="text-xs font-bold text-slate-500 uppercase">Current Account Balance</span>
+                    <span className="text-base font-extrabold text-slate-800">
+                      {formatCurrency(activeStatementRows[activeStatementRows.length - 1].running_balance)}
+                    </span>
+                  </div>
+
+                  <div className="border border-slate-100 rounded-xl overflow-hidden shadow-sm">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="text-slate-400 font-bold border-b border-dashboard-border bg-slate-50">
+                          <th className="py-2.5 px-4">Date</th>
+                          <th className="py-2.5 px-4">Reference</th>
+                          <th className="py-2.5 px-4 text-right">Debit (+)</th>
+                          <th className="py-2.5 px-4 text-right">Credit (-)</th>
+                          <th className="py-2.5 px-4 text-right">Balance</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
+                        {activeStatementRows.map((row) => (
+                          <tr key={row.id} className="hover:bg-slate-50/50">
+                            <td className="py-3 px-4 text-slate-500 text-[10px] whitespace-nowrap">
+                              {new Date(row.created_at).toLocaleDateString("en-IN", {
+                                day: "2-digit",
+                                month: "short",
+                                year: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit"
+                              })}
+                            </td>
+                            <td className="py-3 px-4 text-slate-800 text-[11px] font-bold">
+                              {row.reference_id.startsWith("ORD-") ? `Invoice #${row.reference_id}` : `Payment ${row.reference_id}`}
+                            </td>
+                            <td className="py-3 px-4 text-right font-bold text-rose-600">
+                              {row.type === "DEBIT" ? formatCurrency(row.amount) : "—"}
+                            </td>
+                            <td className="py-3 px-4 text-right font-bold text-emerald-600">
+                              {row.type === "CREDIT" ? formatCurrency(row.amount) : "—"}
+                            </td>
+                            <td className="py-3 px-4 text-right font-bold text-slate-800">
+                              {formatCurrency(row.running_balance)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="p-6 border-t border-dashboard-border bg-slate-50 flex items-center justify-end">
+              <button
+                onClick={() => setIsStatementOpen(false)}
+                className="px-5 py-2.5 bg-slate-800 text-white hover:bg-slate-700 text-xs font-bold rounded-lg transition-all cursor-pointer shadow-sm"
+              >
+                Close Statement
+              </button>
+            </div>
           </div>
         </div>
       )}

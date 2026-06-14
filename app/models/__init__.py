@@ -9,6 +9,7 @@ from app.models.inventory import Inventory
 from app.models.shipment import Shipment
 from app.models.ingestion import IngestionJob, IngestionStaging
 from app.models.user import User
+from app.models.ledger import CustomerLedger
 
 __all__ = [
     "Base",
@@ -31,5 +32,7 @@ __all__ = [
     "IngestionJob",
     "IngestionStaging",
     "User",
+    "CustomerLedger",
 ]
+
 

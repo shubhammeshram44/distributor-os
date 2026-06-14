@@ -13,8 +13,10 @@ from app.models.payment import Payment, PaymentInvoiceLink
 from app.models.inventory import Inventory
 from app.models.ingestion import IngestionJob, IngestionStaging
 from app.models.user import User
+from app.models.ledger import CustomerLedger
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
+
 
 
 # Static Tenant ID for demo/default distributor
@@ -209,7 +211,46 @@ def ensure_demo_data(db: Session):
             )
             db.add(drv)
 
+    # Seed CustomerLedger records
+    ledger_count = db.query(CustomerLedger).count()
+    if ledger_count == 0:
+        # 1. Add Debits for all seeded orders
+        for o in orders_data:
+            cust_uuid = uuid.UUID(o["cust_id"]) if isinstance(o["cust_id"], str) else o["cust_id"]
+            db.add(CustomerLedger(
+                id=uuid.uuid4(),
+                tenant_id=DEMO_TENANT_ID,
+                customer_id=cust_uuid,
+                type="DEBIT",
+                amount=o["amount"],
+                reference_id=o["ord_id"],
+                created_at=datetime.utcnow() - timedelta(minutes=o["time_offset"])
+            ))
+
+        # 2. Add some Credits (payments) to make statements dynamic and realistic
+        # Kaveri Provision Store (CUST-101) paid some amount
+        db.add(CustomerLedger(
+            id=uuid.uuid4(),
+            tenant_id=DEMO_TENANT_ID,
+            customer_id=uuid.UUID("c1010000-0000-0000-0000-000000000001"),
+            type="CREDIT",
+            amount=15000.00,
+            reference_id="PAY-REC-9821",
+            created_at=datetime.utcnow() - timedelta(hours=5)
+        ))
+        # Maruthi Stores (CUST-102) paid
+        db.add(CustomerLedger(
+            id=uuid.uuid4(),
+            tenant_id=DEMO_TENANT_ID,
+            customer_id=uuid.UUID("c1010000-0000-0000-0000-000000000002"),
+            type="CREDIT",
+            amount=45320.00,
+            reference_id="PAY-REC-9822",
+            created_at=datetime.utcnow() - timedelta(minutes=15)
+        ))
+
     db.commit()
+
 
 
 
