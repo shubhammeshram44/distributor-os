@@ -128,3 +128,75 @@ def test_invite_user_invalid_role(db_session, client):
     )
     assert response.status_code == 400
     assert "Invalid role" in response.json()["detail"]
+
+def test_update_user_role_and_status(db_session, client):
+    tenant = DistributorTenant(name="Update User Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+
+    tenant_context.set(tenant.id)
+    user = User(
+        full_name="Danny Operator",
+        email_or_phone="danny@tenant.com",
+        hashed_password="hashed_password",
+        role="OPERATOR",
+        is_active=True
+    )
+    db_session.add(user)
+    db_session.commit()
+
+    # Update role to FINANCE and deactivate user
+    response = client.patch(
+        f"/api/v1/users/{user.id}?tenant_id={tenant.id}",
+        json={
+            "role": "FINANCE",
+            "is_active": False
+        }
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["role"] == "FINANCE"
+    assert data["is_active"] is False
+
+    # Check database
+    db_session.expire_all()
+    user_db = db_session.get(User, user.id)
+    assert user_db.role == "FINANCE"
+    assert user_db.is_active is False
+
+def test_update_user_not_found(client):
+    fake_tenant_id = uuid.uuid4()
+    fake_user_id = uuid.uuid4()
+    response = client.patch(
+        f"/api/v1/users/{fake_user_id}?tenant_id={fake_tenant_id}",
+        json={
+            "role": "OPERATOR"
+        }
+    )
+    assert response.status_code == 404
+    assert "User not found" in response.json()["detail"]
+
+def test_update_user_invalid_role(db_session, client):
+    tenant = DistributorTenant(name="Update User Invalid Role Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+
+    tenant_context.set(tenant.id)
+    user = User(
+        full_name="Danny Operator",
+        email_or_phone="danny2@tenant.com",
+        hashed_password="hashed_password",
+        role="OPERATOR",
+        is_active=True
+    )
+    db_session.add(user)
+    db_session.commit()
+
+    response = client.patch(
+        f"/api/v1/users/{user.id}?tenant_id={tenant.id}",
+        json={
+            "role": "CTO"
+        }
+    )
+    assert response.status_code == 400
+    assert "Invalid role" in response.json()["detail"]

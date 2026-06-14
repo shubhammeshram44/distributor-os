@@ -104,3 +104,51 @@ def invite_user(
         "role": new_user.role,
         "is_active": new_user.is_active
     }
+
+class UserUpdatePayload(BaseModel):
+    role: str | None = None
+    is_active: bool | None = None
+
+@router.patch("/{user_id}", status_code=status.HTTP_200_OK)
+def update_user(
+    user_id: uuid.UUID,
+    payload: UserUpdatePayload,
+    tenant_id: uuid.UUID,
+    db: Session = Depends(get_db)
+):
+    """
+    Modifies user roles and status parameters strictly under tenant context.
+    """
+    tenant_context.set(tenant_id)
+    
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+        
+    if payload.role is not None:
+        valid_roles = {"SUPER_ADMIN", "FINANCE", "OPERATOR", "DRIVER"}
+        role_upper = payload.role.upper()
+        if role_upper not in valid_roles:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid role. Must be one of {valid_roles}"
+            )
+        user.role = role_upper
+        
+    if payload.is_active is not None:
+        user.is_active = payload.is_active
+        
+    db.commit()
+    db.refresh(user)
+    
+    return {
+        "status": "success",
+        "id": str(user.id),
+        "full_name": user.full_name,
+        "email_or_phone": user.email_or_phone,
+        "role": user.role,
+        "is_active": user.is_active
+    }
