@@ -294,7 +294,11 @@ export default function CustomersPage() {
               </button>
 
               <button
-                onClick={fetchCustomers}
+                onClick={() => {
+                  if (activeTenantId) {
+                    fetchCustomers(activeTenantId);
+                  }
+                }}
                 className="flex items-center gap-1.5 px-3 py-2 border border-dashboard-border bg-white rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-all shadow-sm cursor-pointer"
               >
                 <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
