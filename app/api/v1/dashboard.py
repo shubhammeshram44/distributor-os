@@ -32,20 +32,28 @@ def ensure_demo_data(db: Session):
 
     tenant_context.set(DEMO_TENANT_ID)
 
-    # 2. Check if we already have customers (if yes, we are already seeded)
+    # 2. Check if we already have customers (if yes, align balances if needed, and return)
     customer_count = db.query(Customer).count()
     if customer_count > 0:
+        # Align outstanding balances on already-seeded demo data if they are still zero
+        kaveri = db.query(Customer).filter(Customer.customer_id == "CUST-101").first()
+        if kaveri and float(kaveri.outstanding_balance) == 0.0:
+            db.query(Customer).filter(Customer.customer_id == "CUST-101").update({"outstanding_balance": 845000.0})
+            db.query(Customer).filter(Customer.customer_id == "CUST-102").update({"outstanding_balance": 612000.0})
+            db.query(Customer).filter(Customer.customer_id == "CUST-103").update({"outstanding_balance": 475000.0})
+            db.query(Customer).filter(Customer.customer_id == "CUST-104").update({"outstanding_balance": 205000.0})
+            db.commit()
         return
 
     # Seed Customers
     customers_data = [
-        {"id": uuid.UUID("c1010000-0000-0000-0000-000000000001"), "customer_id": "CUST-101", "retailer_name": "Kaveri Provision Store", "address_text": "Bengaluru, Indiranagar", "gstin": "29AAAAA1111A1Z1", "tax_group": "GST-18", "payment_terms": "0-15 Days", "phone": "+919999888877"},
-        {"id": uuid.UUID("c1010000-0000-0000-0000-000000000002"), "customer_id": "CUST-102", "retailer_name": "Maruthi Stores", "address_text": "Bengaluru, Malleshwaram", "gstin": "29BBBBB2222B2Z2", "tax_group": "GST-18", "payment_terms": "16-30 Days", "phone": "+919999777766"},
-        {"id": uuid.UUID("c1010000-0000-0000-0000-000000000003"), "customer_id": "CUST-103", "retailer_name": "Sri Venkateshwara Traders", "address_text": "Bengaluru, Whitefield", "gstin": "29CCCCC3333C3Z3", "tax_group": "GST-18", "payment_terms": "31-60 Days", "phone": "+919999666655"},
-        {"id": uuid.UUID("c1010000-0000-0000-0000-000000000004"), "customer_id": "CUST-104", "retailer_name": "Jayam Distributors", "address_text": "Bengaluru, HSR Layout", "gstin": "29DDDDD4444D4Z4", "tax_group": "GST-18", "payment_terms": "0-15 Days", "phone": "+919999555544"},
-        {"id": uuid.UUID("c1010000-0000-0000-0000-000000000005"), "customer_id": "CUST-105", "retailer_name": "Balaji Retailers", "address_text": "Bengaluru, Koramangala", "gstin": "29EEEEE5555E5Z5", "tax_group": "GST-18", "payment_terms": "60+ Days", "phone": "+919999444433"},
-        {"id": uuid.UUID("c1010000-0000-0000-0000-000000000006"), "customer_id": "SUP-ITC", "retailer_name": "ITC Supplier Hub", "address_text": "Kolkata Warehouse", "gstin": "19AAAAA2222A2Z2", "tax_group": "GST-18", "payment_terms": "Net 30", "phone": "+918888888888"},
-        {"id": uuid.UUID("c1010000-0000-0000-0000-000000000007"), "customer_id": "SUP-HUL", "retailer_name": "HUL Distribution Centre", "address_text": "Mumbai Port", "gstin": "27BBBBB1111B1Z1", "tax_group": "GST-18", "payment_terms": "Net 15", "phone": "+917777777777"}
+        {"id": uuid.UUID("c1010000-0000-0000-0000-000000000001"), "customer_id": "CUST-101", "retailer_name": "Kaveri Provision Store", "address_text": "Bengaluru, Indiranagar", "gstin": "29AAAAA1111A1Z1", "tax_group": "GST-18", "payment_terms": "0-15 Days", "phone": "+919999888877", "outstanding_balance": 845000.0},
+        {"id": uuid.UUID("c1010000-0000-0000-0000-000000000002"), "customer_id": "CUST-102", "retailer_name": "Maruthi Stores", "address_text": "Bengaluru, Malleshwaram", "gstin": "29BBBBB2222B2Z2", "tax_group": "GST-18", "payment_terms": "16-30 Days", "phone": "+919999777766", "outstanding_balance": 612000.0},
+        {"id": uuid.UUID("c1010000-0000-0000-0000-000000000003"), "customer_id": "CUST-103", "retailer_name": "Sri Venkateshwara Traders", "address_text": "Bengaluru, Whitefield", "gstin": "29CCCCC3333C3Z3", "tax_group": "GST-18", "payment_terms": "31-60 Days", "phone": "+919999666655", "outstanding_balance": 475000.0},
+        {"id": uuid.UUID("c1010000-0000-0000-0000-000000000004"), "customer_id": "CUST-104", "retailer_name": "Jayam Distributors", "address_text": "Bengaluru, HSR Layout", "gstin": "29DDDDD4444D4Z4", "tax_group": "GST-18", "payment_terms": "0-15 Days", "phone": "+919999555544", "outstanding_balance": 205000.0},
+        {"id": uuid.UUID("c1010000-0000-0000-0000-000000000005"), "customer_id": "CUST-105", "retailer_name": "Balaji Retailers", "address_text": "Bengaluru, Koramangala", "gstin": "29EEEEE5555E5Z5", "tax_group": "GST-18", "payment_terms": "60+ Days", "phone": "+919999444433", "outstanding_balance": 0.0},
+        {"id": uuid.UUID("c1010000-0000-0000-0000-000000000006"), "customer_id": "SUP-ITC", "retailer_name": "ITC Supplier Hub", "address_text": "Kolkata Warehouse", "gstin": "19AAAAA2222A2Z2", "tax_group": "GST-18", "payment_terms": "Net 30", "phone": "+918888888888", "outstanding_balance": 0.0},
+        {"id": uuid.UUID("c1010000-0000-0000-0000-000000000007"), "customer_id": "SUP-HUL", "retailer_name": "HUL Distribution Centre", "address_text": "Mumbai Port", "gstin": "27BBBBB1111B1Z1", "tax_group": "GST-18", "payment_terms": "Net 15", "phone": "+917777777777", "outstanding_balance": 0.0}
     ]
 
     for c in customers_data:
@@ -57,7 +65,8 @@ def ensure_demo_data(db: Session):
             address_text=c["address_text"],
             gstin=c["gstin"],
             tax_group=c["tax_group"],
-            payment_terms=c["payment_terms"]
+            payment_terms=c["payment_terms"],
+            outstanding_balance=c.get("outstanding_balance", 0.0)
         )
         db.add(cust)
         db.flush()
