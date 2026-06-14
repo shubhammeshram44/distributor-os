@@ -257,6 +257,48 @@ def ensure_demo_data(db: Session):
             created_at=datetime.utcnow() - timedelta(minutes=15)
         ))
 
+        # 3. Add historical Debits to match the visual collections aging outstanding balances
+        # CUST-101 (Kaveri Provision Store): 845,000.0 (0-15 Days) -> 5 days ago
+        db.add(CustomerLedger(
+            id=uuid.uuid4(),
+            tenant_id=DEMO_TENANT_ID,
+            customer_id=uuid.UUID("c1010000-0000-0000-0000-000000000001"),
+            type="DEBIT",
+            amount=845000.00,
+            reference_id="INV-2025-0501",
+            created_at=datetime.utcnow() - timedelta(days=5)
+        ))
+        # CUST-102 (Maruthi Stores): 612,000.0 (16-30 Days) -> 20 days ago
+        db.add(CustomerLedger(
+            id=uuid.uuid4(),
+            tenant_id=DEMO_TENANT_ID,
+            customer_id=uuid.UUID("c1010000-0000-0000-0000-000000000002"),
+            type="DEBIT",
+            amount=612000.00,
+            reference_id="INV-2025-0502",
+            created_at=datetime.utcnow() - timedelta(days=20)
+        ))
+        # CUST-103 (Sri Venkateshwara Traders): 475,000.0 (31-60 Days) -> 40 days ago
+        db.add(CustomerLedger(
+            id=uuid.uuid4(),
+            tenant_id=DEMO_TENANT_ID,
+            customer_id=uuid.UUID("c1010000-0000-0000-0000-000000000003"),
+            type="DEBIT",
+            amount=475000.00,
+            reference_id="INV-2025-0503",
+            created_at=datetime.utcnow() - timedelta(days=40)
+        ))
+        # CUST-104 (Jayam Distributors): 205,000.0 (60+ Days) -> 65 days ago
+        db.add(CustomerLedger(
+            id=uuid.uuid4(),
+            tenant_id=DEMO_TENANT_ID,
+            customer_id=uuid.UUID("c1010000-0000-0000-0000-000000000004"),
+            type="DEBIT",
+            amount=205000.00,
+            reference_id="INV-2025-0504",
+            created_at=datetime.utcnow() - timedelta(days=65)
+        ))
+
     db.commit()
 
 
@@ -309,6 +351,63 @@ def get_dashboard_metrics(
     outstanding_stmt = select(func.sum(Invoice.total_amount))
     outstanding = db.execute(outstanding_stmt).scalar() or 0.0
 
+    # 5. Inventory counts (Low Stock, Out of Stock, Total SKUs, Inventory Value)
+    total_skus_count = db.query(Product).filter(Product.tenant_id == tenant_id).count()
+
+    low_stock_count = db.query(Inventory).filter(
+        and_(
+            Inventory.tenant_id == tenant_id,
+            Inventory.quantity_on_hand <= Inventory.low_stock_threshold
+        )
+    ).count()
+
+    out_of_stock_count = db.query(Inventory).filter(
+        and_(
+            Inventory.tenant_id == tenant_id,
+            Inventory.quantity_on_hand == 0
+        )
+    ).count()
+
+    inventory_val_sum = db.query(func.sum(Inventory.quantity_on_hand * Product.base_price))\
+        .join(Product, Inventory.sku_id == Product.id)\
+        .filter(Inventory.tenant_id == tenant_id).scalar() or 0.0
+
+    if inventory_val_sum >= 10000000:
+        inventory_value_str = f"₹ {(inventory_val_sum / 10000000):.2f} Cr"
+    elif inventory_val_sum >= 100000:
+        inventory_value_str = f"₹ {(inventory_val_sum / 100000):.2f}L"
+    else:
+        inventory_value_str = f"₹ {inventory_val_sum:,.2f}"
+
+    # 6. High-Risk Overdue Accounts (60+ days)
+    now = datetime.utcnow()
+    cutoff_date = now - timedelta(days=60)
+    customers = db.query(Customer).filter(Customer.tenant_id == tenant_id).all()
+    overdue_60_count = 0
+
+    for customer in customers:
+        entries = db.query(CustomerLedger).filter(
+            and_(
+                CustomerLedger.tenant_id == tenant_id,
+                CustomerLedger.customer_id == customer.id
+            )
+        ).order_by(CustomerLedger.created_at.asc()).all()
+
+        total_credits = sum(e.amount for e in entries if e.type == "CREDIT")
+
+        has_overdue = False
+        for e in entries:
+            if e.type == "DEBIT":
+                if total_credits >= e.amount:
+                    total_credits -= e.amount
+                else:
+                    if e.created_at < cutoff_date:
+                        has_overdue = True
+                        break
+                    total_credits = 0
+        if has_overdue:
+            overdue_60_count += 1
+
     # If active tenant matches our demo tenant and calculated values match base counts,
     # return exact visual metrics from the design specification.
     if tenant_id == DEMO_TENANT_ID:
@@ -320,7 +419,12 @@ def get_dashboard_metrics(
             "average_order_value": 19210,
             "average_order_value_change": 6.7,
             "outstanding_collections": 2137200,
-            "outstanding_collections_change": -9.8
+            "outstanding_collections_change": -9.8,
+            "low_stock_count": low_stock_count,
+            "out_of_stock_count": out_of_stock_count,
+            "total_skus_count": total_skus_count,
+            "inventory_value": inventory_value_str,
+            "overdue_60_count": overdue_60_count
         }
 
     return {
@@ -331,7 +435,12 @@ def get_dashboard_metrics(
         "average_order_value": float(aov),
         "average_order_value_change": 0.0,
         "outstanding_collections": float(outstanding),
-        "outstanding_collections_change": 0.0
+        "outstanding_collections_change": 0.0,
+        "low_stock_count": low_stock_count,
+        "out_of_stock_count": out_of_stock_count,
+        "total_skus_count": total_skus_count,
+        "inventory_value": inventory_value_str,
+        "overdue_60_count": overdue_60_count
     }
 
 

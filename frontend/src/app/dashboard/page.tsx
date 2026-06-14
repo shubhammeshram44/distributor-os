@@ -138,7 +138,11 @@ export default function DashboardPage() {
 
             {/* Right Col: Collections Donut Chart (40% width) */}
             <div className="lg:col-span-2 min-h-[380px]">
-              <CollectionsDonut data={donutData} viewReportHref="/dashboard/collections" />
+              <CollectionsDonut
+                data={donutData}
+                viewReportHref="/dashboard/collections"
+                overdue60Count={metrics?.overdue_60_count}
+              />
             </div>
           </div>
 
@@ -148,7 +152,12 @@ export default function DashboardPage() {
               <LiveDeliveries viewAllHref="/dashboard/shipments" />
             </div>
             <div className="min-h-[300px]">
-              <InventorySummary />
+              <InventorySummary
+                totalSkus={metrics?.total_skus_count}
+                lowStock={metrics?.low_stock_count}
+                outOfStock={metrics?.out_of_stock_count}
+                inventoryValue={metrics?.inventory_value}
+              />
             </div>
             <div className="min-h-[300px]">
               <ActivityFeed activities={activities} viewAllHref="/dashboard/reports" />

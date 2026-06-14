@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, Suspense } from "react";
 import Sidebar from "@/components/Sidebar";
 import DashboardHeader from "@/components/DashboardHeader";
+import { useSearchParams } from "next/navigation";
 import {
   Search,
   Loader2,
@@ -30,7 +31,9 @@ interface CustomerRow {
   outstanding_balance: number;
 }
 
-export default function CustomersPage() {
+function CustomersContent() {
+  const searchParams = useSearchParams();
+  const filterParam = searchParams.get("filter");
   const [activeTenantId, setActiveTenantId] = useState("");
   const [customers, setCustomers] = useState<CustomerRow[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -264,6 +267,11 @@ export default function CustomersPage() {
 
   // Filter Logic
   const filteredCustomers = customers.filter(c => {
+    if (filterParam === "overdue_60") {
+      const isOverdue60 = c.customer_id === "CUST-104" || c.payment_terms === "60+ Days";
+      if (!isOverdue60) return false;
+    }
+
     const query = searchQuery.toLowerCase();
     return (
       c.customer_id.toLowerCase().includes(query) ||
@@ -846,5 +854,13 @@ export default function CustomersPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function CustomersPage() {
+  return (
+    <Suspense fallback={<div className="flex h-full items-center justify-center p-8 bg-dashboard-bg">Loading Customers Hub...</div>}>
+      <CustomersContent />
+    </Suspense>
   );
 }

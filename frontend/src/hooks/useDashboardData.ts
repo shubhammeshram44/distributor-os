@@ -11,6 +11,11 @@ export interface DashboardMetrics {
   average_order_value_change: number;
   outstanding_collections: number;
   outstanding_collections_change: number;
+  low_stock_count?: number;
+  out_of_stock_count?: number;
+  total_skus_count?: number;
+  inventory_value?: string;
+  overdue_60_count?: number;
 }
 
 export interface RecentOrder {

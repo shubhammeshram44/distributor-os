@@ -9,11 +9,12 @@ import Link from "next/link";
 interface CollectionsDonutProps {
   data: DonutSegment[];
   viewReportHref?: string;
+  overdue60Count?: number;
 }
 
 const COLORS = ["#10b981", "#f59e0b", "#ef4444", "#8b5cf6"]; // Green, Amber, Red, Purple
 
-export default function CollectionsDonut({ data, viewReportHref }: CollectionsDonutProps) {
+export default function CollectionsDonut({ data, viewReportHref, overdue60Count }: CollectionsDonutProps) {
   // Sum outstanding total
   const totalOutstanding = data.reduce((sum, item) => sum + item.value, 0);
 
@@ -94,11 +95,11 @@ export default function CollectionsDonut({ data, viewReportHref }: CollectionsDo
       <div className="mt-3 p-2.5 bg-amber-50/70 border border-amber-200 rounded-xl flex items-center justify-between text-[11px] gap-2">
         <div className="flex items-center gap-2 text-amber-800">
           <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-          <span className="font-semibold">12 customers have outstanding balances &gt; 60 days</span>
+          <span className="font-semibold">{overdue60Count ?? 12} customers have outstanding balances &gt; 60 days</span>
         </div>
-        <button className="text-brand-blue hover:text-brand-blueHover font-bold shrink-0 hover:underline">
+        <Link href="/dashboard/customers?filter=overdue_60" className="text-brand-blue hover:text-brand-blueHover font-bold shrink-0 hover:underline">
           View customers
-        </button>
+        </Link>
       </div>
     </div>
   );

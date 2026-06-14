@@ -2,13 +2,26 @@
 
 import React from "react";
 import { AlertCircle, Layers, CheckCircle2, DollarSign, ArrowRight } from "lucide-react";
+import Link from "next/link";
 
-export default function InventorySummary() {
+interface InventorySummaryProps {
+  totalSkus?: number;
+  lowStock?: number;
+  outOfStock?: number;
+  inventoryValue?: string;
+}
+
+export default function InventorySummary({
+  totalSkus = 4285,
+  lowStock = 128,
+  outOfStock = 27,
+  inventoryValue = "₹ 8.52 Cr"
+}: InventorySummaryProps) {
   const summaryItems = [
-    { label: "Total SKUs", value: "4,285", color: "bg-blue-500", icon: Layers, iconColor: "text-blue-500 bg-blue-50" },
-    { label: "Low Stock Items", value: "128", color: "bg-amber-500", icon: AlertCircle, iconColor: "text-amber-500 bg-amber-50" },
-    { label: "Out of Stock Items", value: "27", color: "bg-rose-500", icon: AlertCircle, iconColor: "text-rose-500 bg-rose-50" },
-    { label: "Inventory Value", value: "₹ 8.52 Cr", color: "bg-emerald-500", icon: DollarSign, iconColor: "text-emerald-500 bg-emerald-50" }
+    { label: "Total SKUs", value: totalSkus.toLocaleString(), color: "bg-blue-500", icon: Layers, iconColor: "text-blue-500 bg-blue-50" },
+    { label: "Low Stock Items", value: lowStock.toLocaleString(), color: "bg-amber-500", icon: AlertCircle, iconColor: "text-amber-500 bg-amber-50" },
+    { label: "Out of Stock Items", value: outOfStock.toLocaleString(), color: "bg-rose-500", icon: AlertCircle, iconColor: "text-rose-500 bg-rose-50" },
+    { label: "Inventory Value", value: inventoryValue, color: "bg-emerald-500", icon: DollarSign, iconColor: "text-emerald-500 bg-emerald-50" }
   ];
 
   return (
@@ -16,10 +29,10 @@ export default function InventorySummary() {
       {/* Header */}
       <div className="flex items-center justify-between pb-3 border-b border-dashboard-border mb-3">
         <h3 className="font-bold text-slate-800 text-base">Inventory Summary</h3>
-        <button className="text-xs font-semibold text-brand-blue hover:text-brand-blueHover hover:underline flex items-center gap-1">
+        <Link href="/dashboard/inventory" className="text-xs font-semibold text-brand-blue hover:text-brand-blueHover hover:underline flex items-center gap-1">
           <span>View stock</span>
           <ArrowRight className="w-3.5 h-3.5" />
-        </button>
+        </Link>
       </div>
 
       {/* Summary List with Data Bars */}
