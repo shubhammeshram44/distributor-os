@@ -43,8 +43,16 @@ def import_products_csv(
                 detail=f"CSV is missing required headers: {', '.join(missing_fields)}"
             )
 
+        # Initialize tracking lists and telemetry counters
         success_count = 0
         error_rows = []
+        updated_skus = []
+        inserted_skus = []
+
+        print("\n================== PRODUCT CATALOG IMPORT STARTED ==================")
+        print(f"File Name: {file.filename}")
+        print(f"Tenant ID: {tenant_id}")
+        print("=====================================================================\n")
 
         # Start a nested savepoint or handle transaction block
         for idx, row in enumerate(reader, start=2):
@@ -75,6 +83,7 @@ def import_products_csv(
                     existing_product.brand = brand
                     existing_product.category = category
                     existing_product.pack_size = pack_size
+                    updated_skus.append(sku_id)
                 else:
                     # Insert operation
                     new_product = Product(
@@ -108,10 +117,20 @@ def import_products_csv(
                     )
                     db.add(alias_friendly)
                     db.flush()
+                    inserted_skus.append(sku_id)
 
                 success_count += 1
             except Exception as e:
                 error_rows.append(f"Row {idx}: {str(e)}")
+
+        # Print complete summary of the transaction
+        print("\n================== PRODUCT CATALOG IMPORT COMPLETE ==================")
+        print(f"Successfully Upserted: {success_count} rows")
+        print(f"Newly Inserted SKUs ({len(inserted_skus)}): {inserted_skus}")
+        print(f"Updated Existing SKUs ({len(updated_skus)}): {updated_skus}")
+        if error_rows:
+            print(f"Failed Rows ({len(error_rows)}): {error_rows}")
+        print("=====================================================================\n")
 
         if error_rows:
             db.rollback()
