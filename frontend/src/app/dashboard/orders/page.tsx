@@ -97,11 +97,13 @@ export default function OrdersPage() {
   };
 
   // Fetch all orders for active tenant
-  const fetchOrders = useCallback(async () => {
+  const fetchOrders = useCallback(async (tenantId?: string) => {
+    const targetTenant = tenantId || activeTenantId;
+    if (!targetTenant) return;
     setLoading(true);
     try {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-      const resp = await fetch(`${apiBase}/api/v1/orders?tenant_id=${activeTenantId}`);
+      const resp = await fetch(`${apiBase}/api/v1/orders?tenant_id=${targetTenant}`);
       if (!resp.ok) throw new Error("Failed to fetch orders");
       const data = await resp.json();
       setOrders(data);
@@ -114,9 +116,11 @@ export default function OrdersPage() {
     }
   }, [activeTenantId]);
 
+
   // Fetch products for resolving dropdowns
   useEffect(() => {
     const fetchProducts = async () => {
+      if (!activeTenantId) return;
       try {
         const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
         const res = await fetch(`${apiBase}/api/v1/products?tenant_id=${activeTenantId}`);
@@ -132,8 +136,11 @@ export default function OrdersPage() {
   }, [activeTenantId]);
 
   useEffect(() => {
-    fetchOrders();
-  }, [fetchOrders]);
+    if (!activeTenantId) return;
+    setOrders([]);
+    fetchOrders(activeTenantId);
+  }, [activeTenantId, fetchOrders]);
+
 
   const fetchOrderDetails = async (orderId: string) => {
     setLoadingDetails(true);
@@ -176,7 +183,8 @@ export default function OrdersPage() {
       if (response.ok) {
         showToast("Order status updated to Confirmed successfully!", "success");
         handleCloseDetails();
-        fetchOrders();
+        fetchOrders(activeTenantId);
+
       } else {
         const errorDetail = data.detail || "Failed to confirm order.";
         showToast(errorDetail, "error");
@@ -201,7 +209,8 @@ export default function OrdersPage() {
       if (response.ok) {
         showToast("Order line item manually resolved successfully!", "success");
         handleCloseDetails();
-        fetchOrders();
+        fetchOrders(activeTenantId);
+
       } else {
         const errorDetail = data.detail || "Failed to resolve order item.";
         showToast(errorDetail, "error");
@@ -264,12 +273,17 @@ export default function OrdersPage() {
             </div>
 
             <button
-              onClick={fetchOrders}
+              onClick={() => {
+                if (activeTenantId) {
+                  fetchOrders(activeTenantId);
+                }
+              }}
               className="flex items-center gap-1.5 px-3 py-2 border border-dashboard-border bg-white rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-all shadow-sm cursor-pointer"
             >
               <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
               <span>Refresh Orders</span>
             </button>
+
           </div>
 
           {/* Status Navigation & Search Bar Card */}
@@ -359,11 +373,16 @@ export default function OrdersPage() {
                   <AlertCircle className="w-8 h-8" />
                   <span className="text-sm font-semibold">{error}</span>
                   <button
-                    onClick={fetchOrders}
+                    onClick={() => {
+                      if (activeTenantId) {
+                        fetchOrders(activeTenantId);
+                      }
+                    }}
                     className="mt-2 px-4 py-2 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg text-xs font-bold hover:bg-rose-100 transition-all cursor-pointer"
                   >
                     Try Again
                   </button>
+
                 </div>
               ) : filteredOrders.length === 0 ? (
                 <div className="text-center text-slate-400 py-24">

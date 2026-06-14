@@ -70,11 +70,13 @@ export default function ProductsPage() {
   };
 
   // Fetch product catalog for active tenant
-  const fetchProducts = useCallback(async () => {
+  const fetchProducts = useCallback(async (tenantId?: string) => {
+    const targetTenant = tenantId || activeTenantId;
+    if (!targetTenant) return;
     setLoading(true);
     try {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-      const resp = await fetch(`${apiBase}/api/v1/products?tenant_id=${activeTenantId}`);
+      const resp = await fetch(`${apiBase}/api/v1/products?tenant_id=${targetTenant}`);
       if (!resp.ok) throw new Error("Failed to fetch products");
       const data = await resp.json();
       setProducts(data);
@@ -88,8 +90,11 @@ export default function ProductsPage() {
   }, [activeTenantId]);
 
   useEffect(() => {
-    fetchProducts();
-  }, [fetchProducts]);
+    if (!activeTenantId) return;
+    setProducts([]);
+    fetchProducts(activeTenantId);
+  }, [activeTenantId, fetchProducts]);
+
 
   const handleManualSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -132,7 +137,8 @@ export default function ProductsPage() {
           pack_size: "",
           base_price: ""
         });
-        fetchProducts(); // Refresh local list
+        fetchProducts(activeTenantId); // Refresh local list
+
       } else {
         const detail = data.detail || "Failed to add product manually.";
         showToast(detail, "error");
@@ -192,12 +198,17 @@ export default function ProductsPage() {
             </div>
 
             <button
-              onClick={fetchProducts}
+              onClick={() => {
+                if (activeTenantId) {
+                  fetchProducts(activeTenantId);
+                }
+              }}
               className="flex items-center gap-1.5 px-3 py-2 border border-dashboard-border bg-white rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-all shadow-sm cursor-pointer"
             >
               <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
               <span>Refresh Catalog</span>
             </button>
+
           </div>
 
           {/* Top Ingestion & Creation Split Layout */}
@@ -207,7 +218,7 @@ export default function ProductsPage() {
               activeTenantId={activeTenantId}
               onSuccess={(msg) => {
                 showToast(msg, "success");
-                fetchProducts();
+                fetchProducts(activeTenantId);
               }}
               onError={(msg) => showToast(msg, "error")}
             />
@@ -332,11 +343,16 @@ export default function ProductsPage() {
                   <AlertCircle className="w-8 h-8" />
                   <span className="text-sm font-semibold">{error}</span>
                   <button 
-                    onClick={fetchProducts}
+                    onClick={() => {
+                      if (activeTenantId) {
+                        fetchProducts(activeTenantId);
+                      }
+                    }}
                     className="mt-2 px-4 py-2 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg text-xs font-bold hover:bg-rose-100 transition-all cursor-pointer"
                   >
                     Try Again
                   </button>
+
                 </div>
               ) : filteredProducts.length === 0 ? (
                 <div className="text-center text-slate-400 py-24">

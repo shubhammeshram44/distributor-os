@@ -65,11 +65,13 @@ export default function InventoryPage() {
   };
 
   // Fetch inventory levels for active tenant
-  const fetchInventory = useCallback(async () => {
+  const fetchInventory = useCallback(async (tenantId?: string) => {
+    const targetTenant = tenantId || activeTenantId;
+    if (!targetTenant) return;
     setLoading(true);
     try {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-      const resp = await fetch(`${apiBase}/api/v1/products/inventory?tenant_id=${activeTenantId}`);
+      const resp = await fetch(`${apiBase}/api/v1/products/inventory?tenant_id=${targetTenant}`);
       if (!resp.ok) throw new Error("Failed to fetch inventory levels");
       const data = await resp.json();
       setInventory(data);
@@ -83,10 +85,12 @@ export default function InventoryPage() {
   }, [activeTenantId]);
 
   // Fetch valid SKUs list for dropdown
-  const fetchSkuList = useCallback(async () => {
+  const fetchSkuList = useCallback(async (tenantId?: string) => {
+    const targetTenant = tenantId || activeTenantId;
+    if (!targetTenant) return;
     try {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-      const resp = await fetch(`${apiBase}/api/v1/products?tenant_id=${activeTenantId}`);
+      const resp = await fetch(`${apiBase}/api/v1/products?tenant_id=${targetTenant}`);
       if (resp.ok) {
         const data = await resp.json();
         setSkuList(data.map((p: any) => p.sku_id));
@@ -97,9 +101,12 @@ export default function InventoryPage() {
   }, [activeTenantId]);
 
   useEffect(() => {
-    fetchInventory();
-    fetchSkuList();
-  }, [fetchInventory, fetchSkuList]);
+    if (!activeTenantId) return;
+    setInventory([]);
+    fetchInventory(activeTenantId);
+    fetchSkuList(activeTenantId);
+  }, [activeTenantId, fetchInventory, fetchSkuList]);
+
 
   // Handle stock inward replenishment form submit
   const handleInwardSubmit = async (e: React.FormEvent) => {
@@ -133,7 +140,8 @@ export default function InventoryPage() {
       if (resp.ok) {
         showToast(`Successfully replenished ${qtyInt} units of SKU ${sku_id}!`, "success");
         setFormData({ sku_id: "", quantity_received: "" });
-        fetchInventory(); // Instantly reload stock data grid and warnings
+        fetchInventory(activeTenantId); // Instantly reload stock data grid and warnings
+
       } else {
         const detail = data.detail || "Failed to inward stock batch.";
         showToast(detail, "error");
@@ -187,12 +195,17 @@ export default function InventoryPage() {
             </div>
 
             <button
-              onClick={fetchInventory}
+              onClick={() => {
+                if (activeTenantId) {
+                  fetchInventory(activeTenantId);
+                }
+              }}
               className="flex items-center gap-1.5 px-3 py-2 border border-dashboard-border bg-white rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-all shadow-sm cursor-pointer"
             >
               <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
               <span>Refresh Inventory</span>
             </button>
+
           </div>
 
           {/* Quick Metrics Summary & Inward Stock Form Grid */}
@@ -326,11 +339,16 @@ export default function InventoryPage() {
                   <AlertCircle className="w-8 h-8" />
                   <span className="text-sm font-semibold">{error}</span>
                   <button 
-                    onClick={fetchInventory}
+                    onClick={() => {
+                      if (activeTenantId) {
+                        fetchInventory(activeTenantId);
+                      }
+                    }}
                     className="mt-2 px-4 py-2 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg text-xs font-bold hover:bg-rose-100 transition-all cursor-pointer"
                   >
                     Try Again
                   </button>
+
                 </div>
               ) : filteredInventory.length === 0 ? (
                 <div className="text-center text-slate-400 py-24">
