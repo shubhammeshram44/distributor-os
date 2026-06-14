@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import Sidebar from "@/components/Sidebar";
 import DashboardHeader from "@/components/DashboardHeader";
-import { Search, Loader2, RefreshCw, AlertCircle, Box, AlertTriangle } from "lucide-react";
+import { Search, Loader2, RefreshCw, AlertCircle, Box, AlertTriangle, CheckCircle2, X } from "lucide-react";
 
 interface InventoryItem {
   id: string;
@@ -15,9 +15,28 @@ interface InventoryItem {
 export default function InventoryPage() {
   const [activeTenantId, setActiveTenantId] = useState("d3b07384-d113-4956-a5d2-64be7357c11d");
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [skuList, setSkuList] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const [formData, setFormData] = useState({
+    sku_id: "",
+    quantity_received: ""
+  });
+  const [submitting, setSubmitting] = useState(false);
+  const [toast, setToast] = useState<{ show: boolean; message: string; type: "success" | "error" }>({
+    show: false,
+    message: "",
+    type: "success"
+  });
+
+  const showToast = (message: string, type: "success" | "error") => {
+    setToast({ show: true, message, type });
+    setTimeout(() => {
+      setToast(prev => ({ ...prev, show: false }));
+    }, 4000);
+  };
 
   // Sync tenant from localStorage on load
   useEffect(() => {
@@ -63,9 +82,69 @@ export default function InventoryPage() {
     }
   }, [activeTenantId]);
 
+  // Fetch valid SKUs list for dropdown
+  const fetchSkuList = useCallback(async () => {
+    try {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const resp = await fetch(`${apiBase}/api/v1/products?tenant_id=${activeTenantId}`);
+      if (resp.ok) {
+        const data = await resp.json();
+        setSkuList(data.map((p: any) => p.sku_id));
+      }
+    } catch (err) {
+      console.error("Failed to load SKUs:", err);
+    }
+  }, [activeTenantId]);
+
   useEffect(() => {
     fetchInventory();
-  }, [fetchInventory]);
+    fetchSkuList();
+  }, [fetchInventory, fetchSkuList]);
+
+  // Handle stock inward replenishment form submit
+  const handleInwardSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const { sku_id, quantity_received } = formData;
+    
+    if (!sku_id) {
+      showToast("Please select a valid SKU.", "error");
+      return;
+    }
+    
+    const qtyInt = parseInt(quantity_received);
+    if (isNaN(qtyInt) || qtyInt <= 0) {
+      showToast("Quantity received must be a positive number.", "error");
+      return;
+    }
+    
+    setSubmitting(true);
+    try {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const resp = await fetch(`${apiBase}/api/v1/products/adjust-stock?tenant_id=${activeTenantId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sku_id,
+          quantity_received: qtyInt
+        })
+      });
+      
+      const data = await resp.json();
+      if (resp.ok) {
+        showToast(`Successfully replenished ${qtyInt} units of SKU ${sku_id}!`, "success");
+        setFormData({ sku_id: "", quantity_received: "" });
+        fetchInventory(); // Instantly reload stock data grid and warnings
+      } else {
+        const detail = data.detail || "Failed to inward stock batch.";
+        showToast(detail, "error");
+      }
+    } catch (err) {
+      console.error("Inward submit error:", err);
+      showToast("Network connection breakdown during stock adjustment.", "error");
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   // Handle live catalog filtering
   const filteredInventory = inventory.filter(item => 
@@ -116,44 +195,99 @@ export default function InventoryPage() {
             </button>
           </div>
 
-          {/* Quick Metrics Summary Widgets */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="bg-white p-5 rounded-xl border border-dashboard-border shadow-sm flex items-center justify-between">
-              <div>
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Products tracked</p>
-                <h3 className="text-2xl font-extrabold text-slate-800 mt-1">{filteredInventory.length}</h3>
+          {/* Quick Metrics Summary & Inward Stock Form Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            {/* Metric Cards (Takes 3/4 width) */}
+            <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-6 h-full">
+              <div className="bg-white p-5 rounded-xl border border-dashboard-border shadow-sm flex items-center justify-between h-full">
+                <div>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Products Tracked</p>
+                  <h3 className="text-2xl font-extrabold text-slate-800 mt-1">{filteredInventory.length}</h3>
+                </div>
+                <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 border border-slate-100 shadow-sm">
+                  <Box className="w-5 h-5" />
+                </div>
               </div>
-              <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 border border-slate-100">
-                <Box className="w-5 h-5" />
+
+              <div className="bg-white p-5 rounded-xl border border-dashboard-border shadow-sm flex items-center justify-between h-full">
+                <div>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Low Stock SKUs</p>
+                  <h3 className={`text-2xl font-extrabold mt-1 ${lowStockCount > 0 ? "text-amber-600" : "text-slate-800"}`}>
+                    {lowStockCount}
+                  </h3>
+                </div>
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center border shadow-sm ${
+                  lowStockCount > 0 ? "bg-amber-50 text-amber-600 border-amber-100 animate-pulse" : "bg-slate-50 text-slate-400 border-slate-100"
+                }`}>
+                  <AlertTriangle className="w-5 h-5" />
+                </div>
+              </div>
+
+              <div className="bg-white p-5 rounded-xl border border-dashboard-border shadow-sm flex items-center justify-between h-full">
+                <div>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Out of Stock SKUs</p>
+                  <h3 className={`text-2xl font-extrabold mt-1 ${outOfStockCount > 0 ? "text-rose-600" : "text-slate-800"}`}>
+                    {outOfStockCount}
+                  </h3>
+                </div>
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center border shadow-sm ${
+                  outOfStockCount > 0 ? "bg-rose-50 text-rose-600 border-rose-100 animate-pulse" : "bg-slate-50 text-slate-400 border-slate-100"
+                }`}>
+                  <AlertCircle className="w-5 h-5" />
+                </div>
               </div>
             </div>
 
-            <div className="bg-white p-5 rounded-xl border border-dashboard-border shadow-sm flex items-center justify-between">
-              <div>
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Low Stock SKUs</p>
-                <h3 className={`text-2xl font-extrabold mt-1 ${lowStockCount > 0 ? "text-amber-600" : "text-slate-800"}`}>
-                  {lowStockCount}
-                </h3>
-              </div>
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center border ${
-                lowStockCount > 0 ? "bg-amber-50 text-amber-600 border-amber-100 animate-pulse" : "bg-slate-50 text-slate-400 border-slate-100"
-              }`}>
-                <AlertTriangle className="w-5 h-5" />
-              </div>
-            </div>
+            {/* Inward Stock Adjustment Widget (Takes 1/4 width) */}
+            <div className="lg:col-span-1 bg-white p-5 rounded-xl border border-dashboard-border shadow-sm flex flex-col justify-between">
+              <form onSubmit={handleInwardSubmit} className="space-y-3">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <span className="text-lg">📥</span>
+                  <h4 className="font-bold text-slate-800 text-xs uppercase tracking-wider">Inward Batch Arrival</h4>
+                </div>
 
-            <div className="bg-white p-5 rounded-xl border border-dashboard-border shadow-sm flex items-center justify-between">
-              <div>
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Out of Stock SKUs</p>
-                <h3 className={`text-2xl font-extrabold mt-1 ${outOfStockCount > 0 ? "text-rose-600" : "text-slate-800"}`}>
-                  {outOfStockCount}
-                </h3>
-              </div>
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center border ${
-                outOfStockCount > 0 ? "bg-rose-50 text-rose-600 border-rose-100 animate-pulse" : "bg-slate-50 text-slate-400 border-slate-100"
-              }`}>
-                <AlertCircle className="w-5 h-5" />
-              </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-0.5">Select Product SKU</label>
+                  <select
+                    value={formData.sku_id}
+                    onChange={(e) => setFormData(prev => ({ ...prev, sku_id: e.target.value }))}
+                    className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs text-slate-700 bg-white focus:outline-none focus:ring-1 focus:ring-brand-blue cursor-pointer"
+                  >
+                    <option value="">-- Choose SKU --</option>
+                    {skuList.map((sku) => (
+                      <option key={sku} value={sku}>
+                        {sku}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-0.5">Quantity Received</label>
+                  <input
+                    type="number"
+                    placeholder="e.g. 50"
+                    value={formData.quantity_received}
+                    onChange={(e) => setFormData(prev => ({ ...prev, quantity_received: e.target.value }))}
+                    className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-brand-blue bg-white"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs py-2 rounded-lg transition-colors shadow-sm disabled:bg-blue-400 flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  {submitting ? (
+                    <>
+                      <Loader2 className="w-3 animate-spin" />
+                      <span>Processing...</span>
+                    </>
+                  ) : (
+                    <span>Register Inbound</span>
+                  )}
+                </button>
+              </form>
             </div>
           </div>
 
@@ -266,6 +400,31 @@ export default function InventoryPage() {
           </div>
         </main>
       </div>
+
+      {/* Sleek Floating Toast Notification */}
+      {toast.show && (
+        <div className="fixed top-5 right-5 z-50 flex items-center gap-3 bg-white/95 backdrop-blur-md border border-slate-100 shadow-2xl px-4 py-3.5 rounded-xl animate-slide-in pointer-events-auto max-w-sm">
+          {toast.type === "success" ? (
+            <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0 shadow-sm">
+              <CheckCircle2 className="w-4.5 h-4.5" />
+            </div>
+          ) : (
+            <div className="w-8 h-8 rounded-full bg-rose-50 flex items-center justify-center text-rose-600 shrink-0 shadow-sm">
+              <AlertCircle className="w-4.5 h-4.5" />
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-bold text-slate-800">{toast.type === "success" ? "Success" : "Error"}</p>
+            <p className="text-[11px] text-slate-500 font-semibold mt-0.5 break-words">{toast.message}</p>
+          </div>
+          <button 
+            onClick={() => setToast(prev => ({ ...prev, show: false }))}
+            className="text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-50 transition-all shrink-0"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

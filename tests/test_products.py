@@ -198,3 +198,71 @@ def test_manual_product_creation(db_session, client):
     )
     assert bad_response.status_code == 422
 
+
+def test_stock_adjustment(db_session, client):
+    # 1. Setup Tenant
+    tenant = DistributorTenant(name="Stock Adjust Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+
+    tenant_context.set(tenant.id)
+
+    # 2. Add product
+    product = Product(
+        id=uuid.uuid4(),
+        tenant_id=tenant.id,
+        sku_id="PROD-ADJUST-TEST",
+        brand="BrandA",
+        category="CatA",
+        pack_size="10g",
+        base_price=20.00,
+        stock_quantity=50
+    )
+    db_session.add(product)
+    db_session.commit()
+
+    # 3. Post adjustment
+    payload = {
+        "sku_id": "PROD-ADJUST-TEST",
+        "quantity_received": 30
+    }
+
+    response = client.post(
+        f"/api/v1/products/adjust-stock?tenant_id={tenant.id}",
+        json=payload
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["sku_id"] == "PROD-ADJUST-TEST"
+    assert data["new_stock"] == 80
+
+    # Assert database state
+    db_session.expire_all()
+    updated_prod = db_session.query(Product).filter_by(sku_id="PROD-ADJUST-TEST").one()
+    assert updated_prod.stock_quantity == 80
+
+    # 4. Check 404 for invalid SKU
+    bad_sku_payload = {
+        "sku_id": "PROD-INVALID-SKU",
+        "quantity_received": 10
+    }
+    bad_sku_resp = client.post(
+        f"/api/v1/products/adjust-stock?tenant_id={tenant.id}",
+        json=bad_sku_payload
+    )
+    assert bad_sku_resp.status_code == 404
+
+    # 5. Check 422 for invalid quantity
+    bad_qty_payload = {
+        "sku_id": "PROD-ADJUST-TEST",
+        "quantity_received": -5
+    }
+    bad_qty_resp = client.post(
+        f"/api/v1/products/adjust-stock?tenant_id={tenant.id}",
+        json=bad_qty_payload
+    )
+    assert bad_qty_resp.status_code == 422
+
+

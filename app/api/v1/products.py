@@ -74,6 +74,38 @@ def create_product(
         "sku_id": new_product.sku_id
     }
 
+class StockAdjustmentPayload(BaseModel):
+    sku_id: str = Field(..., min_length=1)
+    quantity_received: int = Field(..., gt=0)
+
+@router.post("/adjust-stock", status_code=status.HTTP_200_OK)
+def adjust_stock(
+    payload: StockAdjustmentPayload,
+    tenant_id: uuid.UUID,
+    db: Session = Depends(get_db)
+):
+    """
+    Increments the stock quantity for a specific product SKU.
+    """
+    tenant_context.set(tenant_id)
+    
+    product = db.query(Product).filter(Product.sku_id == payload.sku_id).first()
+    if not product:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Product with SKU '{payload.sku_id}' not found."
+        )
+        
+    product.stock_quantity += payload.quantity_received
+    db.commit()
+    
+    return {
+        "status": "success",
+        "sku_id": product.sku_id,
+        "new_stock": product.stock_quantity
+    }
+
+
 
 @router.get("", status_code=status.HTTP_200_OK)
 def get_products(
