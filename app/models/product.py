@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import String, ForeignKey, Numeric
+from sqlalchemy import String, ForeignKey, Numeric, Integer
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base, TenantMixin
 
@@ -12,6 +12,7 @@ class Product(Base, TenantMixin):
     category: Mapped[str] = mapped_column(String(100), nullable=False)
     pack_size: Mapped[str] = mapped_column(String(50), nullable=False)
     base_price: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
+    stock_quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
 
     aliases: Mapped[list["ProductAlias"]] = relationship(back_populates="product", cascade="all, delete-orphan")
     prices: Mapped[list["ProductPrice"]] = relationship(back_populates="product", cascade="all, delete-orphan")

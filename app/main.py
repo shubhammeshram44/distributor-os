@@ -7,6 +7,14 @@ from app.database import engine, Base
 # This scans all registered ORM models and creates the tables instantly if missing
 Base.metadata.create_all(bind=engine)
 
+from sqlalchemy import text
+try:
+    with engine.connect() as conn:
+        conn.execute(text("ALTER TABLE products ADD COLUMN stock_quantity INTEGER DEFAULT 100"))
+        conn.commit()
+except Exception:
+    pass
+
 app = FastAPI(
     title="Distributor OS API",
     description="Multi-tenant backend platform for supply chain distributors",

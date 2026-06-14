@@ -189,6 +189,11 @@ export default function DashboardPage() {
                 selectedOrderDetails={selectedOrderDetails}
                 loadingDetails={loadingDetails}
                 closeDetails={closeDetails}
+                onSuccess={(msg) => {
+                  showToast(msg, "success");
+                  refreshAll();
+                }}
+                onError={(msg) => showToast(msg, "error")}
               />
             </div>
 

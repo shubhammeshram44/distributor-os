@@ -10,6 +10,8 @@ interface RecentOrdersProps {
   selectedOrderDetails: OrderDetail[] | null;
   loadingDetails: boolean;
   closeDetails: () => void;
+  onSuccess: (msg: string) => void;
+  onError: (msg: string) => void;
 }
 
 export default function RecentOrders({
@@ -17,10 +19,40 @@ export default function RecentOrders({
   fetchOrderDetails,
   selectedOrderDetails,
   loadingDetails,
-  closeDetails
+  closeDetails,
+  onSuccess,
+  onError
 }: RecentOrdersProps) {
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [selectedOrderNo, setSelectedOrderNo] = useState<string>("");
+  const [isConfirming, setIsConfirming] = useState(false);
+
+  const selectedOrder = orders.find(o => o.id === selectedOrderId);
+
+  const handleConfirmOrder = async () => {
+    if (!selectedOrderId) return;
+    setIsConfirming(true);
+    try {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const response = await fetch(`${apiBase}/api/v1/orders/${selectedOrderId}/status`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to_status: "Confirmed" })
+      });
+      const data = await response.json();
+      if (response.ok) {
+        onSuccess("Order status updated to Confirmed successfully!");
+        handleClose();
+      } else {
+        const errorDetail = data.detail || "Failed to confirm order.";
+        onError(errorDetail);
+      }
+    } catch (err) {
+      onError("Network connection breakdown during order confirmation.");
+    } finally {
+      setIsConfirming(false);
+    }
+  };
 
   const handleClose = () => {
     setSelectedOrderId(null);
@@ -188,7 +220,25 @@ export default function RecentOrders({
             </div>
 
             {/* Close footer button */}
-            <div className="p-6 border-t border-dashboard-border bg-slate-50 flex items-center justify-end">
+            <div className="p-6 border-t border-dashboard-border bg-slate-50 flex items-center justify-between">
+              {selectedOrder && selectedOrder.status === "Pending" ? (
+                <button
+                  onClick={handleConfirmOrder}
+                  disabled={isConfirming}
+                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white text-sm font-bold rounded-lg transition-all flex items-center gap-2 cursor-pointer"
+                >
+                  {isConfirming ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Confirming...</span>
+                    </>
+                  ) : (
+                    <span>Confirm Order</span>
+                  )}
+                </button>
+              ) : (
+                <div></div>
+              )}
               <button
                 onClick={handleClose}
                 className="px-5 py-2.5 bg-slate-800 text-white hover:bg-slate-700 text-sm font-bold rounded-lg transition-all"
