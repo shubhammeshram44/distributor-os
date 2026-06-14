@@ -34,8 +34,8 @@ export default function Sidebar({ activeTab, setActiveTab, tenantName }: Sidebar
     { name: "Customers", icon: Users, href: "/dashboard/customers" },
     { name: "Shipments", icon: Truck },
     { name: "Collections", icon: CreditCard },
-    { name: "Sales Analytics", icon: BarChart3 },
-    { name: "Reports", icon: FileText },
+    { name: "Sales Analytics", icon: BarChart3, href: "/dashboard/sales-analytics" },
+    { name: "Reports", icon: FileText, href: "/dashboard/reports" },
     { name: "Automations", icon: Zap }
   ];
 
