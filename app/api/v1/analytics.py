@@ -1,6 +1,6 @@
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, desc, select, and_
+from sqlalchemy import func, desc, select, and_, cast, Date
 from sqlalchemy.orm import Session, aliased
 from app.database import get_db, tenant_context
 from app.models.order import Order, OrderLineItem, OrderStateLedger
@@ -29,10 +29,18 @@ def get_sales_analytics(
             OrderStateLedger.to_status.label("status")
         )
         .where(
-            OrderStateLedger.timestamp == (
-                select(func.max(ledger_alias.timestamp))
-                .where(ledger_alias.order_id == OrderStateLedger.order_id)
-                .scalar_subquery()
+            and_(
+                OrderStateLedger.tenant_id == tenant_id,
+                OrderStateLedger.timestamp == (
+                    select(func.max(ledger_alias.timestamp))
+                    .where(
+                        and_(
+                            ledger_alias.tenant_id == tenant_id,
+                            ledger_alias.order_id == OrderStateLedger.order_id
+                        )
+                    )
+                    .scalar_subquery()
+                )
             )
         )
         .subquery()
@@ -106,10 +114,16 @@ def get_revenue_analytics(
         select(OrderStateLedger.order_id)
         .where(
             and_(
+                OrderStateLedger.tenant_id == tenant_id,
                 OrderStateLedger.to_status == "Confirmed",
                 OrderStateLedger.timestamp == (
                     select(func.max(ledger_alias.timestamp))
-                    .where(ledger_alias.order_id == OrderStateLedger.order_id)
+                    .where(
+                        and_(
+                            ledger_alias.tenant_id == tenant_id,
+                            ledger_alias.order_id == OrderStateLedger.order_id
+                        )
+                    )
                     .scalar_subquery()
                 )
             )
@@ -129,18 +143,18 @@ def get_revenue_analytics(
     # 3. Time-series dataset grouping sales totals by day
     time_series_query = (
         db.query(
-            func.strftime('%Y-%m-%d', Order.created_at).label("date"),
+            func.date(Order.created_at).label("date"),
             func.sum(OrderLineItem.quantity * OrderLineItem.unit_price).label("sales")
         )
         .join(OrderLineItem, OrderLineItem.order_id == Order.id)
         .filter(Order.tenant_id == tenant_id)
-        .group_by(func.strftime('%Y-%m-%d', Order.created_at))
+        .group_by(func.date(Order.created_at))
         .order_by("date")
         .all()
     )
 
     time_series = [
-        {"date": row.date, "sales": float(row.sales or 0.0)}
+        {"date": str(row.date), "sales": float(row.sales or 0.0)}
         for row in time_series_query
     ]
 
