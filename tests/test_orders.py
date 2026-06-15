@@ -620,4 +620,73 @@ def test_get_order_by_id_with_allocations(db_session, client):
     assert response_404.status_code == 404
 
 
+def test_create_order_from_payload(db_session, client):
+    # Setup Tenant
+    tenant = DistributorTenant(name="Create Order Tenant")
+    db_session.add(tenant)
+    db_session.commit()
 
+    tenant_context.set(tenant.id)
+
+    # Setup Product
+    prod = Product(
+        sku_id="PROD-TEST-CREATE",
+        brand="HUL",
+        category="Soap",
+        pack_size="1 unit",
+        base_price=50.0,
+        stock_quantity=100
+    )
+    db_session.add(prod)
+    db_session.flush()
+
+    # Setup Customer
+    cust = Customer(
+        retailer_name="Create Order Stores",
+        customer_id="C-CREATE-1",
+        address_text="Test Address",
+        gstin="29AAAAA1111A1Z1",
+        tax_group="GST-18",
+        payment_terms="0-15 Days"
+    )
+    db_session.add(cust)
+    db_session.flush()
+    db_session.commit()
+
+    # Post creation payload
+    payload = {
+        "tenant_id": str(tenant.id),
+        "customer_id": str(cust.id),
+        "source": "WhatsApp",
+        "status": "Draft",
+        "items": [
+            {
+                "sku_id": "PROD-TEST-CREATE",
+                "quantity": 5,
+                "unit_price": 50.0
+            }
+        ]
+    }
+
+    response = client.post("/api/v1/orders", json=payload)
+    assert response.status_code == 201
+    data = response.json()
+    assert data["status"] == "success"
+    assert "order_id" in data
+    assert "internal_order_id" in data
+    assert data["new_status"] == "Draft"
+
+    # Query DB to check if order and items are created
+    created_order_id = uuid.UUID(data["order_id"])
+    order = db_session.get(Order, created_order_id)
+    assert order is not None
+    assert order.tenant_id == tenant.id
+    assert order.customer_id == cust.id
+    assert order.source == "WhatsApp"
+    assert order.current_status == "Draft"
+
+    line_items = db_session.query(OrderLineItem).filter(OrderLineItem.order_id == order.id).all()
+    assert len(line_items) == 1
+    assert line_items[0].product_id == prod.id
+    assert line_items[0].quantity == 5
+    assert line_items[0].unit_price == 50.0

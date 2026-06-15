@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import Link from "next/link";
 import { Search, Bell, MessageSquare, Calendar, ChevronDown } from "lucide-react";
 
 interface DashboardHeaderProps {
@@ -75,12 +76,12 @@ export default function DashboardHeader({
           </button>
 
           {/* WhatsApp Webhook alert count */}
-          <button className="relative p-2 text-slate-500 hover:bg-slate-50 rounded-full transition-all">
+          <Link href="/dashboard/messages" className="relative p-2 text-slate-500 hover:bg-slate-50 rounded-full transition-all cursor-pointer">
             <MessageSquare className="w-5 h-5 text-emerald-600" />
             <span className="absolute top-0 right-0 w-4.5 h-4.5 bg-emerald-500 text-[9px] font-bold text-white rounded-full flex items-center justify-center border-2 border-white">
               8
             </span>
-          </button>
+          </Link>
 
           {/* Calendar Picker */}
           <button className="p-2 text-slate-500 hover:bg-slate-50 rounded-full transition-all">

@@ -560,3 +560,86 @@ def get_order_by_id(
         "payments_allocated": payments_allocated
     }
 
+
+class OrderItemCreate(BaseModel):
+    sku_id: str
+    quantity: int
+    unit_price: float
+
+
+class OrderCreatePayload(BaseModel):
+    tenant_id: uuid.UUID
+    customer_id: uuid.UUID
+    source: str
+    status: str
+    items: list[OrderItemCreate]
+
+
+@router.post("", status_code=status.HTTP_201_CREATED)
+def create_order(
+    payload: OrderCreatePayload,
+    db: Session = Depends(get_db)
+):
+    """
+    Creates a new order from a structured payload.
+    """
+    tenant_context.set(payload.tenant_id)
+    
+    # Generate unique order ID
+    from datetime import datetime
+    generated_order_id = f"ORD-2506-{uuid.uuid4().hex[:4].upper()}"
+    
+    new_order = Order(
+        id=uuid.uuid4(),
+        tenant_id=payload.tenant_id,
+        internal_order_id=generated_order_id,
+        source=payload.source,
+        customer_id=payload.customer_id,
+        created_at=datetime.utcnow()
+    )
+    db.add(new_order)
+    db.flush()
+
+    for item in payload.items:
+        # Fetch or resolve the product by sku_id
+        product = db.query(Product).filter_by(sku_id=item.sku_id).first()
+        if not product:
+            # Create a fallback product
+            product = Product(
+                id=uuid.uuid4(),
+                tenant_id=payload.tenant_id,
+                sku_id=item.sku_id,
+                brand="Generic",
+                category="Grocery",
+                pack_size="1 unit",
+                base_price=item.unit_price
+            )
+            db.add(product)
+            db.flush()
+
+        db.add(OrderLineItem(
+            id=uuid.uuid4(),
+            tenant_id=payload.tenant_id,
+            order_id=new_order.id,
+            product_id=product.id,
+            quantity=item.quantity,
+            unit_price=item.unit_price
+        ))
+
+    # Add ledger transition entry
+    db.add(OrderStateLedger(
+        tenant_id=payload.tenant_id,
+        order_id=new_order.id,
+        from_status=None,
+        to_status=payload.status,
+        updated_by="operator"
+    ))
+
+    db.commit()
+    return {
+        "status": "success",
+        "order_id": str(new_order.id),
+        "internal_order_id": generated_order_id,
+        "new_status": payload.status
+    }
+

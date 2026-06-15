@@ -15,7 +15,8 @@ import {
   FileText,
   Zap,
   HelpCircle,
-  Settings
+  Settings,
+  MessageSquare
 } from "lucide-react";
 
 interface SidebarProps {
@@ -29,6 +30,7 @@ export default function Sidebar({ activeTab, setActiveTab, tenantName }: Sidebar
 
   const menuItems = [
     { name: "Dashboard", icon: LayoutDashboard, href: "/dashboard" },
+    { name: "Messages", icon: MessageSquare, href: "/dashboard/messages" },
     { name: "Orders", icon: ShoppingCart, href: "/dashboard/orders" },
     { name: "Inventory", icon: Box, href: "/dashboard/inventory" },
     { name: "Products", icon: Layers, href: "/dashboard/products" },
