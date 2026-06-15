@@ -46,23 +46,6 @@ export default function DashboardHeader({
   }, [userProfile]);
 
   const displayProfile = userProfile || internalProfile;
-
-  // Dynamically resolve tenant list strictly based on authenticated session context
-  const tenants: { id: string; name: string }[] = [];
-  const activeUserTenant = displayProfile?.tenant;
-  if (activeUserTenant?.id) {
-    tenants.push({
-      id: activeUserTenant.id,
-      name: activeUserTenant.name || "My Workspace"
-    });
-  } else if (activeTenantId && tenantName) {
-    // Fallback to active properties if profile not loaded yet to prevent empty selector state
-    tenants.push({
-      id: activeTenantId,
-      name: tenantName
-    });
-  }
-
   return (
     <header className="h-16 bg-white border-b border-dashboard-border flex items-center justify-between px-8 fixed top-0 right-0 left-64 z-10 shadow-sm">
       {/* Search Input and Channel Selector */}
@@ -96,11 +79,13 @@ export default function DashboardHeader({
               onChange={(e) => setActiveTenantId(e.target.value)}
               className="pl-3 pr-8 py-1.5 border border-dashboard-border rounded-lg text-xs font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-brand-blue cursor-pointer bg-white appearance-none"
             >
-              {tenants.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
+              {displayProfile?.tenant ? (
+                <option value={displayProfile.tenant.id}>
+                  {displayProfile.tenant.name || "My Workspace"}
                 </option>
-              ))}
+              ) : (
+                <option value="">Loading Workspace Account...</option>
+              )}
             </select>
             <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
           </div>

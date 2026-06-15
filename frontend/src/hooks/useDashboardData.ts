@@ -64,6 +64,7 @@ export function useDashboardData(activeTenantId: string, startDate?: string, end
   const [error, setError] = useState<string | null>(null);
 
   const fetchStaticData = useCallback(async () => {
+    if (!activeTenantId) return;
     try {
       const options = {
         method: "GET",
@@ -106,6 +107,7 @@ export function useDashboardData(activeTenantId: string, startDate?: string, end
   }, [activeTenantId, startDate, endDate]);
 
   const fetchPolledData = useCallback(async () => {
+    if (!activeTenantId) return;
     try {
       const options = {
         method: "GET",

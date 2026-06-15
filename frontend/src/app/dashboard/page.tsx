@@ -15,7 +15,7 @@ import WhatsAppSimulator from "@/components/WhatsAppSimulator";
 
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState("Dashboard");
-  const [tenantId, setTenantId] = useState("d3b07384-d113-4956-a5d2-64be7357c11d");
+  const [tenantId, setTenantId] = useState("");
   const [userProfile, setUserProfile] = useState<any>(null);
 
   // Sync profile and tenant from backend / localStorage
