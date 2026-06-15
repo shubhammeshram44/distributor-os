@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   ShoppingCart,
@@ -19,7 +19,8 @@ import {
   MessageSquare,
   ChevronLeft,
   ChevronRight,
-  Globe
+  Globe,
+  LogOut
 } from "lucide-react";
 
 interface SidebarProps {
@@ -30,7 +31,34 @@ interface SidebarProps {
 
 export default function Sidebar({ activeTab, setActiveTab, tenantName }: SidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const [isCollapsed, setIsCollapsed] = useState(false);
+
+  const handleLogout = async () => {
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+    const token = localStorage.getItem("accessToken");
+
+    try {
+      // Notify backend server to discard cross-site session cookies
+      await fetch(`${apiBase}/api/v1/auth/logout`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Accept": "application/json",
+          "Content-Type": "application/json",
+          ...(token ? { "Authorization": `Bearer ${token}` } : {})
+        }
+      });
+    } catch (err) {
+      console.error("Server-side session teardown log incomplete:", err);
+    }
+
+    // Explicitly purge all local caching keys from client storage
+    localStorage.clear();
+    
+    // Clear cookie fallback via explicit window location assignment
+    window.location.href = "/auth";
+  };
 
   // Sync with localStorage and body classes on load
   useEffect(() => {
@@ -184,6 +212,32 @@ export default function Sidebar({ activeTab, setActiveTab, tenantName }: Sidebar
               <p className="text-[10px]">Back to homepage</p>
             </div>
           </Link>
+        )}
+
+        {/* Logout Button */}
+        {isCollapsed ? (
+          <div className="group relative w-full flex justify-center">
+            <button
+              onClick={handleLogout}
+              className="p-2 text-brand-textMuted hover:bg-brand-darkHover hover:text-white rounded-lg transition-all cursor-pointer"
+            >
+              <LogOut className="w-5 h-5" />
+            </button>
+            <span className="absolute left-full ml-3 px-2 py-1 bg-slate-950 text-white text-xs rounded-md whitespace-nowrap shadow-xl opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none z-50 invisible group-hover:visible">
+              Log Out
+            </span>
+          </div>
+        ) : (
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center gap-3 p-3 rounded-lg text-brand-textMuted hover:bg-brand-darkHover hover:text-white text-sm transition-all cursor-pointer"
+          >
+            <LogOut className="w-5 h-5 flex-shrink-0" />
+            <div className="text-left">
+              <p className="font-semibold text-xs text-white">Log Out</p>
+              <p className="text-[10px]">End your session</p>
+            </div>
+          </button>
         )}
 
         {/* Tenant Profile */}

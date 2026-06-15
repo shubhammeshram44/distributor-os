@@ -145,3 +145,12 @@ def test_verify_otp_invalid_or_expired(db_session, client):
     response = client.post("/api/v1/auth/verify-otp", json=payload)
     assert response.status_code == 400
     assert "Invalid or expired OTP" in response.json()["detail"]
+
+def test_logout_success(client):
+    response = client.post("/api/v1/auth/logout")
+    assert response.status_code == 200
+    assert response.json()["status"] == "success"
+    assert response.json()["message"] == "Session logged out successfully"
+    # Verify cookie deletion instruction
+    assert 'access_token=""' in response.headers["set-cookie"] or 'access_token=;' in response.headers["set-cookie"]
+

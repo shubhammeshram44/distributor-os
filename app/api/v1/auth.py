@@ -211,3 +211,17 @@ def get_me(
             "category": tenant.category if tenant else None
         }
     }
+
+@router.post("/logout", status_code=status.HTTP_200_OK)
+def logout(response: Response):
+    """
+    Clears the secure HttpOnly session access cookie across cross-origin domains.
+    """
+    response.delete_cookie(
+        key="access_token",
+        httponly=True,
+        secure=True,
+        samesite="none"  # Must match login options footprint exactly
+    )
+    return {"status": "success", "message": "Session logged out successfully"}
+
