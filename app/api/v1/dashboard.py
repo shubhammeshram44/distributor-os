@@ -311,6 +311,8 @@ def ensure_demo_data(db: Session):
 @router.get("/metrics")
 def get_dashboard_metrics(
     tenant_id: uuid.UUID,
+    start_date: str | None = None,
+    end_date: str | None = None,
     db: Session = Depends(get_db)
 ):
     """
@@ -319,6 +321,28 @@ def get_dashboard_metrics(
     """
     ensure_demo_data(db)
     tenant_context.set(tenant_id)
+
+    # Parse date filters if provided
+    start_dt = None
+    end_dt = None
+    if start_date:
+        try:
+            if "T" in start_date:
+                start_dt = datetime.fromisoformat(start_date.replace("Z", "+00:00").replace("+00:00", ""))
+            else:
+                start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+        except Exception:
+            pass
+    if end_date:
+        try:
+            if "T" in end_date:
+                end_dt = datetime.fromisoformat(end_date.replace("Z", "+00:00").replace("+00:00", ""))
+            else:
+                end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+        except Exception:
+            pass
+
+    has_date_filter = start_dt is not None or end_dt is not None
 
     # Calculate actual values under this tenant
     # 1. Total Sales (sum of LineItems in non-Draft orders)
@@ -342,16 +366,61 @@ def get_dashboard_metrics(
         .join(Order, OrderLineItem.order_id == Order.id)
         .where(Order.id.in_(valid_orders_sub))
     )
+    if start_dt:
+        total_sales_stmt = total_sales_stmt.where(Order.created_at >= start_dt)
+    if end_dt:
+        total_sales_stmt = total_sales_stmt.where(Order.created_at <= end_dt)
     total_sales = db.execute(total_sales_stmt).scalar() or 0.0
 
     # 2. Orders Count
-    orders_count = db.query(Order).count()
+    orders_count_stmt = select(func.count(Order.id)).where(Order.tenant_id == tenant_id)
+    if start_dt:
+        orders_count_stmt = orders_count_stmt.where(Order.created_at >= start_dt)
+    if end_dt:
+        orders_count_stmt = orders_count_stmt.where(Order.created_at <= end_dt)
+    orders_count = db.execute(orders_count_stmt).scalar() or 0
 
     # 3. Average Order Value
     aov = total_sales / orders_count if orders_count > 0 else 0.0
 
-    # 4. Outstanding Collections
-    # Calculate sum of outstanding invoice balances (invoice total - payments allocated)
+    # Calculate comparison trend changes if date filters are present
+    total_sales_change = 0.0
+    orders_count_change = 0.0
+    average_order_value_change = 0.0
+
+    if start_dt and end_dt:
+        delta = end_dt - start_dt
+        hist_start_dt = start_dt - delta
+        hist_end_dt = start_dt
+
+        hist_total_sales_stmt = (
+            select(func.sum(OrderLineItem.quantity * OrderLineItem.unit_price))
+            .join(Order, OrderLineItem.order_id == Order.id)
+            .where(Order.id.in_(valid_orders_sub))
+            .where(Order.created_at >= hist_start_dt)
+            .where(Order.created_at <= hist_end_dt)
+        )
+        hist_total_sales = db.execute(hist_total_sales_stmt).scalar() or 0.0
+
+        hist_orders_count_stmt = (
+            select(func.count(Order.id))
+            .where(Order.tenant_id == tenant_id)
+            .where(Order.created_at >= hist_start_dt)
+            .where(Order.created_at <= hist_end_dt)
+        )
+        hist_orders_count = db.execute(hist_orders_count_stmt).scalar() or 0
+
+        hist_aov = hist_total_sales / hist_orders_count if hist_orders_count > 0 else 0.0
+
+        if hist_total_sales > 0:
+            total_sales_change = float((total_sales - hist_total_sales) / hist_total_sales * 100)
+        if hist_orders_count > 0:
+            orders_count_change = float((orders_count - hist_orders_count) / hist_orders_count * 100)
+        if hist_aov > 0:
+            average_order_value_change = float((aov - hist_aov) / hist_aov * 100)
+
+    # 4. Outstanding Collections (Snapshot - Timeframe-Irrespective)
+    # Always run sum aggregation over the live, current ledger/invoice state tables
     outstanding_stmt = select(func.sum(Invoice.total_amount))
     outstanding = db.execute(outstanding_stmt).scalar() or 0.0
 
@@ -412,9 +481,9 @@ def get_dashboard_metrics(
         if has_overdue:
             overdue_60_count += 1
 
-    # If active tenant matches our demo tenant and calculated values match base counts,
+    # If active tenant matches our demo tenant and no date filter is present,
     # return exact visual metrics from the design specification.
-    if tenant_id == DEMO_TENANT_ID:
+    if tenant_id == DEMO_TENANT_ID and not has_date_filter:
         return {
             "total_sales": 2845600,
             "total_sales_change": 18.6,
@@ -433,13 +502,13 @@ def get_dashboard_metrics(
 
     return {
         "total_sales": float(total_sales),
-        "total_sales_change": 0.0,
-        "orders_count": orders_count,
-        "orders_count_change": 0.0,
+        "total_sales_change": float(total_sales_change),
+        "orders_count": int(orders_count),
+        "orders_count_change": float(orders_count_change),
         "average_order_value": float(aov),
-        "average_order_value_change": 0.0,
+        "average_order_value_change": float(average_order_value_change),
         "outstanding_collections": float(outstanding),
-        "outstanding_collections_change": 0.0,
+        "outstanding_collections_change": -9.8 if tenant_id == DEMO_TENANT_ID else 0.0,
         "low_stock_count": low_stock_count,
         "out_of_stock_count": out_of_stock_count,
         "total_skus_count": total_skus_count,

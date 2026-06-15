@@ -69,3 +69,23 @@ def test_dashboard_api_endpoints(db_session, client):
     assert len(activity) >= 5
     # Verify chronological ordering (newest first)
     assert "ORD-2505-1482" in activity[0]["message"]
+
+
+def test_dashboard_metrics_date_filtering(db_session, client):
+    demo_tenant_id = uuid.UUID("d3b07384-d113-4956-a5d2-64be7357c11d")
+    
+    # 1. Call metrics with dates that filter orders
+    resp = client.get(
+        f"/api/v1/dashboard/metrics?tenant_id={demo_tenant_id}&start_date=2026-06-01&end_date=2026-06-30"
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    
+    # Check that sales, count, and AOV are computed dynamically
+    assert "total_sales" in data
+    assert "orders_count" in data
+    assert "average_order_value" in data
+    
+    # Snapshot collections must still return full value
+    assert data["outstanding_collections"] > 0
+

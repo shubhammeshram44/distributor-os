@@ -28,7 +28,13 @@ export default function CollectionsDonut({ data, viewReportHref, overdue60Count 
     <div className="bg-white p-4 rounded-xl border border-dashboard-border shadow-sm flex flex-col justify-between h-full">
       {/* Header */}
       <div className="flex items-center justify-between pb-3 border-b border-dashboard-border mb-3">
-        <h3 className="font-bold text-slate-800 text-base">Collections Overview</h3>
+        <div>
+          <div className="flex items-center gap-2">
+            <h3 className="font-bold text-slate-800 text-base">Collections Overview</h3>
+            <span className="text-[10px] uppercase tracking-wider font-semibold text-slate-500 bg-slate-100 dark:bg-slate-800 dark:text-slate-400 px-2 py-0.5 rounded-full">Live</span>
+          </div>
+          <p className="text-[10px] text-slate-400 font-semibold mt-0.5">Current Portfolio Snapshot</p>
+        </div>
         {viewReportHref ? (
           <Link href={viewReportHref} className="text-xs font-semibold text-brand-blue hover:text-brand-blueHover hover:underline flex items-center gap-1">
             <span>View report</span>

@@ -87,7 +87,12 @@ export default function MetricCards({ metrics }: MetricCardsProps) {
           <div key={i} className="bg-white p-5 rounded-xl border border-dashboard-border shadow-sm flex flex-col justify-between hover:shadow-md transition-all">
             {/* Top Row */}
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">{card.title}</span>
+              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center">
+                {card.title}
+                {card.title === "Outstanding Collections" && (
+                  <span className="text-[10px] uppercase tracking-wider font-semibold text-slate-500 bg-slate-100 dark:bg-slate-800 dark:text-slate-400 px-2 py-0.5 rounded-full ml-2">Live</span>
+                )}
+              </span>
               <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${card.iconBg}`}>
                 <Icon className="w-4.5 h-4.5" />
               </div>

@@ -52,7 +52,7 @@ export interface ActivityEvent {
   category: string;
 }
 
-export function useDashboardData(activeTenantId: string) {
+export function useDashboardData(activeTenantId: string, startDate?: string, endDate?: string) {
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
   const [donutData, setDonutData] = useState<DonutSegment[]>([]);
@@ -63,8 +63,15 @@ export function useDashboardData(activeTenantId: string) {
 
   const fetchStaticData = useCallback(async () => {
     try {
-      // Fetch Metrics
-      const metricsResp = await fetch(`${BASE_URL}/api/v1/dashboard/metrics?tenant_id=${activeTenantId}`);
+      // Fetch Metrics with optional date filters
+      let metricsUrl = `${BASE_URL}/api/v1/dashboard/metrics?tenant_id=${activeTenantId}`;
+      if (startDate) {
+        metricsUrl += `&start_date=${encodeURIComponent(startDate)}`;
+      }
+      if (endDate) {
+        metricsUrl += `&end_date=${encodeURIComponent(endDate)}`;
+      }
+      const metricsResp = await fetch(metricsUrl);
       if (!metricsResp.ok) throw new Error("Failed to fetch dashboard metrics");
       const metricsData = await metricsResp.json();
       setMetrics(metricsData);
@@ -86,7 +93,7 @@ export function useDashboardData(activeTenantId: string) {
       console.error(err);
       setError(err.message || "Failed to load dashboard data");
     }
-  }, [activeTenantId]);
+  }, [activeTenantId, startDate, endDate]);
 
   const fetchPolledData = useCallback(async () => {
     try {
@@ -119,13 +126,13 @@ export function useDashboardData(activeTenantId: string) {
     setSelectedOrderDetails(null);
   };
 
-  // Initial and Tenant-switch load
+  // Initial and Tenant-switch or Date-switch load
   useEffect(() => {
     if (activeTenantId) {
       fetchStaticData();
       fetchPolledData();
     }
-  }, [activeTenantId, fetchStaticData, fetchPolledData]);
+  }, [activeTenantId, startDate, endDate, fetchStaticData, fetchPolledData]);
 
   // Activity feed polling setup (every 5 seconds)
   useEffect(() => {
