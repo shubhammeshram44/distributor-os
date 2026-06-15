@@ -62,9 +62,11 @@ export function useDashboardData(activeTenantId: string, startDate?: string, end
   const [selectedOrderDetails, setSelectedOrderDetails] = useState<OrderDetail[] | null>(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   const fetchStaticData = useCallback(async () => {
     if (!activeTenantId) return;
+    setIsLoading(true);
     try {
       const options = {
         method: "GET",
@@ -103,6 +105,8 @@ export function useDashboardData(activeTenantId: string, startDate?: string, end
     } catch (err: any) {
       console.error(err);
       setError(err.message || "Failed to load dashboard data");
+    } finally {
+      setIsLoading(false);
     }
   }, [activeTenantId, startDate, endDate]);
 
@@ -182,6 +186,7 @@ export function useDashboardData(activeTenantId: string, startDate?: string, end
     fetchOrderDetails,
     closeDetails,
     refreshAll: fetchStaticData,
-    error
+    error,
+    isLoading
   };
 }

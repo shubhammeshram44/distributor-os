@@ -144,7 +144,8 @@ export default function DashboardPage() {
     fetchOrderDetails,
     closeDetails,
     refreshAll,
-    error
+    error,
+    isLoading
   } = useDashboardData(isHydrating ? "" : tenantId, startDate, endDate);
 
   // Absolute multi-tenant protection guard
@@ -181,6 +182,12 @@ export default function DashboardPage() {
             <div className="flex flex-col items-center justify-center py-32 gap-3 bg-white rounded-xl border border-dashboard-border shadow-sm h-[400px]">
               <div className="w-8 h-8 rounded-full border-4 border-slate-200 border-t-brand-blue animate-spin" />
               <span className="text-sm font-semibold text-slate-500">Hydrating your workspace profile...</span>
+            </div>
+          ) : isLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 animate-pulse">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="h-28 bg-slate-100 rounded-2xl" />
+              ))}
             </div>
           ) : (
             <>
