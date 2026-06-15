@@ -72,11 +72,9 @@ export default function CollectionsDonut({ data, viewReportHref, overdue60Count 
           </ResponsiveContainer>
           
           {/* Centered label */}
-          <div className="absolute text-center flex flex-col items-center">
-            <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Total Outstanding</span>
-            <span className="text-sm font-extrabold text-slate-800 tracking-tight mt-0.5">
-              {formatLakhs(totalOutstanding)}
-            </span>
+          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Outstanding</span>
+            <span className="text-xl font-extrabold text-slate-800 mt-0.5">₹ {totalOutstanding === 0 ? "0.00L" : (totalOutstanding / 100000).toFixed(2) + "L"}</span>
           </div>
         </div>
 

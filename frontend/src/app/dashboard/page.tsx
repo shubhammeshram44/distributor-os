@@ -183,12 +183,6 @@ export default function DashboardPage() {
               <div className="w-8 h-8 rounded-full border-4 border-slate-200 border-t-brand-blue animate-spin" />
               <span className="text-sm font-semibold text-slate-500">Hydrating your workspace profile...</span>
             </div>
-          ) : isLoading ? (
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 animate-pulse">
-              {[...Array(4)].map((_, i) => (
-                <div key={i} className="h-28 bg-slate-100 rounded-2xl" />
-              ))}
-            </div>
           ) : (
             <>
               {/* Dashboard Control Header */}
@@ -270,42 +264,96 @@ export default function DashboardPage() {
           {/* A. Core Operational Metrics Row */}
           <MetricCards metrics={metrics} />
 
-          {/* B. Split Middle Pane (Recent Orders vs Collections Aging Donut) */}
+          {/* B. Split Middle Pane - Row 2 (Recent Orders vs Collections Aging Donut) */}
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-            {/* Left Col: Recent Orders Table (60% width) */}
-            <div className="lg:col-span-3">
-              <RecentOrders
-                orders={recentOrders}
-                fetchOrderDetails={fetchOrderDetails}
-                selectedOrderDetails={selectedOrderDetails}
-                loadingDetails={loadingDetails}
-                closeDetails={closeDetails}
-                onSuccess={(msg) => {
-                  showToast(msg, "success");
-                  refreshAll();
-                }}
-                onError={(msg) => {
-                  showToast(msg, "error");
-                  console.error("Inventory/Order Adjustment Exception:", msg);
-                }}
-                activeTenantId={tenantId}
-                viewAllHref="/dashboard/orders"
-              />
+            {/* Left Col: Recent Orders Table (3/5 width) */}
+            <div className="lg:col-span-3 h-[340px]">
+              {isLoading ? (
+                <div className="bg-white p-5 rounded-xl border border-dashboard-border shadow-sm flex flex-col h-full justify-between">
+                  <div className="flex items-center justify-between pb-4 border-b border-dashboard-border mb-4">
+                    <div className="h-6 bg-slate-100 rounded animate-pulse w-32" />
+                    <div className="h-4 bg-slate-100 rounded animate-pulse w-16" />
+                  </div>
+                  <div className="flex-1 space-y-4 my-2">
+                    <div className="h-5 bg-slate-100 rounded animate-pulse w-full animate-pulse bg-slate-100 h-5 rounded" />
+                    <div className="h-5 bg-slate-50 rounded animate-pulse w-full animate-pulse bg-slate-100 h-5 rounded" />
+                    <div className="h-5 bg-slate-50 rounded animate-pulse w-full animate-pulse bg-slate-100 h-5 rounded" />
+                  </div>
+                </div>
+              ) : (
+                <RecentOrders
+                  orders={recentOrders}
+                  fetchOrderDetails={fetchOrderDetails}
+                  selectedOrderDetails={selectedOrderDetails}
+                  loadingDetails={loadingDetails}
+                  closeDetails={closeDetails}
+                  onSuccess={(msg) => {
+                    showToast(msg, "success");
+                    refreshAll();
+                  }}
+                  onError={(msg) => {
+                    showToast(msg, "error");
+                    console.error("Inventory/Order Adjustment Exception:", msg);
+                  }}
+                  activeTenantId={tenantId}
+                  viewAllHref="/dashboard/orders"
+                />
+              )}
             </div>
 
-            {/* Right Col: Collections Donut Chart (40% width) */}
-            <div className="lg:col-span-2 min-h-[320px]">
-              <CollectionsDonut
-                data={donutData}
-                viewReportHref="/dashboard/collections"
-                overdue60Count={metrics?.overdue_60_count}
-              />
+            {/* Right Col: Collections Donut Chart (2/5 width) */}
+            <div className="lg:col-span-2 h-[340px]">
+              {isLoading ? (
+                <div className="bg-white p-5 rounded-xl border border-dashboard-border shadow-sm flex flex-col h-full justify-between">
+                  <div className="flex items-center justify-between pb-3 border-b border-dashboard-border mb-3">
+                    <div className="h-6 bg-slate-100 rounded animate-pulse w-40" />
+                    <div className="h-4 bg-slate-100 rounded animate-pulse w-16" />
+                  </div>
+                  <div className="flex flex-col sm:flex-row lg:flex-col xl:flex-row items-center justify-between gap-4 py-1 flex-1">
+                    <div className="relative w-36 h-36 flex items-center justify-center">
+                      <div className="w-28 h-28 rounded-full border-8 border-slate-100 animate-pulse" />
+                    </div>
+                    <div className="flex-1 space-y-2.5 w-full">
+                      <div className="h-4 bg-slate-100 rounded animate-pulse w-full animate-pulse bg-slate-100 h-5 rounded" />
+                      <div className="h-4 bg-slate-100 rounded animate-pulse w-5/6 animate-pulse bg-slate-100 h-5 rounded" />
+                      <div className="h-4 bg-slate-100 rounded animate-pulse w-4/6 animate-pulse bg-slate-100 h-5 rounded" />
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <CollectionsDonut
+                  data={donutData}
+                  viewReportHref="/dashboard/collections"
+                  overdue60Count={metrics?.overdue_60_count}
+                />
+              )}
             </div>
           </div>
 
-          {/* C. Bottom Operational Grid (Live Map, Stock Summary, Activity Feed) */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="relative border border-slate-100 rounded-2xl p-6 bg-white overflow-hidden min-h-[320px]">
+          {/* C. Operations Row 3 (Inventory Summary [Left 3/5] vs Live Deliveries [Right 2/5]) */}
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+            <div className="lg:col-span-3 h-[280px]">
+              {isLoading ? (
+                <div className="bg-white p-5 rounded-xl border border-dashboard-border shadow-sm flex flex-col h-full justify-between">
+                  <div className="flex items-center justify-between pb-3 border-b border-dashboard-border mb-3">
+                    <div className="h-6 bg-slate-100 rounded animate-pulse w-36" />
+                    <div className="h-4 bg-slate-100 rounded animate-pulse w-16" />
+                  </div>
+                  <div className="flex-1 space-y-3.5 py-2">
+                    {[...Array(4)].map((_, i) => (
+                      <div key={i} className="flex justify-between items-center">
+                        <div className="h-4 bg-slate-100 rounded animate-pulse w-24 animate-pulse bg-slate-100 h-5 rounded" />
+                        <div className="h-4 bg-slate-100 rounded animate-pulse w-12 animate-pulse bg-slate-100 h-5 rounded" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <InventorySummary data={metrics || undefined} />
+              )}
+            </div>
+
+            <div className="lg:col-span-2 relative border border-slate-100 rounded-2xl p-6 bg-white overflow-hidden h-[280px]">
               {/* Translucent Backdrop Blur */}
               <div className="absolute inset-0 bg-slate-50/60 backdrop-blur-[2px] z-10 flex flex-col items-center justify-center text-center p-4">
                 <span className="bg-blue-50 text-blue-700 text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-1 rounded-full mb-2 shadow-sm border border-blue-100">
@@ -316,16 +364,28 @@ export default function DashboardPage() {
               </div>
 
               {/* Keep underlying template or existing placeholder layout code intact beneath the overlay */}
-              <div className="opacity-25 pointer-events-none">
+              <div className="opacity-25 pointer-events-none h-full">
                 <LiveDeliveries viewAllHref="/dashboard/shipments" />
               </div>
             </div>
-            <div className="min-h-[320px]">
-              <InventorySummary data={metrics || undefined} />
-            </div>
-            <div>
+          </div>
+
+          {/* D. Audit Log Row 4 */}
+          <div className="w-full">
+            {isLoading ? (
+              <div className="bg-white p-5 rounded-xl border border-dashboard-border shadow-sm flex flex-col justify-between">
+                <div className="flex items-center justify-between pb-3 border-b border-dashboard-border mb-3">
+                  <div className="h-6 bg-slate-100 rounded animate-pulse w-32" />
+                  <div className="h-4 bg-slate-100 rounded animate-pulse w-16" />
+                </div>
+                <div className="space-y-4 my-2 flex-1">
+                  <div className="h-5 bg-slate-100 rounded animate-pulse w-full animate-pulse bg-slate-100 h-5 rounded" />
+                  <div className="h-5 bg-slate-50 rounded animate-pulse w-5/6 animate-pulse bg-slate-100 h-5 rounded" />
+                </div>
+              </div>
+            ) : (
               <ActivityFeed activities={activities} viewAllHref="/dashboard/reports" />
-            </div>
+            )}
           </div>
             </>
           )}
