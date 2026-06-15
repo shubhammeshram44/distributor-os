@@ -529,3 +529,94 @@ def test_list_orders_with_invoice_payment_status(db_session, client):
     assert results_map["ORD-PAY-LIST-2"]["amount_paid"] == 450.0
 
 
+def test_get_order_by_id_with_allocations(db_session, client):
+    from app.models.invoice import Invoice
+    from app.models.payment import Payment, PaymentInvoiceLink
+    
+    # 1. Setup Tenant
+    tenant = DistributorTenant(name="Order Details Detail Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+
+    tenant_context.set(tenant.id)
+
+    # 2. Setup Product
+    p = Product(sku_id="PROD-DET-PAY", brand="HUL", category="Soap", pack_size="100g", base_price=50.0, stock_quantity=100)
+    db_session.add(p)
+    db_session.flush()
+
+    # 3. Setup Customer
+    cust = Customer(
+        retailer_name="Payment Detail Customer", customer_id="C-PAY-DET-1", address_text="Mumbai",
+        gstin="27AAAAA1111A1Z1", tax_group="GST", payment_terms="COD"
+    )
+    db_session.add(cust)
+    db_session.flush()
+
+    # 4. Setup Order (with invoice having status PAID and one allocated payment)
+    order = Order(
+        tenant_id=tenant.id,
+        internal_order_id="ORD-PAY-DET-1",
+        source="WhatsApp",
+        customer_id=cust.id
+    )
+    db_session.add(order)
+    db_session.flush()
+    db_session.add(OrderLineItem(order_id=order.id, product_id=p.id, quantity=10, unit_price=50.0))
+
+    # Add Invoice
+    inv = Invoice(
+        tenant_id=tenant.id,
+        order_id=order.id,
+        gstin=cust.gstin,
+        total_amount=500.0,
+        payment_status="PAID",
+        amount_paid=500.0
+    )
+    db_session.add(inv)
+    db_session.flush()
+
+    # Add Payment
+    pay = Payment(
+        tenant_id=tenant.id,
+        customer_id=cust.id,
+        amount=500.0,
+        method="UPI",
+        reference_number="TXN1234567890",
+        status="COMPLETED"
+    )
+    db_session.add(pay)
+    db_session.flush()
+
+    # Add Payment-Invoice Link
+    link = PaymentInvoiceLink(
+        tenant_id=tenant.id,
+        payment_id=pay.id,
+        invoice_id=inv.id,
+        amount_allocated=500.0
+    )
+    db_session.add(link)
+    db_session.commit()
+
+    # 5. Call single order lookup API
+    response = client.get(f"/api/v1/orders/{order.id}")
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["id"] == str(order.id)
+    assert data["order_id"] == "ORD-PAY-DET-1"
+    assert data["payment_status"] == "PAID"
+    assert data["amount_paid"] == 500.0
+    assert len(data["payments_allocated"]) == 1
+    assert data["payments_allocated"][0]["payment_code"] == f"PAY-REC-{str(pay.id)[:8].upper()}"
+    assert data["payments_allocated"][0]["amount_allocated"] == 500.0
+    assert data["payments_allocated"][0]["method"] == "UPI"
+    assert data["payments_allocated"][0]["reference_number"] == "TXN1234567890"
+
+    # 6. Test 404
+    fake_id = uuid.uuid4()
+    response_404 = client.get(f"/api/v1/orders/{fake_id}")
+    assert response_404.status_code == 404
+
+
+

@@ -508,3 +508,54 @@ def get_order_invoice(
         }
     )
 
+
+@router.get("/{order_id}", status_code=status.HTTP_200_OK)
+def get_order_by_id(
+    order_id: uuid.UUID,
+    db: Session = Depends(get_db)
+):
+    """
+    Returns single order detail including its payment allocation history.
+    """
+    from app.models.payment import Payment, PaymentInvoiceLink
+    from app.models.invoice import Invoice
+
+    order = db.get(Order, order_id)
+    if not order:
+        raise HTTPException(
+            status_code=404,
+            detail="Order not found"
+        )
+
+    # Set tenant isolation context
+    tenant_context.set(order.tenant_id)
+
+    # Find associated invoice
+    invoice = db.query(Invoice).filter(Invoice.order_id == order.id).first()
+    
+    payments_allocated = []
+    if invoice:
+        # Join allocation history
+        links = (
+            db.query(PaymentInvoiceLink, Payment)
+            .join(Payment, PaymentInvoiceLink.payment_id == Payment.id)
+            .filter(PaymentInvoiceLink.invoice_id == invoice.id)
+            .all()
+        )
+        for link, payment in links:
+            payments_allocated.append({
+                "payment_code": f"PAY-REC-{str(payment.id)[:8].upper()}",
+                "amount_allocated": float(link.amount_allocated),
+                "method": payment.method,
+                "reference_number": payment.reference_number,
+                "created_at": payment.created_at.isoformat()
+            })
+
+    return {
+        "id": str(order.id),
+        "order_id": order.internal_order_id,
+        "payment_status": invoice.payment_status if invoice else "UNPAID",
+        "amount_paid": float(invoice.amount_paid) if invoice else 0.0,
+        "payments_allocated": payments_allocated
+    }
+

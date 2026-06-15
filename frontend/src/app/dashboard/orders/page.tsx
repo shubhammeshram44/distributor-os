@@ -58,6 +58,16 @@ export default function OrdersPage() {
   const [isConfirming, setIsConfirming] = useState(false);
   const [productsList, setProductsList] = useState<any[]>([]);
   const [resolvingItemId, setResolvingItemId] = useState<string | null>(null);
+  const [selectedOrderPayments, setSelectedOrderPayments] = useState<{
+    payment_status: string;
+    payments_allocated: {
+      payment_code: string;
+      amount_allocated: number;
+      method: string;
+      reference_number: string | null;
+      created_at: string;
+    }[];
+  } | null>(null);
 
   const [toast, setToast] = useState<{ show: boolean; message: string; type: "success" | "error" }>({
     show: false,
@@ -154,6 +164,14 @@ export default function OrdersPage() {
       if (!resp.ok) throw new Error("Failed to load order line item details");
       const data = await resp.json();
       setSelectedOrderDetails(data);
+
+      const orderResp = await fetch(`${apiBase}/api/v1/orders/${orderId}`);
+      if (orderResp.ok) {
+        const orderData = await orderResp.json();
+        setSelectedOrderPayments(orderData);
+      } else {
+        setSelectedOrderPayments(null);
+      }
     } catch (err: any) {
       console.error(err);
       showToast("Failed to load order details.", "error");
@@ -171,6 +189,7 @@ export default function OrdersPage() {
   const handleCloseDetails = () => {
     setSelectedOrderId(null);
     setSelectedOrderDetails(null);
+    setSelectedOrderPayments(null);
   };
 
   const handleConfirmOrder = async () => {
@@ -586,6 +605,45 @@ export default function OrdersPage() {
                       <span>{formatCurrency(selectedOrderDetails.reduce((a, b) => a + b.total_price, 0))}</span>
                     </div>
                   </div>
+
+                  {/* Payment Receipt Audit Trail Box */}
+                  {selectedOrderPayments && (selectedOrderPayments.payments_allocated.length > 0 || selectedOrderPayments.payment_status === "UNPAID") && (
+                    <div className="border border-slate-200/80 rounded-lg p-4 mt-4 bg-slate-50/50">
+                      <h5 className="font-bold text-slate-800 text-xs uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                        <span>💳 Payment Audit Trail</span>
+                      </h5>
+                      
+                      {selectedOrderPayments.payments_allocated.length > 0 ? (
+                        <div className="space-y-3">
+                          {selectedOrderPayments.payments_allocated.map((payment, idx) => (
+                            <div key={idx} className="flex flex-col border-b border-dashed border-slate-200 pb-2 last:border-0 last:pb-0">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold font-mono text-slate-600">
+                                  {payment.payment_code}
+                                </span>
+                                <span className="text-sm font-extrabold text-emerald-700">
+                                  {formatCurrency(payment.amount_allocated)}
+                                </span>
+                              </div>
+                              <div className="flex items-center justify-between text-xs text-slate-600 mt-0.5">
+                                <span>Method: <strong className="font-semibold text-slate-700">{payment.method}</strong></span>
+                                <span>{new Date(payment.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}</span>
+                              </div>
+                              {payment.reference_number && (
+                                <div className="text-xs text-slate-600 mt-0.5 font-mono truncate">
+                                  Ref: {payment.reference_number}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-rose-700 font-medium flex items-center gap-1.5">
+                          <span>❌ No payments recorded yet against this invoice.</span>
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </>
               ) : (
                 <div className="text-center text-slate-400 py-12">No details available.</div>
