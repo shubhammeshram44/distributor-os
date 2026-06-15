@@ -38,6 +38,8 @@ interface OrderRow {
   status: string;
   created_on: string;
   eta: string;
+  payment_status: string;
+  amount_paid: number;
 }
 
 export default function OrdersPage() {
@@ -403,6 +405,7 @@ export default function OrdersPage() {
                       <th className="py-3 px-6 text-center">Channel</th>
                       <th className="py-3 px-6 text-right">Amount</th>
                       <th className="py-3 px-6 text-center">Status</th>
+                      <th className="py-3 px-6 text-center">PAYMENT</th>
                       <th className="py-3 px-6">Created On</th>
                       <th className="py-3 px-6 text-right">Actions</th>
                     </tr>
@@ -446,6 +449,21 @@ export default function OrdersPage() {
                               : "bg-amber-50 text-amber-700 border border-amber-200"
                           }`}>
                             {order.status}
+                          </span>
+                        </td>
+                        <td className="py-4 px-6 text-center">
+                          <span className={`inline-flex items-center justify-center w-24 px-2.5 py-1 rounded-full text-xs font-bold leading-none ${
+                            order.payment_status === "PAID"
+                              ? "bg-emerald-50 text-emerald-700 border border-emerald-200/60"
+                              : order.payment_status === "PARTIALLY_PAID"
+                              ? "bg-amber-50 text-amber-700 border border-amber-200/60"
+                              : "bg-rose-50 text-rose-700 border border-rose-200/60"
+                          }`}>
+                            {order.payment_status === "PAID"
+                              ? "🟢 Paid"
+                              : order.payment_status === "PARTIALLY_PAID"
+                              ? "🟡 Partial"
+                              : "🔴 Unpaid"}
                           </span>
                         </td>
                         <td className="py-4 px-6 text-xs font-semibold text-slate-500">

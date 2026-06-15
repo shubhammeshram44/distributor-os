@@ -451,3 +451,81 @@ def test_credit_limit_guardrail_success_and_failure(db_session, client):
     cust_db2 = db_session.get(Customer, cust.id)
     assert float(cust_db2.outstanding_balance) == 2500.0
 
+
+def test_list_orders_with_invoice_payment_status(db_session, client):
+    from app.models.invoice import Invoice
+    
+    # 1. Setup Tenant
+    tenant = DistributorTenant(name="Payment Status List Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+
+    tenant_context.set(tenant.id)
+
+    # 2. Setup Product
+    p = Product(sku_id="PROD-LIST-PAY", brand="HUL", category="Soap", pack_size="100g", base_price=45.0, stock_quantity=100)
+    db_session.add(p)
+    db_session.flush()
+
+    # 3. Setup Customer
+    cust = Customer(
+        retailer_name="Payment List Customer", customer_id="C-PAY-LIST-1", address_text="Delhi",
+        gstin="07AAAAA1111A1Z1", tax_group="GST", payment_terms="COD"
+    )
+    db_session.add(cust)
+    db_session.flush()
+
+    # 4. Setup Order 1 (without invoice)
+    order1 = Order(
+        tenant_id=tenant.id,
+        internal_order_id="ORD-PAY-LIST-1",
+        source="WhatsApp",
+        customer_id=cust.id
+    )
+    db_session.add(order1)
+    db_session.flush()
+    db_session.add(OrderLineItem(order_id=order1.id, product_id=p.id, quantity=5, unit_price=45.0))
+
+    # 5. Setup Order 2 (with invoice having status PAID)
+    order2 = Order(
+        tenant_id=tenant.id,
+        internal_order_id="ORD-PAY-LIST-2",
+        source="Portal",
+        customer_id=cust.id
+    )
+    db_session.add(order2)
+    db_session.flush()
+    db_session.add(OrderLineItem(order_id=order2.id, product_id=p.id, quantity=10, unit_price=45.0))
+
+    # Add Invoice for Order 2
+    inv2 = Invoice(
+        tenant_id=tenant.id,
+        order_id=order2.id,
+        gstin=cust.gstin,
+        total_amount=450.0,
+        payment_status="PAID",
+        amount_paid=450.0
+    )
+    db_session.add(inv2)
+    db_session.commit()
+
+    # 6. Call List orders API
+    response = client.get(f"/api/v1/orders?tenant_id={tenant.id}")
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 2
+
+    # Map results by order_id
+    results_map = {item["order_id"]: item for item in data}
+
+    # Verify Order 1 (no invoice, should default to UNPAID and 0.0 amount_paid)
+    assert "ORD-PAY-LIST-1" in results_map
+    assert results_map["ORD-PAY-LIST-1"]["payment_status"] == "UNPAID"
+    assert results_map["ORD-PAY-LIST-1"]["amount_paid"] == 0.0
+
+    # Verify Order 2 (has invoice with PAID status)
+    assert "ORD-PAY-LIST-2" in results_map
+    assert results_map["ORD-PAY-LIST-2"]["payment_status"] == "PAID"
+    assert results_map["ORD-PAY-LIST-2"]["amount_paid"] == 450.0
+
+

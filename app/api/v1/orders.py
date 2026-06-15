@@ -10,6 +10,7 @@ from app.models.product import Product
 from app.models.tenant import DistributorTenant
 from app.models.customer import Customer
 from app.models.ledger import CustomerLedger
+from app.models.invoice import Invoice
 
 
 from reportlab.lib.pagesizes import letter
@@ -28,10 +29,16 @@ def list_orders(
     Returns all orders for a tenant.
     """
     tenant_context.set(tenant_id)
-    orders = db.query(Order).filter(Order.tenant_id == tenant_id).order_by(Order.created_at.desc()).all()
+    orders_invoices = (
+        db.query(Order, Invoice)
+        .outerjoin(Invoice, Invoice.order_id == Order.id)
+        .filter(Order.tenant_id == tenant_id)
+        .order_by(Order.created_at.desc())
+        .all()
+    )
     results = []
     
-    for o in orders:
+    for o, inv in orders_invoices:
         customer = db.get(Customer, o.customer_id)
         cust_name = customer.retailer_name if customer else "Unknown Retailer"
 
@@ -42,6 +49,10 @@ def list_orders(
         status_raw = o.current_status
         status_resolved = "Pending" if status_raw == "Draft" else status_raw
 
+        # Payment status attributes
+        payment_status = inv.payment_status if inv else "UNPAID"
+        amount_paid = float(inv.amount_paid) if inv else 0.0
+
         results.append({
             "id": str(o.id),
             "order_id": o.internal_order_id,
@@ -50,7 +61,9 @@ def list_orders(
             "amount": amount_sum,
             "status": status_resolved,
             "created_on": o.created_at.strftime("%d %b, %Y %I:%M %p"),
-            "eta": o.created_at.strftime("%d %b, %Y %I:%M %p")
+            "eta": o.created_at.strftime("%d %b, %Y %I:%M %p"),
+            "payment_status": payment_status,
+            "amount_paid": amount_paid
         })
 
     return results
