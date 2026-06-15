@@ -7,6 +7,23 @@ body {
   background-color: #f8fafc;
 }
 
+/* Sidebar collapse transition overrides */
+.pl-64 {
+  transition: padding-left 300ms ease-in-out !important;
+}
+
+body.sidebar-collapsed .pl-64 {
+  padding-left: 4rem !important; /* matches w-16 */
+}
+
+.left-64 {
+  transition: left 300ms ease-in-out !important;
+}
+
+body.sidebar-collapsed .left-64 {
+  left: 4rem !important; /* matches w-16 */
+}
+
 /* Custom scrollbars for high-density tables */
 ::-webkit-scrollbar {
   width: 6px;
