@@ -129,7 +129,7 @@ export default function RecentOrders({
   };
 
   return (
-    <div className="bg-white p-5 rounded-xl border border-dashboard-border shadow-sm flex flex-col h-full">
+    <div className="bg-white p-5 rounded-xl border border-dashboard-border shadow-sm flex flex-col">
       {/* Table Header */}
       <div className="flex items-center justify-between pb-4 border-b border-dashboard-border mb-4">
         <h3 className="font-bold text-slate-800 text-base">Recent Orders</h3>

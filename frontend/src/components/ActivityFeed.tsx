@@ -56,7 +56,7 @@ export default function ActivityFeed({ activities, viewAllHref }: ActivityFeedPr
   };
 
   return (
-    <div className="bg-white p-5 rounded-xl border border-dashboard-border shadow-sm flex flex-col justify-between h-full">
+    <div className="bg-white p-5 rounded-xl border border-dashboard-border shadow-sm flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between pb-3 border-b border-dashboard-border mb-3">
         <h3 className="font-bold text-slate-800 text-base">Recent Activity</h3>

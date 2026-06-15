@@ -273,7 +273,7 @@ export default function DashboardPage() {
           {/* B. Split Middle Pane (Recent Orders vs Collections Aging Donut) */}
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
             {/* Left Col: Recent Orders Table (60% width) */}
-            <div className="lg:col-span-3 min-h-[380px]">
+            <div className="lg:col-span-3">
               <RecentOrders
                 orders={recentOrders}
                 fetchOrderDetails={fetchOrderDetails}
@@ -294,7 +294,7 @@ export default function DashboardPage() {
             </div>
 
             {/* Right Col: Collections Donut Chart (40% width) */}
-            <div className="lg:col-span-2 min-h-[380px]">
+            <div className="lg:col-span-2 min-h-[320px]">
               <CollectionsDonut
                 data={donutData}
                 viewReportHref="/dashboard/collections"
@@ -305,7 +305,7 @@ export default function DashboardPage() {
 
           {/* C. Bottom Operational Grid (Live Map, Stock Summary, Activity Feed) */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="relative border border-slate-100 rounded-2xl p-6 bg-white overflow-hidden min-h-[300px]">
+            <div className="relative border border-slate-100 rounded-2xl p-6 bg-white overflow-hidden min-h-[320px]">
               {/* Translucent Backdrop Blur */}
               <div className="absolute inset-0 bg-slate-50/60 backdrop-blur-[2px] z-10 flex flex-col items-center justify-center text-center p-4">
                 <span className="bg-blue-50 text-blue-700 text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-1 rounded-full mb-2 shadow-sm border border-blue-100">
@@ -320,10 +320,10 @@ export default function DashboardPage() {
                 <LiveDeliveries viewAllHref="/dashboard/shipments" />
               </div>
             </div>
-            <div className="min-h-[300px]">
+            <div className="min-h-[320px]">
               <InventorySummary data={metrics || undefined} />
             </div>
-            <div className="min-h-[300px]">
+            <div>
               <ActivityFeed activities={activities} viewAllHref="/dashboard/reports" />
             </div>
           </div>
