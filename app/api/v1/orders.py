@@ -11,6 +11,7 @@ from app.models.tenant import DistributorTenant
 from app.models.customer import Customer
 from app.models.ledger import CustomerLedger
 from app.models.invoice import Invoice
+from app.models.inventory import Inventory
 
 
 from reportlab.lib.pagesizes import letter
@@ -123,9 +124,8 @@ def update_order_status(
                     detail=f"Credit limit exceeded for customer '{customer.retailer_name}'. Combined balance: ₹{combined_balance:,.2f}, Credit Limit: ₹{customer.credit_limit:,.2f}"
                 )
 
-            # 5. Inventory Guardrail Validation Loop
+            # Resolve product variables dynamically
             for item in items:
-                # Resolve product variables dynamically
                 prod_data = db.query(Product).filter(Product.id == item.product_id).first()
                 if prod_data:
                     item.sku_code = prod_data.sku_id
@@ -134,21 +134,34 @@ def update_order_status(
                     item.sku_code = "UNKNOWN_SKU"
                     item.product_name = "Unknown Product"
 
-                # Core inventory look up logic matching directives exactly
-                product = db.query(Product).filter(Product.sku_id == item.sku_code).first()
-                if product:
-                    # Check if enough physical stock exists
-                    if product.stock_quantity < item.quantity:
-                        raise HTTPException(
-                            status_code=400, 
-                            detail=f"Insufficient stock for {item.product_name}. Requested: {item.quantity}, Available: {product.stock_quantity}"
-                        )
-
-            # Atomic Decrements: If all items pass, safely decrement stock counts
+            # 5. Inventory Guardrail Validation Loop
             for item in items:
-                product = db.query(Product).filter(Product.sku_id == item.sku_code).first()
-                if product:
-                    product.stock_quantity -= item.quantity
+                # Find the corresponding inventory row for this tenant and SKU
+                inv_record = db.query(Inventory).filter(
+                    Inventory.tenant_id == order.tenant_id,
+                    Inventory.sku_id == item.product_id  # Matches parent model ID mapping link
+                ).first()
+                
+                if not inv_record:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Warehouse stock record not initialized for product code {item.sku_code}"
+                    )
+                    
+                if inv_record.quantity_on_hand < item.quantity:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Insufficient physical stock for item. Requested: {item.quantity}, Available: {inv_record.quantity_on_hand}"
+                    )
+
+            # Rewrite Stock Decrement Execution: Perform atomic subtraction on the real stock inventory rows
+            for item in items:
+                inv_record = db.query(Inventory).filter(
+                    Inventory.tenant_id == order.tenant_id,
+                    Inventory.sku_id == item.product_id
+                ).first()
+                if inv_record:
+                    inv_record.quantity_on_hand -= item.quantity
 
             # Update Customer outstanding balance
             customer.outstanding_balance = float(customer.outstanding_balance) + current_order_total

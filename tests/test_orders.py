@@ -3,9 +3,10 @@ import pytest
 from fastapi.testclient import TestClient
 from app.main import app
 from app.models.tenant import DistributorTenant
-from app.models.product import Product
+from app.models.product import Product, ProductAlias
 from app.models.customer import Customer
 from app.models.order import Order, OrderLineItem, OrderStateLedger
+from app.models.inventory import Inventory
 from app.database import tenant_context
 
 @pytest.fixture(name="client")
@@ -20,10 +21,15 @@ def test_confirm_order_success(db_session, client):
 
     tenant_context.set(tenant.id)
 
-    # 2. Setup Products with stock_quantity
+    # 2. Setup Products with stock_quantity and Inventory
     p1 = Product(sku_id="PROD-SOAP-1", brand="HUL", category="Soap", pack_size="100g", base_price=45.0, stock_quantity=100)
     p2 = Product(sku_id="PROD-SOAP-2", brand="HUL", category="Soap", pack_size="200g", base_price=80.0, stock_quantity=50)
     db_session.add_all([p1, p2])
+    db_session.flush()
+
+    inv1 = Inventory(tenant_id=tenant.id, sku_id=p1.id, location="Loc1", quantity_on_hand=100, low_stock_threshold=10)
+    inv2 = Inventory(tenant_id=tenant.id, sku_id=p2.id, location="Loc2", quantity_on_hand=50, low_stock_threshold=10)
+    db_session.add_all([inv1, inv2])
     db_session.flush()
 
     # 3. Setup Customer
@@ -66,11 +72,11 @@ def test_confirm_order_success(db_session, client):
     # 6. Verify database state
     db_session.expire_all()
 
-    # Verify stock decrements
-    p1_db = db_session.get(Product, p1.id)
-    p2_db = db_session.get(Product, p2.id)
-    assert p1_db.stock_quantity == 70  # 100 - 30
-    assert p2_db.stock_quantity == 40  # 50 - 10
+    # Verify stock decrements in Inventory
+    inv1_db = db_session.query(Inventory).filter_by(sku_id=p1.id).one()
+    inv2_db = db_session.query(Inventory).filter_by(sku_id=p2.id).one()
+    assert inv1_db.quantity_on_hand == 70  # 100 - 30
+    assert inv2_db.quantity_on_hand == 40  # 50 - 10
 
     # Verify ledger entry
     latest_ledger = db_session.query(OrderStateLedger).filter_by(order_id=order.id).order_by(OrderStateLedger.timestamp.desc()).first()
@@ -86,9 +92,13 @@ def test_confirm_order_insufficient_stock(db_session, client):
 
     tenant_context.set(tenant.id)
 
-    # Setup Product with low stock_quantity (20)
+    # Setup Product with low stock_quantity (20) and Inventory
     p = Product(sku_id="PROD-LOW-STOCK", brand="HUL", category="Soap", pack_size="100g", base_price=45.0, stock_quantity=20)
     db_session.add(p)
+    db_session.flush()
+
+    inv = Inventory(tenant_id=tenant.id, sku_id=p.id, location="Loc", quantity_on_hand=20, low_stock_threshold=10)
+    db_session.add(inv)
     db_session.flush()
 
     cust = Customer(
@@ -119,12 +129,12 @@ def test_confirm_order_insufficient_stock(db_session, client):
 
     # Assert 400 Bad Request
     assert response.status_code == 400
-    assert "Insufficient stock" in response.json()["detail"]
+    assert "Insufficient stock" in response.json()["detail"] or "Insufficient physical stock" in response.json()["detail"]
 
     # Verify stock was NOT decremented (transaction rollback integrity)
     db_session.expire_all()
-    p_db = db_session.get(Product, p.id)
-    assert p_db.stock_quantity == 20
+    inv_db = db_session.query(Inventory).filter_by(sku_id=p.id).one()
+    assert inv_db.quantity_on_hand == 20
 
 
 def test_confirm_order_atomic_rollback(db_session, client):
@@ -138,6 +148,11 @@ def test_confirm_order_atomic_rollback(db_session, client):
     p1 = Product(sku_id="PROD-OK", brand="HUL", category="Soap", pack_size="100g", base_price=45.0, stock_quantity=100)
     p2 = Product(sku_id="PROD-NOT-OK", brand="HUL", category="Soap", pack_size="200g", base_price=80.0, stock_quantity=5)
     db_session.add_all([p1, p2])
+    db_session.flush()
+
+    inv1 = Inventory(tenant_id=tenant.id, sku_id=p1.id, location="Loc1", quantity_on_hand=100, low_stock_threshold=10)
+    inv2 = Inventory(tenant_id=tenant.id, sku_id=p2.id, location="Loc2", quantity_on_hand=5, low_stock_threshold=10)
+    db_session.add_all([inv1, inv2])
     db_session.flush()
 
     cust = Customer(
@@ -172,10 +187,10 @@ def test_confirm_order_atomic_rollback(db_session, client):
 
     # Verify atomic rollback: p1 stock is NOT decremented (should remain 100)
     db_session.expire_all()
-    p1_db = db_session.get(Product, p1.id)
-    p2_db = db_session.get(Product, p2.id)
-    assert p1_db.stock_quantity == 100
-    assert p2_db.stock_quantity == 5
+    inv1_db = db_session.query(Inventory).filter_by(sku_id=p1.id).one()
+    inv2_db = db_session.query(Inventory).filter_by(sku_id=p2.id).one()
+    assert inv1_db.quantity_on_hand == 100
+    assert inv2_db.quantity_on_hand == 5
 
 
 def test_resolve_order_item(db_session, client):
@@ -396,6 +411,10 @@ def test_credit_limit_guardrail_success_and_failure(db_session, client):
     # Setup Product
     p = Product(sku_id="PROD-CREDIT", brand="HUL", category="Soap", pack_size="100g", base_price=500.0, stock_quantity=100)
     db_session.add(p)
+    db_session.flush()
+
+    inv = Inventory(tenant_id=tenant.id, sku_id=p.id, location="Loc", quantity_on_hand=100, low_stock_threshold=10)
+    db_session.add(inv)
     db_session.flush()
 
     # Setup Customer with structural credit_limit of 5,000.0
