@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import { Search, Bell, MessageSquare, Calendar, ChevronDown, LogOut, HelpCircle, Globe } from "lucide-react";
+import { Search, Bell, MessageSquare, ChevronDown, LogOut, HelpCircle, Globe } from "lucide-react";
 
 interface DashboardHeaderProps {
   activeTenantId: string;
@@ -119,10 +119,7 @@ export default function DashboardHeader({
             </span>
           </Link>
 
-          {/* Calendar Picker */}
-          <button className="p-2 text-slate-500 hover:bg-slate-50 rounded-full transition-all">
-            <Calendar className="w-5 h-5" />
-          </button>
+
         </div>
 
         {/* User Profile with Dropdown */}

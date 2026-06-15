@@ -100,8 +100,39 @@ export default function DashboardPage() {
     return "Loading Workspace...";
   };
 
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
+  const [timeframe, setTimeframe] = useState("7days");
+  const [startDate, setStartDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 7);
+    return d.toISOString().split("T")[0];
+  });
+  const [endDate, setEndDate] = useState(() => {
+    return new Date().toISOString().split("T")[0];
+  });
+
+  const handleTimeframeChange = (value: string) => {
+    const today = new Date();
+    const formatDate = (date: Date) => date.toISOString().split("T")[0];
+
+    if (value === "7days") {
+      const pastDate = new Date();
+      pastDate.setDate(today.getDate() - 7);
+      setStartDate(formatDate(pastDate));
+      setEndDate(formatDate(today));
+    } else if (value === "30days") {
+      const pastDate = new Date();
+      pastDate.setDate(today.getDate() - 30);
+      setStartDate(formatDate(pastDate));
+      setEndDate(formatDate(today));
+    } else if (value === "thisMonth") {
+      const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+      setStartDate(formatDate(firstDay));
+      setEndDate(formatDate(today));
+    } else if (value === "custom") {
+      setStartDate("");
+      setEndDate("");
+    }
+  };
 
   const {
     metrics,
@@ -173,39 +204,58 @@ export default function DashboardPage() {
                 </button>
               )}
 
-              {/* Date Filter Input Selectors */}
+              {/* Unified Timeframe Selector */}
               <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1.5 bg-white border border-dashboard-border rounded-lg px-2.5 py-1.5 shadow-sm">
-                  <span className="text-[10px] uppercase font-bold text-slate-400">From</span>
-                  <input
-                    type="date"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    className="text-xs font-semibold text-slate-600 bg-transparent focus:outline-none cursor-pointer"
-                  />
-                </div>
-                <div className="flex items-center gap-1.5 bg-white border border-dashboard-border rounded-lg px-2.5 py-1.5 shadow-sm">
-                  <span className="text-[10px] uppercase font-bold text-slate-400">To</span>
-                  <input
-                    type="date"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    className="text-xs font-semibold text-slate-600 bg-transparent focus:outline-none cursor-pointer"
-                  />
-                </div>
-                {(startDate || endDate) && (
-                  <button
-                    onClick={() => {
-                      setStartDate("");
-                      setEndDate("");
-                    }}
-                    className="p-1.5 text-slate-400 hover:text-slate-600 bg-white border border-dashboard-border rounded-lg shadow-sm"
-                    title="Clear date filters"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
+                <label className="text-xs font-semibold text-slate-500">Timeframe:</label>
+                <select 
+                  value={timeframe}
+                  onChange={(e) => {
+                    setTimeframe(e.target.value);
+                    handleTimeframeChange(e.target.value);
+                  }}
+                  className="bg-white border border-slate-200 text-slate-700 text-xs font-bold rounded-xl px-3 py-2 focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all cursor-pointer outline-none"
+                >
+                  <option value="7days">Last 7 Days</option>
+                  <option value="30days">Last 30 Days</option>
+                  <option value="thisMonth">This Month</option>
+                  <option value="custom">Custom Range</option>
+                </select>
               </div>
+
+              {timeframe === "custom" && (
+                <div className="flex items-center gap-2 animate-fade-in">
+                  <div className="flex items-center gap-1.5 bg-white border border-dashboard-border rounded-lg px-2.5 py-1.5 shadow-sm">
+                    <span className="text-[10px] uppercase font-bold text-slate-400">From</span>
+                    <input
+                      type="date"
+                      value={startDate}
+                      onChange={(e) => setStartDate(e.target.value)}
+                      className="text-xs font-semibold text-slate-600 bg-transparent focus:outline-none cursor-pointer"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1.5 bg-white border border-dashboard-border rounded-lg px-2.5 py-1.5 shadow-sm">
+                    <span className="text-[10px] uppercase font-bold text-slate-400">To</span>
+                    <input
+                      type="date"
+                      value={endDate}
+                      onChange={(e) => setEndDate(e.target.value)}
+                      className="text-xs font-semibold text-slate-600 bg-transparent focus:outline-none cursor-pointer"
+                    />
+                  </div>
+                  {(startDate || endDate) && (
+                    <button
+                      onClick={() => {
+                        setStartDate("");
+                        setEndDate("");
+                      }}
+                      className="p-1.5 text-slate-400 hover:text-slate-600 bg-white border border-dashboard-border rounded-lg shadow-sm"
+                      title="Clear date filters"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              )}
 
               {/* Customize Layout */}
               <button className="flex items-center gap-1.5 px-3 py-2 border border-dashboard-border bg-white rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-all shadow-sm">

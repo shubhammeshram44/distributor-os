@@ -130,32 +130,6 @@ export default function Sidebar({ activeTab, setActiveTab, tenantName }: Sidebar
           );
         })}
       </nav>
-
-      {/* Profile Area */}
-      <div className={`p-4 border-t border-brand-darkHover bg-brand-dark relative flex flex-col ${isCollapsed ? 'items-center gap-4' : 'gap-3'}`}>
-        {/* Toggle Collapse Button */}
-        <button
-          onClick={toggleCollapse}
-          className={`absolute -top-10 bg-brand-blue border border-brand-darkHover text-white p-1 rounded-full shadow-lg hover:bg-brand-blue/80 transition-all z-30 cursor-pointer ${
-            isCollapsed ? 'left-1/2 -translate-x-1/2' : 'right-4'
-          }`}
-          title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
-        >
-          {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
-        </button>
-
-        {/* Tenant Profile */}
-        <div className={`flex items-center ${isCollapsed ? 'justify-center p-0 bg-transparent' : 'gap-3 p-2 bg-brand-darkHover rounded-lg'} overflow-hidden transition-all duration-300 w-full`}>
-          <div className="w-10 h-10 rounded-full bg-brand-blue flex items-center justify-center font-bold text-white shadow-inner flex-shrink-0">
-            {tenantName ? tenantName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : ""}
-          </div>
-          {!isCollapsed && (
-            <div className="text-left overflow-hidden transition-opacity duration-200">
-              <h4 className="font-semibold text-sm truncate text-white">{tenantName}</h4>
-            </div>
-          )}
-        </div>
-      </div>
     </aside>
   );
 }
