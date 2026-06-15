@@ -10,7 +10,14 @@ interface InventoryItem {
   sku_id: string;
   product_name: string;
   stock_quantity: number;
+  low_stock_threshold?: number;
 }
+
+const getStockStatus = (quantity: number, threshold: number) => {
+  if (quantity === 0) return { label: "Out of Stock", style: "bg-rose-50 text-rose-700 border-rose-200" };
+  if (quantity < threshold) return { label: "Low Stock", style: "bg-amber-50 text-amber-700 border-amber-200" };
+  return { label: "Healthy", style: "bg-emerald-50 text-emerald-700 border-emerald-200" };
+};
 
 export default function InventoryPage() {
   const [activeTenantId, setActiveTenantId] = useState("");
@@ -163,7 +170,10 @@ export default function InventoryPage() {
   );
 
   // Calculate statistics
-  const lowStockCount = filteredInventory.filter(item => item.stock_quantity > 0 && item.stock_quantity < 10).length;
+  const lowStockCount = filteredInventory.filter(item => {
+    const threshold = item.low_stock_threshold ?? 10;
+    return item.stock_quantity > 0 && item.stock_quantity < threshold;
+  }).length;
   const outOfStockCount = filteredInventory.filter(item => item.stock_quantity <= 0).length;
   if (!activeTenantId) {
     return <div className="flex h-full items-center justify-center p-8">Loading Workspace Context...</div>;
@@ -375,30 +385,22 @@ export default function InventoryPage() {
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {filteredInventory.map((item) => {
-                      // Color-coding thresholds
-                      const isOutOfStock = item.stock_quantity <= 0;
-                      const isLowStock = item.stock_quantity > 0 && item.stock_quantity < 10;
+                      const threshold = item.low_stock_threshold ?? 10;
+                      const status = getStockStatus(item.stock_quantity, threshold);
+                      
+                      const isOutOfStock = item.stock_quantity === 0;
+                      const isLowStock = item.stock_quantity > 0 && item.stock_quantity < threshold;
                       
                       let statusBadge = (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-100">
-                          Healthy
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold border ${status.style} ${isOutOfStock || isLowStock ? "animate-pulse" : ""}`}>
+                          {status.label}
                         </span>
                       );
                       let qtyClass = "text-slate-800 font-extrabold";
                       
                       if (isOutOfStock) {
-                        statusBadge = (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-rose-50 text-rose-700 border border-rose-100 animate-pulse">
-                            Out of Stock
-                          </span>
-                        );
                         qtyClass = "text-rose-600 font-black animate-pulse";
                       } else if (isLowStock) {
-                        statusBadge = (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-amber-50 text-amber-700 border border-amber-100 animate-pulse">
-                            Low Stock Alert
-                          </span>
-                        );
                         qtyClass = "text-amber-600 font-black animate-pulse";
                       }
 

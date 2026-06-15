@@ -34,7 +34,7 @@ class InventoryService:
         Triggers an alert if quantity on hand drops below or matches the threshold.
         """
         levels = self.calculate_current_stock(db, product_id)
-        return levels["quantity_on_hand"] <= levels["low_stock_threshold"]
+        return levels["quantity_on_hand"] < levels["low_stock_threshold"]
 
     def calculate_sales_velocity(self, db: Session, product_id: uuid.UUID, timeframe_days: int = 30) -> float:
         """
@@ -119,7 +119,7 @@ class InventoryService:
                     suggested_qty = int(max(0, target_stock - available))
             else:
                 # Fallback: if velocity is 0, check if physical stock is below the low stock threshold
-                if on_hand <= stock["low_stock_threshold"]:
+                if on_hand < stock["low_stock_threshold"]:
                     reorder_needed = True
                     # Order a default bulk coverage
                     suggested_qty = stock["low_stock_threshold"] * 5

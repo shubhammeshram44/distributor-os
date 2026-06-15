@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from app.database import get_db, tenant_context
 from app.models.product import Product, ProductAlias
+from app.models.inventory import Inventory
 from app.api.v1.dashboard import ensure_demo_data
 
 router = APIRouter(prefix="/products", tags=["Products"])
@@ -141,15 +142,16 @@ def get_inventory_items(
     """
     ensure_demo_data(db)
     tenant_context.set(tenant_id)
-    products = db.query(Product).all()
+    items = db.query(Product, Inventory).join(Inventory, Product.id == Inventory.sku_id).filter(Product.tenant_id == tenant_id).all()
     return [
         {
             "id": str(p.id),
             "sku_id": p.sku_id,
             "product_name": f"{p.brand} {p.category}",
-            "stock_quantity": p.stock_quantity
+            "stock_quantity": inv.quantity_on_hand,
+            "low_stock_threshold": inv.low_stock_threshold
         }
-        for p in products
+        for p, inv in items
     ]
 
 

@@ -430,7 +430,7 @@ def get_dashboard_metrics(
     low_stock_count = db.query(Inventory).filter(
         and_(
             Inventory.tenant_id == tenant_id,
-            Inventory.quantity_on_hand <= Inventory.low_stock_threshold,
+            Inventory.quantity_on_hand < Inventory.low_stock_threshold,
             Inventory.quantity_on_hand > 0
         )
     ).count()
