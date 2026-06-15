@@ -257,11 +257,6 @@ export default function DashboardPage() {
                 </div>
               )}
 
-              {/* Customize Layout */}
-              <button className="flex items-center gap-1.5 px-3 py-2 border border-dashboard-border bg-white rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-all shadow-sm">
-                <SlidersHorizontal className="w-3.5 h-3.5 text-slate-400" />
-                <span>Customize</span>
-              </button>
             </div>
           </div>
 
@@ -303,8 +298,20 @@ export default function DashboardPage() {
 
           {/* C. Bottom Operational Grid (Live Map, Stock Summary, Activity Feed) */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="min-h-[300px]">
-              <LiveDeliveries viewAllHref="/dashboard/shipments" />
+            <div className="relative border border-slate-100 rounded-2xl p-6 bg-white overflow-hidden min-h-[300px]">
+              {/* Translucent Backdrop Blur */}
+              <div className="absolute inset-0 bg-slate-50/60 backdrop-blur-[2px] z-10 flex flex-col items-center justify-center text-center p-4">
+                <span className="bg-blue-50 text-blue-700 text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-1 rounded-full mb-2 shadow-sm border border-blue-100">
+                  Coming Soon
+                </span>
+                <p className="text-xs font-bold text-slate-700">Real-Time Driver GPS Tracking</p>
+                <p className="text-[11px] text-slate-400 mt-0.5 max-w-[200px]">Lightweight PWA integration with browser-native HTML5 location tracking is on the immediate horizon.</p>
+              </div>
+
+              {/* Keep underlying template or existing placeholder layout code intact beneath the overlay */}
+              <div className="opacity-25 pointer-events-none">
+                <LiveDeliveries viewAllHref="/dashboard/shipments" />
+              </div>
             </div>
             <div className="min-h-[300px]">
               <InventorySummary data={metrics || undefined} />

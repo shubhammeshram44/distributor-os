@@ -34,7 +34,6 @@ export default function CollectionsDonut({ data, viewReportHref, overdue60Count 
         <div>
           <div className="flex items-center gap-2">
             <h3 className="font-bold text-slate-800 text-base">Collections Overview</h3>
-            <span className="text-[10px] uppercase tracking-wider font-semibold text-slate-500 bg-slate-100 dark:bg-slate-800 dark:text-slate-400 px-2 py-0.5 rounded-full">Live</span>
           </div>
           <p className="text-[10px] text-slate-400 font-semibold mt-0.5">Current Portfolio Snapshot</p>
         </div>

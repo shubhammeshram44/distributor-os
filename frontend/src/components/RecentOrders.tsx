@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { MessageSquare, Globe, X, FileSpreadsheet, Loader2, ArrowRight, AlertCircle } from "lucide-react";
+import { MessageSquare, Globe, X, FileSpreadsheet, Loader2, ArrowRight, AlertCircle, ShoppingBag } from "lucide-react";
 import { RecentOrder, OrderDetail } from "@/hooks/useDashboardData";
 import Link from "next/link";
 
@@ -147,68 +147,80 @@ export default function RecentOrders({
       </div>
 
       {/* Grid Table */}
-      <div className="flex-1 overflow-x-auto">
-        <table className="w-full text-left text-sm border-collapse">
-          <thead>
-            <tr className="text-slate-400 font-semibold text-xs border-b border-dashboard-border bg-slate-50/50">
-              <th className="py-3 px-4">Order ID</th>
-              <th className="py-3 px-4">Customer</th>
-              <th className="py-3 px-4 text-center">Channel</th>
-              <th className="py-3 px-4 text-right">Amount</th>
-              <th className="py-3 px-4 text-center">Status</th>
-              <th className="py-3 px-4">Created On</th>
-              <th className="py-3 px-4">ETA</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {orders.map((order) => (
-              <tr key={order.id} className="hover:bg-slate-50/70 transition-colors group">
-                <td className="py-3.5 px-4 font-semibold text-brand-blue hover:text-brand-blueHover">
-                  <button
-                    onClick={() => handleOrderIdClick(order)}
-                    className="hover:underline text-left text-sm cursor-pointer focus:outline-none"
-                  >
-                    {order.order_id}
-                  </button>
-                </td>
-                <td className="py-3.5 px-4 font-medium text-slate-700 max-w-[180px] truncate">
-                  {order.customer}
-                </td>
-                <td className="py-3.5 px-4 text-center">
-                  <div className="flex items-center justify-center">
-                    {order.channel.toLowerCase() === "whatsapp" ? (
-                      <div className="w-7 h-7 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 shadow-sm" title="WhatsApp Channel">
-                        <MessageSquare className="w-4 h-4" />
-                      </div>
-                    ) : (
-                      <div className="w-7 h-7 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 shadow-sm" title="Portal Channel">
-                        <Globe className="w-4 h-4" />
-                      </div>
-                    )}
-                  </div>
-                </td>
-                <td className="py-3.5 px-4 text-right font-bold text-slate-800">
-                  {formatCurrency(order.amount)}
-                </td>
-                <td className="py-3.5 px-4 text-center">
-                  <span className={`inline-flex items-center justify-center px-2.5 py-1 rounded-full text-xs font-bold leading-none ${
-                    order.status === "Confirmed"
-                      ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                      : "bg-amber-50 text-amber-700 border border-amber-200"
-                  }`}>
-                    {order.status}
-                  </span>
-                </td>
-                <td className="py-3.5 px-4 text-xs font-semibold text-slate-500">
-                  {order.created_on || order.eta}
-                </td>
-                <td className="py-3.5 px-4 text-xs font-semibold text-slate-500">
-                  {order.eta}
-                </td>
+      <div className="flex-1 overflow-x-auto flex flex-col justify-center">
+        {orders && orders.length > 0 ? (
+          <table className="w-full text-left text-sm border-collapse">
+            <thead>
+              <tr className="text-slate-400 font-semibold text-xs border-b border-dashboard-border bg-slate-50/50">
+                <th className="py-3 px-4">Order ID</th>
+                <th className="py-3 px-4">Customer</th>
+                <th className="py-3 px-4 text-center">Channel</th>
+                <th className="py-3 px-4 text-right">Amount</th>
+                <th className="py-3 px-4 text-center">Status</th>
+                <th className="py-3 px-4">Created On</th>
+                <th className="py-3 px-4">ETA</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {orders.map((order) => (
+                <tr key={order.id} className="hover:bg-slate-50/70 transition-colors group">
+                  <td className="py-3.5 px-4 font-semibold text-brand-blue hover:text-brand-blueHover">
+                    <button
+                      onClick={() => handleOrderIdClick(order)}
+                      className="hover:underline text-left text-sm cursor-pointer focus:outline-none"
+                    >
+                      {order.order_id}
+                    </button>
+                  </td>
+                  <td className="py-3.5 px-4 font-medium text-slate-700 max-w-[180px] truncate">
+                    {order.customer}
+                  </td>
+                  <td className="py-3.5 px-4 text-center">
+                    <div className="flex items-center justify-center">
+                      {order.channel.toLowerCase() === "whatsapp" ? (
+                        <div className="w-7 h-7 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 shadow-sm" title="WhatsApp Channel">
+                          <MessageSquare className="w-4 h-4" />
+                        </div>
+                      ) : (
+                        <div className="w-7 h-7 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 shadow-sm" title="Portal Channel">
+                          <Globe className="w-4 h-4" />
+                        </div>
+                      )}
+                    </div>
+                  </td>
+                  <td className="py-3.5 px-4 text-right font-bold text-slate-800">
+                    {formatCurrency(order.amount)}
+                  </td>
+                  <td className="py-3.5 px-4 text-center">
+                    <span className={`inline-flex items-center justify-center px-2.5 py-1 rounded-full text-xs font-bold leading-none ${
+                      order.status === "Confirmed"
+                        ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                        : "bg-amber-50 text-amber-700 border border-amber-200"
+                    }`}>
+                      {order.status}
+                    </span>
+                  </td>
+                  <td className="py-3.5 px-4 text-xs font-semibold text-slate-500">
+                    {order.created_on || order.eta}
+                  </td>
+                  <td className="py-3.5 px-4 text-xs font-semibold text-slate-500">
+                    {order.eta}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+            <div className="w-12 h-12 rounded-full bg-slate-50 flex items-center justify-center mb-3 text-slate-400">
+              <ShoppingBag className="w-6 h-6" />
+            </div>
+            <p className="text-sm font-semibold text-slate-600">No recent orders found</p>
+            <p className="text-xs text-slate-400 mt-1 max-w-[250px]">
+              Orders received via WhatsApp or the portal will populate here.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Slide-out Sidebar Drawer for Line Item Details */}

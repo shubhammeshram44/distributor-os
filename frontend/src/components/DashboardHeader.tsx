@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import { Search, Bell, MessageSquare, ChevronDown, LogOut, HelpCircle, Globe } from "lucide-react";
+import { Search, MessageSquare, ChevronDown, LogOut, HelpCircle, Globe } from "lucide-react";
 
 interface DashboardHeaderProps {
   activeTenantId: string;
@@ -103,13 +103,7 @@ export default function DashboardHeader({
 
         {/* Notifications & Badges */}
         <div className="flex items-center gap-4">
-          {/* System Alerts */}
-          <button className="relative p-2 text-slate-500 hover:bg-slate-50 rounded-full transition-all">
-            <Bell className="w-5 h-5" />
-            <span className="absolute top-0 right-0 w-4.5 h-4.5 bg-brand-blue text-[9px] font-bold text-white rounded-full flex items-center justify-center border-2 border-white">
-              12
-            </span>
-          </button>
+
 
           {/* WhatsApp Webhook alert count */}
           <Link href="/dashboard/messages" className="relative p-2 text-slate-500 hover:bg-slate-50 rounded-full transition-all cursor-pointer">
