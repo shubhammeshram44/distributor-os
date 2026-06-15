@@ -47,24 +47,20 @@ export default function DashboardHeader({
 
   const displayProfile = userProfile || internalProfile;
 
-  // Available tenants for testing multi-tenant isolation
-  const baseTenants = [
-    { id: "d3b07384-d113-4956-a5d2-64be7357c11d", name: "S.V. Distributors" },
-    { id: "e1c08495-d224-4a67-b6e3-75cf8468d22e", name: "Reliance Distribution" },
-    { id: "f2d095a6-e335-5b78-c7f4-86df9579e33f", name: "Vikas Sales Corp" }
-  ];
-
-  // Append user's custom tenant dynamically if not present in the default list
-  const tenants = [...baseTenants];
+  // Dynamically resolve tenant list strictly based on authenticated session context
+  const tenants: { id: string; name: string }[] = [];
   const activeUserTenant = displayProfile?.tenant;
   if (activeUserTenant?.id) {
-    const exists = tenants.some(t => t.id === activeUserTenant.id);
-    if (!exists) {
-      tenants.push({
-        id: activeUserTenant.id,
-        name: activeUserTenant.name || "My Workspace"
-      });
-    }
+    tenants.push({
+      id: activeUserTenant.id,
+      name: activeUserTenant.name || "My Workspace"
+    });
+  } else if (activeTenantId && tenantName) {
+    // Fallback to active properties if profile not loaded yet to prevent empty selector state
+    tenants.push({
+      id: activeTenantId,
+      name: tenantName
+    });
   }
 
   return (

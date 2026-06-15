@@ -33,16 +33,16 @@ interface AnalyticsData {
 }
 
 export default function SalesAnalyticsPage() {
-  const [activeTenantId, setActiveTenantId] = useState("d3b07384-d113-4956-a5d2-64be7357c11d");
+  const [activeTenantId, setActiveTenantId] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<AnalyticsData | null>(null);
 
   // Sync tenant from localStorage on load
   useEffect(() => {
-    const stored = localStorage.getItem("tenant_id");
-    if (stored) {
-      setActiveTenantId(stored);
+    const currentWorkspace = localStorage.getItem("tenant_id");
+    if (currentWorkspace) {
+      setActiveTenantId(currentWorkspace);
     }
   }, []);
 
@@ -66,10 +66,16 @@ export default function SalesAnalyticsPage() {
 
   const fetchSalesAnalytics = useCallback(async (tenantId?: string) => {
     const targetTenant = tenantId || activeTenantId;
+    if (!targetTenant) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-      const resp = await fetch(`${apiBase}/api/v1/analytics/sales?tenant_id=${targetTenant}`);
+      const resp = await fetch(`${apiBase}/api/v1/analytics/sales-overview?tenant_id=${targetTenant}`, {
+        credentials: "include"
+      });
       if (!resp.ok) throw new Error("Failed to fetch sales analytics");
       const resData = await resp.json();
       setData(resData);

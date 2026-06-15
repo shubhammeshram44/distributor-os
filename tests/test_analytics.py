@@ -56,7 +56,7 @@ def test_analytics_endpoints(db_session, client):
     db_session.commit()
 
     # Call sales analytics
-    response = client.get(f"/api/v1/analytics/sales?tenant_id={tenant.id}")
+    response = client.get(f"/api/v1/analytics/sales-overview?tenant_id={tenant.id}")
     assert response.status_code == 200
     sales_data = response.json()
     assert sales_data["status"] == "success"
@@ -67,7 +67,7 @@ def test_analytics_endpoints(db_session, client):
     assert sales_data["top_moving_skus"][0]["total_quantity"] == 5
 
     # Call revenue analytics
-    response = client.get(f"/api/v1/analytics/revenue?tenant_id={tenant.id}")
+    response = client.get(f"/api/v1/analytics/revenue-trend?tenant_id={tenant.id}")
     assert response.status_code == 200
     rev_data = response.json()
     assert rev_data["status"] == "success"

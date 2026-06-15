@@ -6,20 +6,21 @@ from app.database import get_db, tenant_context
 from app.models.order import Order, OrderLineItem, OrderStateLedger
 from app.models.product import Product
 from app.models.customer import Customer
-from app.api.v1.dashboard import ensure_demo_data
+from app.api.v1.dashboard import ensure_demo_data, resolve_tenant_id
 
 router = APIRouter(prefix="/analytics", tags=["Analytics"])
 
-@router.get("/sales")
+@router.get("/sales-overview")
 def get_sales_analytics(
-    tenant_id: uuid.UUID,
-    db: Session = Depends(get_db)
+    tenant_id: uuid.UUID | None = None,
+    db: Session = Depends(get_db),
+    resolved_tenant_id: uuid.UUID = Depends(resolve_tenant_id)
 ):
-    ensure_demo_data(db, tenant_id)
-    tenant_context.set(tenant_id)
+    ensure_demo_data(db, resolved_tenant_id)
+    tenant_context.set(resolved_tenant_id)
 
     # 1. Total orders count
-    total_orders = db.query(Order).filter(Order.tenant_id == tenant_id).count()
+    total_orders = db.query(Order).filter(Order.tenant_id == resolved_tenant_id).count()
 
     # 2. Count of orders grouped by status
     ledger_alias = aliased(OrderStateLedger)
@@ -30,12 +31,12 @@ def get_sales_analytics(
         )
         .where(
             and_(
-                OrderStateLedger.tenant_id == tenant_id,
+                OrderStateLedger.tenant_id == resolved_tenant_id,
                 OrderStateLedger.timestamp == (
                     select(func.max(ledger_alias.timestamp))
                     .where(
                         and_(
-                            ledger_alias.tenant_id == tenant_id,
+                            ledger_alias.tenant_id == resolved_tenant_id,
                             ledger_alias.order_id == OrderStateLedger.order_id
                         )
                     )
@@ -52,7 +53,7 @@ def get_sales_analytics(
             func.count(Order.id)
         )
         .join(latest_status_sub, Order.id == latest_status_sub.c.order_id)
-        .filter(Order.tenant_id == tenant_id)
+        .filter(Order.tenant_id == resolved_tenant_id)
         .group_by(latest_status_sub.c.status)
         .all()
     )
@@ -63,7 +64,7 @@ def get_sales_analytics(
         status_counts[status_key] = status_counts.get(status_key, 0) + count
 
     # If demo tenant, make sure we show realistic statuses
-    if not status_counts_query and tenant_id == uuid.UUID("d3b07384-d113-4956-a5d2-64be7357c11d"):
+    if not status_counts_query and resolved_tenant_id == uuid.UUID("d3b07384-d113-4956-a5d2-64be7357c11d"):
         status_counts = {"Pending": 2, "Confirmed": 3, "Dispatched": 0}
 
     # 3. Top 5 moving SKUs sorted by total quantity
@@ -76,7 +77,7 @@ def get_sales_analytics(
         )
         .join(Product, OrderLineItem.product_id == Product.id)
         .join(Order, OrderLineItem.order_id == Order.id)
-        .filter(Order.tenant_id == tenant_id)
+        .filter(Order.tenant_id == resolved_tenant_id)
         .group_by(Product.sku_id, Product.brand, Product.category)
         .order_by(desc("total_quantity"))
         .limit(5)
@@ -100,13 +101,14 @@ def get_sales_analytics(
         "top_moving_skus": top_moving_skus
     }
 
-@router.get("/revenue")
+@router.get("/revenue-trend")
 def get_revenue_analytics(
-    tenant_id: uuid.UUID,
-    db: Session = Depends(get_db)
+    tenant_id: uuid.UUID | None = None,
+    db: Session = Depends(get_db),
+    resolved_tenant_id: uuid.UUID = Depends(resolve_tenant_id)
 ):
-    ensure_demo_data(db, tenant_id)
-    tenant_context.set(tenant_id)
+    ensure_demo_data(db, resolved_tenant_id)
+    tenant_context.set(resolved_tenant_id)
 
     # 1. Total gross revenue sum
     ledger_alias = aliased(OrderStateLedger)
@@ -114,13 +116,13 @@ def get_revenue_analytics(
         select(OrderStateLedger.order_id)
         .where(
             and_(
-                OrderStateLedger.tenant_id == tenant_id,
+                OrderStateLedger.tenant_id == resolved_tenant_id,
                 OrderStateLedger.to_status == "Confirmed",
                 OrderStateLedger.timestamp == (
                     select(func.max(ledger_alias.timestamp))
                     .where(
                         and_(
-                            ledger_alias.tenant_id == tenant_id,
+                            ledger_alias.tenant_id == resolved_tenant_id,
                             ledger_alias.order_id == OrderStateLedger.order_id
                         )
                     )
@@ -133,12 +135,12 @@ def get_revenue_analytics(
     total_revenue_stmt = (
         select(func.sum(OrderLineItem.quantity * OrderLineItem.unit_price))
         .join(Order, OrderLineItem.order_id == Order.id)
-        .where(and_(Order.tenant_id == tenant_id, Order.id.in_(confirmed_orders_sub)))
+        .where(and_(Order.tenant_id == resolved_tenant_id, Order.id.in_(confirmed_orders_sub)))
     )
     total_revenue = db.execute(total_revenue_stmt).scalar() or 0.0
 
     # 2. Total receivables balance
-    total_receivables = db.query(func.sum(Customer.outstanding_balance)).filter(Customer.tenant_id == tenant_id).scalar() or 0.0
+    total_receivables = db.query(func.sum(Customer.outstanding_balance)).filter(Customer.tenant_id == resolved_tenant_id).scalar() or 0.0
 
     # 3. Time-series dataset grouping sales totals by day
     time_series_query = (
@@ -147,7 +149,7 @@ def get_revenue_analytics(
             func.sum(OrderLineItem.quantity * OrderLineItem.unit_price).label("sales")
         )
         .join(OrderLineItem, OrderLineItem.order_id == Order.id)
-        .filter(Order.tenant_id == tenant_id)
+        .filter(Order.tenant_id == resolved_tenant_id)
         .group_by(func.date(Order.created_at))
         .order_by("date")
         .all()
@@ -159,7 +161,7 @@ def get_revenue_analytics(
     ]
 
     # Seed some sample data for demo tenant if it's too sparse to render a nice line chart
-    if len(time_series) < 3 and tenant_id == uuid.UUID("d3b07384-d113-4956-a5d2-64be7357c11d"):
+    if len(time_series) < 3 and resolved_tenant_id == uuid.UUID("d3b07384-d113-4956-a5d2-64be7357c11d"):
         time_series = [
             {"date": "2026-06-08", "sales": 15000},
             {"date": "2026-06-09", "sales": 24000},
