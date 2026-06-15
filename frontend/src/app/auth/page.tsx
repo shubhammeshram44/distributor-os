@@ -76,16 +76,14 @@ export default function AuthPage() {
 
       setSuccessMessage("OTP verified! Directing to workspace...");
       
-      // Save credentials in client storage
-      localStorage.setItem("tenant_id", resData.user.tenant_id);
-      localStorage.setItem("userRole", resData.user.role);
-      localStorage.setItem("userFullName", resData.user.full_name);
-      localStorage.setItem("userPhoneNumber", resData.user.phone_number);
-      localStorage.setItem("accessToken", resData.token);
-
-      if (resData.tenant_id) {
-        localStorage.setItem("tenant_id", resData.tenant_id);
-      }
+      // Save credentials defensively in client storage
+      const activeTenantId = resData.tenant_id || resData.user?.tenant_id || "";
+      localStorage.setItem("tenant_id", activeTenantId);
+      localStorage.setItem("userRole", resData.user?.role || "");
+      localStorage.setItem("userFullName", resData.user?.full_name || "");
+      localStorage.setItem("userPhoneNumber", resData.user?.phone_number || "");
+      localStorage.setItem("accessToken", resData.token || resData.access_token || "");
+      
       if (resData.tenant_name) {
         localStorage.setItem("tenant_name", resData.tenant_name);
       }
