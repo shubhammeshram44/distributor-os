@@ -31,9 +31,10 @@ export default function DashboardPage() {
         const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
         const resp = await fetch(`${apiBase}/api/v1/auth/me`, {
           method: "GET",
-          credentials: "include",
+          credentials: "include", // CRITICAL: Forces browser to carry secure HttpOnly access cookies
           headers: {
-            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "Content-Type": "application/json"
           }
         });
 
