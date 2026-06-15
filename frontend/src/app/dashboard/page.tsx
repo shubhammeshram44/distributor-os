@@ -17,6 +17,7 @@ export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState("Dashboard");
   const [tenantId, setTenantId] = useState("");
   const [userProfile, setUserProfile] = useState<any>(null);
+  const [isHydrating, setIsHydrating] = useState(true);
 
   // Sync profile and tenant from backend / localStorage
   useEffect(() => {
@@ -50,6 +51,8 @@ export default function DashboardPage() {
         }
       } catch (err) {
         console.error("Failed to load authenticated user profile:", err);
+      } finally {
+        setIsHydrating(false);
       }
     };
 
@@ -95,7 +98,7 @@ export default function DashboardPage() {
     closeDetails,
     refreshAll,
     error
-  } = useDashboardData(tenantId, startDate, endDate);
+  } = useDashboardData(isHydrating ? "" : tenantId, startDate, endDate);
 
   return (
     <div className="flex bg-dashboard-bg min-h-screen text-slate-800">
@@ -118,8 +121,15 @@ export default function DashboardPage() {
 
         {/* 3. Dashboard Scrollable Content */}
         <main className="flex-1 mt-16 p-6 overflow-y-auto space-y-6">
-          {/* Dashboard Control Header */}
-          <div className="flex items-center justify-between">
+          {isHydrating ? (
+            <div className="flex flex-col items-center justify-center py-32 gap-3 bg-white rounded-xl border border-dashboard-border shadow-sm h-[400px]">
+              <div className="w-8 h-8 rounded-full border-4 border-slate-200 border-t-brand-blue animate-spin" />
+              <span className="text-sm font-semibold text-slate-500">Hydrating your workspace profile...</span>
+            </div>
+          ) : (
+            <>
+              {/* Dashboard Control Header */}
+              <div className="flex items-center justify-between">
             <div>
               <h1 className="text-xl font-bold text-slate-800 tracking-tight">Dashboard</h1>
               <p className="text-xs text-slate-400 font-semibold mt-0.5">Real-time operational workflow management</p>
@@ -228,6 +238,8 @@ export default function DashboardPage() {
               <ActivityFeed activities={activities} viewAllHref="/dashboard/reports" />
             </div>
           </div>
+            </>
+          )}
         </main>
       </div>
 
