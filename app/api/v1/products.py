@@ -116,7 +116,7 @@ def get_products(
     """
     Retrieves the complete product catalog for a given tenant.
     """
-    ensure_demo_data(db)
+    ensure_demo_data(db, tenant_id)
     tenant_context.set(tenant_id)
     products = db.query(Product).all()
     return [
@@ -140,7 +140,7 @@ def get_inventory_items(
     """
     Retrieves inventory levels for all products under the tenant.
     """
-    ensure_demo_data(db)
+    ensure_demo_data(db, tenant_id)
     tenant_context.set(tenant_id)
     items = db.query(Product, Inventory).join(Inventory, Product.id == Inventory.sku_id).filter(Product.tenant_id == tenant_id).all()
     return [

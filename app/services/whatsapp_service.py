@@ -167,3 +167,13 @@ class WhatsAppService:
             job.status = "Completed"
             db.commit()
             return job
+
+    def send_otp_message(self, mobile_number: str, otp_code: str) -> None:
+        """
+        Simulates sending a WhatsApp message containing the 6-digit OTP code.
+        """
+        print(f"\n================== OUTGOING WHATSAPP OTP ==================")
+        print(f"To: {mobile_number}")
+        print(f"Message: Your verification code is: {otp_code}. Expires in 5 minutes.")
+        print(f"===========================================================\n")
+        logger.info(f"WhatsApp OTP sent to {mobile_number}: {otp_code}")

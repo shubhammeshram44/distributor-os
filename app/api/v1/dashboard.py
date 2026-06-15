@@ -23,11 +23,16 @@ router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 # Static Tenant ID for demo/default distributor
 DEMO_TENANT_ID = uuid.UUID("d3b07384-d113-4956-a5d2-64be7357c11d")
 
-def ensure_demo_data(db: Session):
+def ensure_demo_data(db: Session, tenant_id: uuid.UUID | None = None):
     """
     Seeds the database with the exact B2B distributor data matching the Operations Dashboard
     screenshot if the database is empty.
     """
+    # Bypass seeding for non-demo tenants
+    t_id = tenant_id or tenant_context.get()
+    if t_id is not None and t_id != DEMO_TENANT_ID:
+        return
+
     # 1. Check if the default tenant exists
     tenant = db.get(DistributorTenant, DEMO_TENANT_ID)
     if not tenant:
@@ -319,7 +324,7 @@ def get_dashboard_metrics(
     Returns high-level metric values. Tries to read from live tables;
     if database is empty, automatically triggers seeder first.
     """
-    ensure_demo_data(db)
+    ensure_demo_data(db, tenant_id)
     tenant_context.set(tenant_id)
 
     # Parse date filters if provided
@@ -490,7 +495,7 @@ def get_dashboard_metrics(
         "average_order_value": float(aov),
         "average_order_value_change": float(average_order_value_change),
         "outstanding_collections": float(outstanding),
-        "outstanding_collections_change": -9.8 if tenant_id == DEMO_TENANT_ID else 0.0,
+        "outstanding_collections_change": 0.0,
         "low_stock_count": low_stock_count,
         "out_of_stock_count": out_of_stock_count,
         "total_skus_count": total_skus_count,
@@ -509,7 +514,7 @@ def get_recent_orders(
     """
     Returns the latest 5 orders with their status resolved from the ledger.
     """
-    ensure_demo_data(db)
+    ensure_demo_data(db, tenant_id)
     tenant_context.set(tenant_id)
 
     orders = db.query(Order).order_by(Order.created_at.desc()).limit(5).all()
@@ -579,7 +584,7 @@ def get_collections_donut(
     """
     Calculatesoutstanding collection balances grouped by aging periods.
     """
-    ensure_demo_data(db)
+    ensure_demo_data(db, tenant_id)
     tenant_context.set(tenant_id)
 
     # Grouping logic (0-15, 16-30, 31-60, 60+ days)
@@ -644,7 +649,7 @@ def get_recent_activity(
     """
     Returns a chronologically merged activity feed from the ledger and file ingestion logs.
     """
-    ensure_demo_data(db)
+    ensure_demo_data(db, tenant_id)
     tenant_context.set(tenant_id)
 
     activity = []
@@ -719,7 +724,7 @@ def get_customers(
     """
     Returns all customers for a tenant.
     """
-    ensure_demo_data(db)
+    ensure_demo_data(db, tenant_id)
     tenant_context.set(tenant_id)
     customers = db.query(Customer).filter(Customer.tenant_id == tenant_id).all()
     results = []

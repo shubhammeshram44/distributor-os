@@ -112,7 +112,7 @@ def get_customer_statement(
     tenant_id: uuid.UUID,
     db: Session = Depends(get_db)
 ):
-    ensure_demo_data(db)
+    ensure_demo_data(db, tenant_id)
     tenant_context.set(tenant_id)
     
     customer = db.get(Customer, customer_id)

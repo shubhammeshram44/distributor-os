@@ -15,7 +15,7 @@ def get_sales_analytics(
     tenant_id: uuid.UUID,
     db: Session = Depends(get_db)
 ):
-    ensure_demo_data(db)
+    ensure_demo_data(db, tenant_id)
     tenant_context.set(tenant_id)
 
     # 1. Total orders count
@@ -105,7 +105,7 @@ def get_revenue_analytics(
     tenant_id: uuid.UUID,
     db: Session = Depends(get_db)
 ):
-    ensure_demo_data(db)
+    ensure_demo_data(db, tenant_id)
     tenant_context.set(tenant_id)
 
     # 1. Total gross revenue sum

@@ -10,6 +10,7 @@ from app.models.shipment import Shipment
 from app.models.ingestion import IngestionJob, IngestionStaging
 from app.models.user import User
 from app.models.ledger import CustomerLedger
+from app.models.auth import WhatsAppVerification
 
 __all__ = [
     "Base",
@@ -33,6 +34,7 @@ __all__ = [
     "IngestionStaging",
     "User",
     "CustomerLedger",
+    "WhatsAppVerification",
 ]
 
 

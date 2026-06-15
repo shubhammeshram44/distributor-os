@@ -29,7 +29,7 @@ def get_pending_shipments(
     tenant_id: uuid.UUID,
     db: Session = Depends(get_db)
 ):
-    ensure_demo_data(db)
+    ensure_demo_data(db, tenant_id)
     tenant_context.set(tenant_id)
 
     # 1. Confirmed orders subquery
@@ -95,7 +95,7 @@ def get_active_shipments(
     tenant_id: uuid.UUID,
     db: Session = Depends(get_db)
 ):
-    ensure_demo_data(db)
+    ensure_demo_data(db, tenant_id)
     tenant_context.set(tenant_id)
 
     shipments = db.query(Shipment).filter(Shipment.tenant_id == tenant_id).all()
@@ -158,7 +158,7 @@ def create_shipment(
     tenant_id: uuid.UUID,
     db: Session = Depends(get_db)
 ):
-    ensure_demo_data(db)
+    ensure_demo_data(db, tenant_id)
     tenant_context.set(tenant_id)
 
     driver = db.get(User, payload.driver_id)

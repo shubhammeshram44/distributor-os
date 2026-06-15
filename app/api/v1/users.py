@@ -16,7 +16,7 @@ def get_users(
     tenant_id: uuid.UUID | None = None,
     db: Session = Depends(get_db)
 ):
-    ensure_demo_data(db)
+    ensure_demo_data(db, tenant_id)
     if tenant_id:
         tenant_context.set(tenant_id)
 
