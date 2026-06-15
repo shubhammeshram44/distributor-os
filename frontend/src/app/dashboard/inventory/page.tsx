@@ -146,6 +146,25 @@ export default function InventoryPage() {
       if (resp.ok) {
         showToast(`Successfully replenished ${qtyInt} units of SKU ${sku_id}!`, "success");
         setFormData({ sku_id: "", quantity_received: "" });
+        
+        // Dynamically update the local state array immediately
+        setInventory(prevItems => {
+          const exists = prevItems.some(item => item.sku_id === data.sku_id);
+          if (exists) {
+            return prevItems.map(item => 
+              item.sku_id === data.sku_id ? { ...item, stock_quantity: data.new_stock } : item
+            );
+          }
+          // Fallback placeholder
+          const newPlaceholder: InventoryItem = {
+            id: Math.random().toString(),
+            sku_id: data.sku_id,
+            product_name: data.sku_id,
+            stock_quantity: data.new_stock
+          };
+          return [newPlaceholder, ...prevItems];
+        });
+
         fetchInventory(activeTenantId); // Instantly reload stock data grid and warnings
 
       } else {
