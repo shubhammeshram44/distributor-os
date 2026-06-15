@@ -158,7 +158,7 @@ def verify_otp(
         "access_token": token,
         "token_type": "bearer",
         "tenant_id": str(user.tenant_id) if user.tenant_id else None,
-        "tenant_name": tenant_name,
+        "tenant_name": tenant_name or "My Workspace",
         "user": {
             "id": str(user.id),
             "tenant_id": str(user.tenant_id) if user.tenant_id else None,
