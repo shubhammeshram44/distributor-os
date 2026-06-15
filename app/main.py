@@ -23,6 +23,13 @@ try:
 except Exception:
     pass
 
+try:
+    with engine.connect() as conn:
+        conn.execute(text("ALTER TABLE distributor_tenants ADD COLUMN category VARCHAR(100);"))
+        conn.commit()
+except Exception:
+    pass
+
 app = FastAPI(
     title="Distributor OS API",
     description="Multi-tenant backend platform for supply chain distributors",

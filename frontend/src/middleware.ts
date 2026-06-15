@@ -5,6 +5,11 @@ export function middleware(request: NextRequest) {
   const token = request.cookies.get('access_token')?.value;
   const { pathname } = request.nextUrl;
 
+  // Explicitly allow root path / access for all
+  if (pathname === '/') {
+    return NextResponse.next();
+  }
+
   // Protect /dashboard paths
   if (pathname.startsWith('/dashboard')) {
     if (!token) {

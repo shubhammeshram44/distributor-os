@@ -40,7 +40,7 @@ export default function SalesAnalyticsPage() {
 
   // Sync tenant from localStorage on load
   useEffect(() => {
-    const stored = localStorage.getItem("activeTenantId");
+    const stored = localStorage.getItem("tenant_id");
     if (stored) {
       setActiveTenantId(stored);
     }
@@ -48,7 +48,7 @@ export default function SalesAnalyticsPage() {
 
   const handleTenantChange = (id: string) => {
     setActiveTenantId(id);
-    localStorage.setItem("activeTenantId", id);
+    localStorage.setItem("tenant_id", id);
   };
 
   const getTenantName = () => {

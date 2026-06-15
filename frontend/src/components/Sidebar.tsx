@@ -18,7 +18,8 @@ import {
   Settings,
   MessageSquare,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Globe
 } from "lucide-react";
 
 interface SidebarProps {
@@ -163,6 +164,26 @@ export default function Sidebar({ activeTab, setActiveTab, tenantName }: Sidebar
               <p className="text-[10px]">Contact Support</p>
             </div>
           </button>
+        )}
+
+        {/* View Marketing Site */}
+        {isCollapsed ? (
+          <div className="group relative w-full flex justify-center">
+            <Link href="/" className="p-2 text-brand-textMuted hover:bg-brand-darkHover hover:text-white rounded-lg transition-all">
+              <Globe className="w-5 h-5" />
+            </Link>
+            <span className="absolute left-full ml-3 px-2 py-1 bg-slate-950 text-white text-xs rounded-md whitespace-nowrap shadow-xl opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none z-50 invisible group-hover:visible">
+              View Marketing Site
+            </span>
+          </div>
+        ) : (
+          <Link href="/" className="w-full flex items-center gap-3 p-3 rounded-lg text-brand-textMuted hover:bg-brand-darkHover hover:text-white text-sm transition-all">
+            <Globe className="w-5 h-5 flex-shrink-0" />
+            <div className="text-left">
+              <p className="font-semibold text-xs text-white">View Marketing Site</p>
+              <p className="text-[10px]">Back to homepage</p>
+            </div>
+          </Link>
         )}
 
         {/* Tenant Profile */}

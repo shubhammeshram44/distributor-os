@@ -96,10 +96,10 @@ def verify_otp(
         (User.phone_number == mobile) | (User.email_or_phone == mobile)
     ).first()
     
-    is_new_registration = False
+    is_new_user = False
     if not user:
         # Create brand-new DistributorTenant for clean-slate setup
-        is_new_registration = True
+        is_new_user = True
         new_tenant = DistributorTenant(
             id=uuid.uuid4(),
             name="My B2B Distribution"
@@ -143,7 +143,8 @@ def verify_otp(
     
     return {
         "status": "success",
-        "is_new_registration": is_new_registration,
+        "is_new_user": is_new_user,
+        "is_new_registration": is_new_user,
         "token": token,
         "user": {
             "id": str(user.id),

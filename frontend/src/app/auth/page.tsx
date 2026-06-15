@@ -61,29 +61,30 @@ export default function AuthPage() {
 
     setLoading(true);
     try {
-      const res = await fetch(`${apiBase}/api/v1/auth/verify-otp`, {
+      const response = await fetch(`${apiBase}/api/v1/auth/verify-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mobile_number: mobileNumber, otp_code: otpCode }),
       });
 
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.detail || "Invalid or expired OTP code.");
+      const resData = await response.json();
+      if (!response.ok) {
+        throw new Error(resData.detail || "Invalid or expired OTP code.");
       }
 
       setSuccessMessage("OTP verified! Directing to workspace...");
       
       // Save credentials in client storage
-      localStorage.setItem("activeTenantId", data.user.tenant_id);
-      localStorage.setItem("userRole", data.user.role);
-      localStorage.setItem("userFullName", data.user.full_name);
-      localStorage.setItem("userPhoneNumber", data.user.phone_number);
-      localStorage.setItem("accessToken", data.token);
+      localStorage.setItem("tenant_id", resData.user.tenant_id);
+      localStorage.setItem("userRole", resData.user.role);
+      localStorage.setItem("userFullName", resData.user.full_name);
+      localStorage.setItem("userPhoneNumber", resData.user.phone_number);
+      localStorage.setItem("accessToken", resData.token);
 
-      // Force reload to trigger cookies and middleware checks on navigation
+      const res = { data: resData };
+
       setTimeout(() => {
-        window.location.href = "/dashboard";
+        if (res.data.is_new_user) { router.push('/auth/onboarding'); } else { router.push('/dashboard'); }
       }, 1000);
 
     } catch (err: any) {

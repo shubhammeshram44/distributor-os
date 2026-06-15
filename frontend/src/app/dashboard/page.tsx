@@ -15,19 +15,19 @@ import WhatsAppSimulator from "@/components/WhatsAppSimulator";
 
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState("Dashboard");
-  const [activeTenantId, setActiveTenantId] = useState("d3b07384-d113-4956-a5d2-64be7357c11d");
+  const [tenantId, setTenantId] = useState("d3b07384-d113-4956-a5d2-64be7357c11d");
 
   // Sync tenant from localStorage on load
   useEffect(() => {
-    const stored = localStorage.getItem("activeTenantId");
-    if (stored) {
-      setActiveTenantId(stored);
+    const storedTenant = localStorage.getItem("tenant_id");
+    if (storedTenant) {
+      setTenantId(storedTenant);
     }
   }, []);
 
   const handleTenantChange = (id: string) => {
-    setActiveTenantId(id);
-    localStorage.setItem("activeTenantId", id);
+    setTenantId(id);
+    localStorage.setItem("tenant_id", id);
   };
   const [toast, setToast] = useState<{ show: boolean; message: string; type: "success" | "error" }>({
     show: false,
@@ -44,7 +44,7 @@ export default function DashboardPage() {
 
   // Get active tenant name
   const getTenantName = () => {
-    switch (activeTenantId) {
+    switch (tenantId) {
       case "d3b07384-d113-4956-a5d2-64be7357c11d":
         return "S.V. Distributors";
       case "e1c08495-d224-4a67-b6e3-75cf8468d22e":
@@ -70,7 +70,7 @@ export default function DashboardPage() {
     closeDetails,
     refreshAll,
     error
-  } = useDashboardData(activeTenantId, startDate, endDate);
+  } = useDashboardData(tenantId, startDate, endDate);
 
   return (
     <div className="flex bg-dashboard-bg min-h-screen text-slate-800">
@@ -85,7 +85,7 @@ export default function DashboardPage() {
       <div className="flex-1 pl-64 flex flex-col h-screen overflow-hidden">
         {/* 2. Top Header */}
         <DashboardHeader
-          activeTenantId={activeTenantId}
+          activeTenantId={tenantId}
           setActiveTenantId={handleTenantChange}
           tenantName={getTenantName()}
         />
@@ -175,7 +175,7 @@ export default function DashboardPage() {
                   showToast(msg, "error");
                   console.error("Inventory/Order Adjustment Exception:", msg);
                 }}
-                activeTenantId={activeTenantId}
+                activeTenantId={tenantId}
                 viewAllHref="/dashboard/orders"
               />
             </div>
@@ -207,7 +207,7 @@ export default function DashboardPage() {
 
       {/* WhatsApp Ingestion Live testing simulator */}
       <WhatsAppSimulator
-        activeTenantId={activeTenantId}
+        activeTenantId={tenantId}
         onSuccess={refreshAll}
       />
 
