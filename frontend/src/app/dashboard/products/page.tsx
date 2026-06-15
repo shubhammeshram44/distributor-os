@@ -48,8 +48,6 @@ export default function ProductsPage() {
     const stored = localStorage.getItem("tenant_id");
     if (stored) {
       setActiveTenantId(stored);
-    } else {
-      setActiveTenantId("d3b07384-d113-4956-a5d2-64be7357c11d");
     }
   }, []);
 
@@ -59,16 +57,10 @@ export default function ProductsPage() {
   };
 
   const getTenantName = () => {
-    switch (activeTenantId) {
-      case "d3b07384-d113-4956-a5d2-64be7357c11d":
-        return "S.V. Distributors";
-      case "e1c08495-d224-4a67-b6e3-75cf8468d22e":
-        return "Reliance Distribution";
-      case "f2d095a6-e335-5b78-c7f4-86df9579e33f":
-        return "Vikas Sales Corp";
-      default:
-        return "S.V. Distributors";
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("tenant_name") || "My Workspace";
     }
+    return "My Workspace";
   };
 
   // Fetch product catalog for active tenant
@@ -78,7 +70,9 @@ export default function ProductsPage() {
     setLoading(true);
     try {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-      const resp = await fetch(`${apiBase}/api/v1/products?tenant_id=${targetTenant}`);
+      const resp = await fetch(`${apiBase}/api/v1/products?tenant_id=${targetTenant}`, {
+        credentials: "include"
+      });
       if (!resp.ok) throw new Error("Failed to fetch products");
       const data = await resp.json();
       setProducts(data);
@@ -119,6 +113,7 @@ export default function ProductsPage() {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
       const resp = await fetch(`${apiBase}/api/v1/products?tenant_id=${activeTenantId}`, {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           sku_id: sku_id.trim(),
@@ -169,7 +164,11 @@ export default function ProductsPage() {
     }).format(val);
   };
   if (!activeTenantId) {
-    return <div className="flex h-full items-center justify-center p-8">Loading Workspace Context...</div>;
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-slate-50">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-blue" />
+      </div>
+    );
   }
 
   return (

@@ -38,6 +38,7 @@ export default function WhatsAppSimulator({ activeTenantId, onSuccess }: WhatsAp
     try {
       const response = await fetch(`${BASE_URL}/api/v1/whatsapp/webhook`, {
         method: "POST",
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
         },

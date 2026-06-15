@@ -43,6 +43,7 @@ export default function OnboardingPage() {
     try {
       const response = await fetch(`${apiBase}/api/v1/tenant/profile`, {
         method: "PUT",
+        credentials: "include",  // MANDATORY: Cross-domain session cookie transfer
         headers: {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${accessToken}`,

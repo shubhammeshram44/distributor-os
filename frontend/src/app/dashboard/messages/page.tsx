@@ -184,8 +184,6 @@ export default function MessagesPage() {
     const stored = localStorage.getItem("tenant_id");
     if (stored) {
       setActiveTenantId(stored);
-    } else {
-      setActiveTenantId("d3b07384-d113-4956-a5d2-64be7357c11d");
     }
   }, []);
 
@@ -195,16 +193,10 @@ export default function MessagesPage() {
   };
 
   const getTenantName = () => {
-    switch (activeTenantId) {
-      case "d3b07384-d113-4956-a5d2-64be7357c11d":
-        return "S.V. Distributors";
-      case "e1c08495-d224-4a67-b6e3-75cf8468d22e":
-        return "Reliance Distribution";
-      case "f2d095a6-e335-5b78-c7f4-86df9579e33f":
-        return "Vikas Sales Corp";
-      default:
-        return "S.V. Distributors";
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("tenant_name") || "My Workspace";
     }
+    return "My Workspace";
   };
 
   // Fetch B2B Retailers / Customers
@@ -213,7 +205,9 @@ export default function MessagesPage() {
     setLoading(true);
     try {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-      const resp = await fetch(`${apiBase}/api/v1/dashboard/customers?tenant_id=${activeTenantId}`);
+      const resp = await fetch(`${apiBase}/api/v1/dashboard/customers?tenant_id=${activeTenantId}`, {
+        credentials: "include"
+      });
       if (!resp.ok) throw new Error("Failed to fetch customers");
       const data = await resp.json();
       setCustomers(data);
@@ -322,6 +316,7 @@ export default function MessagesPage() {
       
       const response = await fetch(`${apiBase}/api/v1/orders`, {
         method: "POST",
+        credentials: "include",
         headers: {
           "Content-Type": "application/json"
         },
@@ -365,6 +360,14 @@ export default function MessagesPage() {
   const orderTotal = activeExtraction 
     ? activeExtraction.items.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0)
     : 0;
+
+  if (!activeTenantId) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-slate-50">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-blue" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex bg-slate-50 min-h-screen text-slate-800 font-sans overflow-hidden">

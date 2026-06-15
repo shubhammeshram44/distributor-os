@@ -35,13 +35,16 @@ export default function RecentOrders({
   const [productsList, setProductsList] = useState<any[]>([]);
   const [resolvingItemId, setResolvingItemId] = useState<string | null>(null);
 
-  const tenantId = activeTenantId || "d3b07384-d113-4956-a5d2-64be7357c11d";
+  const tenantId = activeTenantId || "";
 
   useEffect(() => {
     const fetchProducts = async () => {
+      if (!tenantId) return;
       try {
         const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-        const res = await fetch(`${apiBase}/api/v1/products?tenant_id=${tenantId}`);
+        const res = await fetch(`${apiBase}/api/v1/products?tenant_id=${tenantId}`, {
+          credentials: "include"
+        });
         if (res.ok) {
           const data = await res.json();
           setProductsList(data);
@@ -59,6 +62,7 @@ export default function RecentOrders({
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
       const response = await fetch(`${apiBase}/api/v1/orders/items/${itemId}/resolve`, {
         method: "PATCH",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sku_code: skuCode, quantity })
       });
@@ -86,6 +90,7 @@ export default function RecentOrders({
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
       const response = await fetch(`${apiBase}/api/v1/orders/${selectedOrderId}/status`, {
         method: "PUT",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ to_status: "Confirmed" })
       });

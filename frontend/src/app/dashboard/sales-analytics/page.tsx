@@ -99,6 +99,14 @@ export default function SalesAnalyticsPage() {
 
   const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"];
 
+  if (!activeTenantId) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-slate-50">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-blue" />
+      </div>
+    );
+  }
+
   return (
     <div className="flex bg-dashboard-bg min-h-screen text-slate-800">
       <Sidebar

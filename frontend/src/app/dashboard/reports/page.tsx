@@ -89,6 +89,14 @@ export default function ReportsPage() {
     }).format(val);
   };
 
+  if (!activeTenantId) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-slate-50">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-blue" />
+      </div>
+    );
+  }
+
   return (
     <div className="flex bg-dashboard-bg min-h-screen text-slate-800">
       <Sidebar

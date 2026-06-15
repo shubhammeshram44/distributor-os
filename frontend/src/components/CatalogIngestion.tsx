@@ -77,6 +77,7 @@ export default function CatalogIngestion({
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
       const response = await fetch(`${apiBase}/api/v1/products/import`, {
         method: "POST",
+        credentials: "include",
         body: formData,
       });
 
