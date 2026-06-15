@@ -1,7 +1,7 @@
 import uuid
 import random
 from datetime import datetime, timedelta
-from fastapi import APIRouter, Depends, HTTPException, status, Response
+from fastapi import APIRouter, Depends, HTTPException, status, Response, Cookie, Header
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from app.database import get_db
@@ -9,7 +9,7 @@ from app.models.auth import WhatsAppVerification
 from app.models.user import User
 from app.models.tenant import DistributorTenant
 from app.services.whatsapp_service import WhatsAppService
-from app.utils.security import sign_jwt
+from app.utils.security import sign_jwt, verify_jwt
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -152,5 +152,49 @@ def verify_otp(
             "role": user.role,
             "full_name": user.full_name,
             "phone_number": user.phone_number
+        }
+    }
+
+@router.get("/me", status_code=status.HTTP_200_OK)
+def get_me(
+    access_token: str | None = Cookie(None),
+    authorization: str | None = Header(None),
+    db: Session = Depends(get_db)
+):
+    token = access_token
+    if not token and authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ")[1]
+        
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated"
+        )
+        
+    payload = verify_jwt(token)
+    if not payload or "user_id" not in payload:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid session token"
+        )
+        
+    user = db.get(User, uuid.UUID(payload["user_id"]))
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found"
+        )
+        
+    tenant = db.get(DistributorTenant, user.tenant_id)
+    
+    return {
+        "id": str(user.id),
+        "full_name": user.full_name,
+        "phone_number": user.phone_number or "",
+        "role": user.role,
+        "tenant": {
+            "id": str(tenant.id) if tenant else None,
+            "name": tenant.name if tenant else None,
+            "category": tenant.category if tenant else None
         }
     }

@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timedelta
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Cookie, Header
 from sqlalchemy import select, func, and_, desc
 from sqlalchemy.orm import Session, aliased
 from app.database import get_db, tenant_context
@@ -14,11 +14,32 @@ from app.models.inventory import Inventory
 from app.models.ingestion import IngestionJob, IngestionStaging
 from app.models.user import User
 from app.models.ledger import CustomerLedger
-from app.utils.security import hash_password
+from app.utils.security import hash_password, verify_jwt
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
-
+def resolve_tenant_id(
+    tenant_id: uuid.UUID | None = None,
+    access_token: str | None = Cookie(None),
+    authorization: str | None = Header(None)
+) -> uuid.UUID:
+    """
+    Resolves the tenant ID by checking the JWT cookie or Authorization header first.
+    Falls back to query parameter if not authenticated (preserving tests compatibility).
+    """
+    token = access_token
+    if not token and authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ")[1]
+    if token:
+        payload = verify_jwt(token)
+        if payload and "tenant_id" in payload:
+            return uuid.UUID(payload["tenant_id"])
+    if tenant_id:
+        return tenant_id
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not resolve active Tenant ID from session or headers."
+    )
 
 # Static Tenant ID for demo/default distributor
 DEMO_TENANT_ID = uuid.UUID("d3b07384-d113-4956-a5d2-64be7357c11d")
@@ -28,10 +49,9 @@ def ensure_demo_data(db: Session, tenant_id: uuid.UUID | None = None):
     Seeds the database with the exact B2B distributor data matching the Operations Dashboard
     screenshot if the database is empty.
     """
-    # Bypass seeding for non-demo tenants
-    t_id = tenant_id or tenant_context.get()
-    if t_id is not None and t_id != DEMO_TENANT_ID:
-        return
+    # Hard multi-tenant lockout constraint
+    if tenant_id is None or str(tenant_id) != "d3b07384-d113-4956-a5d2-64be7357c11d":
+        return  # Abort instantly. NEVER seed data for custom registered tenants.
 
     # 1. Check if the default tenant exists
     tenant = db.get(DistributorTenant, DEMO_TENANT_ID)
@@ -315,15 +335,18 @@ def ensure_demo_data(db: Session, tenant_id: uuid.UUID | None = None):
 
 @router.get("/metrics")
 def get_dashboard_metrics(
-    tenant_id: uuid.UUID,
+    tenant_id: uuid.UUID | None = None,
     start_date: str | None = None,
     end_date: str | None = None,
+    access_token: str | None = Cookie(None),
+    authorization: str | None = Header(None),
     db: Session = Depends(get_db)
 ):
     """
     Returns high-level metric values. Tries to read from live tables;
     if database is empty, automatically triggers seeder first.
     """
+    tenant_id = resolve_tenant_id(tenant_id, access_token, authorization)
     ensure_demo_data(db, tenant_id)
     tenant_context.set(tenant_id)
 
@@ -508,12 +531,15 @@ def get_dashboard_metrics(
 
 @router.get("/recent-orders")
 def get_recent_orders(
-    tenant_id: uuid.UUID,
+    tenant_id: uuid.UUID | None = None,
+    access_token: str | None = Cookie(None),
+    authorization: str | None = Header(None),
     db: Session = Depends(get_db)
 ):
     """
     Returns the latest 5 orders with their status resolved from the ledger.
     """
+    tenant_id = resolve_tenant_id(tenant_id, access_token, authorization)
     ensure_demo_data(db, tenant_id)
     tenant_context.set(tenant_id)
 
@@ -578,12 +604,15 @@ def get_order_details(
 
 @router.get("/collections-donut")
 def get_collections_donut(
-    tenant_id: uuid.UUID,
+    tenant_id: uuid.UUID | None = None,
+    access_token: str | None = Cookie(None),
+    authorization: str | None = Header(None),
     db: Session = Depends(get_db)
 ):
     """
     Calculatesoutstanding collection balances grouped by aging periods.
     """
+    tenant_id = resolve_tenant_id(tenant_id, access_token, authorization)
     ensure_demo_data(db, tenant_id)
     tenant_context.set(tenant_id)
 
@@ -643,12 +672,15 @@ def get_collections_donut(
 
 @router.get("/recent-activity")
 def get_recent_activity(
-    tenant_id: uuid.UUID,
+    tenant_id: uuid.UUID | None = None,
+    access_token: str | None = Cookie(None),
+    authorization: str | None = Header(None),
     db: Session = Depends(get_db)
 ):
     """
     Returns a chronologically merged activity feed from the ledger and file ingestion logs.
     """
+    tenant_id = resolve_tenant_id(tenant_id, access_token, authorization)
     ensure_demo_data(db, tenant_id)
     tenant_context.set(tenant_id)
 
@@ -718,12 +750,15 @@ def get_recent_activity(
 
 @router.get("/customers")
 def get_customers(
-    tenant_id: uuid.UUID,
+    tenant_id: uuid.UUID | None = None,
+    access_token: str | None = Cookie(None),
+    authorization: str | None = Header(None),
     db: Session = Depends(get_db)
 ):
     """
     Returns all customers for a tenant.
     """
+    tenant_id = resolve_tenant_id(tenant_id, access_token, authorization)
     ensure_demo_data(db, tenant_id)
     tenant_context.set(tenant_id)
     customers = db.query(Customer).filter(Customer.tenant_id == tenant_id).all()

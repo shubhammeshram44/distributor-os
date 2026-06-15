@@ -65,6 +65,14 @@ export function useDashboardData(activeTenantId: string, startDate?: string, end
 
   const fetchStaticData = useCallback(async () => {
     try {
+      const options = {
+        method: "GET",
+        credentials: "include" as const,
+        headers: {
+          "Content-Type": "application/json",
+        }
+      };
+
       // Fetch Metrics with optional date filters
       let metricsUrl = `${BASE_URL}/api/v1/dashboard/metrics?tenant_id=${activeTenantId}`;
       if (startDate) {
@@ -73,19 +81,19 @@ export function useDashboardData(activeTenantId: string, startDate?: string, end
       if (endDate) {
         metricsUrl += `&end_date=${encodeURIComponent(endDate)}`;
       }
-      const metricsResp = await fetch(metricsUrl);
+      const metricsResp = await fetch(metricsUrl, options);
       if (!metricsResp.ok) throw new Error("Failed to fetch dashboard metrics");
       const metricsData = await metricsResp.json();
       setMetrics(metricsData);
 
       // Fetch Recent Orders
-      const ordersResp = await fetch(`${BASE_URL}/api/v1/dashboard/recent-orders?tenant_id=${activeTenantId}`);
+      const ordersResp = await fetch(`${BASE_URL}/api/v1/dashboard/recent-orders?tenant_id=${activeTenantId}`, options);
       if (!ordersResp.ok) throw new Error("Failed to fetch recent orders");
       const ordersData = await ordersResp.json();
       setRecentOrders(ordersData);
 
       // Fetch Donut Data
-      const donutResp = await fetch(`${BASE_URL}/api/v1/dashboard/collections-donut?tenant_id=${activeTenantId}`);
+      const donutResp = await fetch(`${BASE_URL}/api/v1/dashboard/collections-donut?tenant_id=${activeTenantId}`, options);
       if (!donutResp.ok) throw new Error("Failed to fetch collections donut");
       const donutResData = await donutResp.json();
       setDonutData(donutResData);
@@ -99,8 +107,16 @@ export function useDashboardData(activeTenantId: string, startDate?: string, end
 
   const fetchPolledData = useCallback(async () => {
     try {
+      const options = {
+        method: "GET",
+        credentials: "include" as const,
+        headers: {
+          "Content-Type": "application/json",
+        }
+      };
+
       // Fetch Activity Feed (Polled)
-      const activityResp = await fetch(`${BASE_URL}/api/v1/dashboard/recent-activity?tenant_id=${activeTenantId}`);
+      const activityResp = await fetch(`${BASE_URL}/api/v1/dashboard/recent-activity?tenant_id=${activeTenantId}`, options);
       if (activityResp.ok) {
         const activityData = await activityResp.json();
         setActivities(activityData);
@@ -113,7 +129,14 @@ export function useDashboardData(activeTenantId: string, startDate?: string, end
   const fetchOrderDetails = async (orderId: string) => {
     setLoadingDetails(true);
     try {
-      const resp = await fetch(`${BASE_URL}/api/v1/dashboard/order-details/${orderId}`);
+      const options = {
+        method: "GET",
+        credentials: "include" as const,
+        headers: {
+          "Content-Type": "application/json",
+        }
+      };
+      const resp = await fetch(`${BASE_URL}/api/v1/dashboard/order-details/${orderId}`, options);
       if (!resp.ok) throw new Error("Failed to load order line item details");
       const data = await resp.json();
       setSelectedOrderDetails(data);

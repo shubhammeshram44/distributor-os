@@ -16,13 +16,41 @@ import WhatsAppSimulator from "@/components/WhatsAppSimulator";
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState("Dashboard");
   const [tenantId, setTenantId] = useState("d3b07384-d113-4956-a5d2-64be7357c11d");
+  const [userProfile, setUserProfile] = useState<any>(null);
 
-  // Sync tenant from localStorage on load
+  // Sync profile and tenant from backend / localStorage
   useEffect(() => {
-    const storedTenant = localStorage.getItem("tenant_id");
-    if (storedTenant) {
-      setTenantId(storedTenant);
-    }
+    const fetchProfileAndTenant = async () => {
+      try {
+        const storedTenant = localStorage.getItem("tenant_id");
+        if (storedTenant) {
+          setTenantId(storedTenant);
+        }
+
+        const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+        const resp = await fetch(`${apiBase}/api/v1/auth/me`, {
+          method: "GET",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+          }
+        });
+        if (resp.ok) {
+          const profileData = await resp.json();
+          setUserProfile(profileData);
+          
+          // If no tenant is selected or in localStorage, default to user's assigned tenant
+          if (!storedTenant && profileData.tenant?.id) {
+            setTenantId(profileData.tenant.id);
+            localStorage.setItem("tenant_id", profileData.tenant.id);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load authenticated user profile:", err);
+      }
+    };
+
+    fetchProfileAndTenant();
   }, []);
 
   const handleTenantChange = (id: string) => {
@@ -44,6 +72,9 @@ export default function DashboardPage() {
 
   // Get active tenant name
   const getTenantName = () => {
+    if (userProfile?.tenant?.id === tenantId) {
+      return userProfile.tenant.name || "My Workspace";
+    }
     switch (tenantId) {
       case "d3b07384-d113-4956-a5d2-64be7357c11d":
         return "S.V. Distributors";
@@ -88,6 +119,7 @@ export default function DashboardPage() {
           activeTenantId={tenantId}
           setActiveTenantId={handleTenantChange}
           tenantName={getTenantName()}
+          userProfile={userProfile}
         />
 
         {/* 3. Dashboard Scrollable Content */}

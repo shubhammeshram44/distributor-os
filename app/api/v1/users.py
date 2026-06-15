@@ -1,12 +1,13 @@
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Cookie, Header
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
 from app.database import get_db, tenant_context
 from app.models.user import User
+from app.models.tenant import DistributorTenant
 from app.api.v1.dashboard import ensure_demo_data
-from app.utils.security import hash_password
+from app.utils.security import hash_password, verify_jwt
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
@@ -151,4 +152,48 @@ def update_user(
         "email_or_phone": user.email_or_phone,
         "role": user.role,
         "is_active": user.is_active
+    }
+
+@router.get("/me", status_code=status.HTTP_200_OK)
+def get_me(
+    access_token: str | None = Cookie(None),
+    authorization: str | None = Header(None),
+    db: Session = Depends(get_db)
+):
+    token = access_token
+    if not token and authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ")[1]
+        
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated"
+        )
+        
+    payload = verify_jwt(token)
+    if not payload or "user_id" not in payload:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid session token"
+        )
+        
+    user = db.get(User, uuid.UUID(payload["user_id"]))
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found"
+        )
+        
+    tenant = db.get(DistributorTenant, user.tenant_id)
+    
+    return {
+        "id": str(user.id),
+        "full_name": user.full_name,
+        "phone_number": user.phone_number or "",
+        "role": user.role,
+        "tenant": {
+            "id": str(tenant.id) if tenant else None,
+            "name": tenant.name if tenant else None,
+            "category": tenant.category if tenant else None
+        }
     }

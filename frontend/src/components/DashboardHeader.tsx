@@ -8,19 +8,33 @@ interface DashboardHeaderProps {
   activeTenantId: string;
   setActiveTenantId: (id: string) => void;
   tenantName: string;
+  userProfile?: any;
 }
 
 export default function DashboardHeader({
   activeTenantId,
   setActiveTenantId,
-  tenantName
+  tenantName,
+  userProfile
 }: DashboardHeaderProps) {
   // Available tenants for testing multi-tenant isolation
-  const tenants = [
+  const baseTenants = [
     { id: "d3b07384-d113-4956-a5d2-64be7357c11d", name: "S.V. Distributors" },
     { id: "e1c08495-d224-4a67-b6e3-75cf8468d22e", name: "Reliance Distribution" },
     { id: "f2d095a6-e335-5b78-c7f4-86df9579e33f", name: "Vikas Sales Corp" }
   ];
+
+  // Append user's custom tenant dynamically if not present in the default list
+  const tenants = [...baseTenants];
+  if (userProfile?.tenant?.id) {
+    const exists = tenants.some(t => t.id === userProfile.tenant.id);
+    if (!exists) {
+      tenants.push({
+        id: userProfile.tenant.id,
+        name: userProfile.tenant.name || "My Workspace"
+      });
+    }
+  }
 
   return (
     <header className="h-16 bg-white border-b border-dashboard-border flex items-center justify-between px-8 fixed top-0 right-0 left-64 z-10 shadow-sm">
@@ -92,11 +106,11 @@ export default function DashboardHeader({
         {/* User Profile */}
         <div className="flex items-center gap-3 pl-2 border-l border-dashboard-border">
           <div className="text-right">
-            <h5 className="font-semibold text-sm text-slate-800">Hi, Vikram</h5>
-            <p className="text-[10px] text-slate-400 font-medium">Super Admin</p>
+            <h5 className="font-semibold text-sm text-slate-800">Hi, {userProfile?.full_name || "Vikram"}</h5>
+            <p className="text-[10px] text-slate-400 font-medium">{userProfile?.role || "Super Admin"}</p>
           </div>
           <div className="w-9 h-9 rounded-full bg-slate-200 overflow-hidden border border-slate-300 shadow-sm flex items-center justify-center text-xs font-bold text-slate-700">
-            V
+            {userProfile?.full_name ? userProfile.full_name.charAt(0).toUpperCase() : "V"}
           </div>
         </div>
       </div>
