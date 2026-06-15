@@ -50,7 +50,7 @@ export default function CollectionsDonut({ data, viewReportHref, overdue60Count 
         )}
       </div>
 
-      <div className="flex flex-col sm:flex-row lg:flex-col xl:flex-row items-center justify-between gap-4 py-1">
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 py-1">
         {/* Donut Chart with Centered Total */}
         <div className="relative w-36 h-36 flex items-center justify-center">
           <ResponsiveContainer width="100%" height="100%">
