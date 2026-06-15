@@ -37,6 +37,9 @@ export default function DashboardHeader({
         if (resp.ok) {
           const data = await resp.json();
           setInternalProfile(data);
+          if (data.tenant?.name) {
+            localStorage.setItem("tenant_name", data.tenant.name);
+          }
         }
       } catch (err) {
         console.error("DashboardHeader failed to load profile:", err);

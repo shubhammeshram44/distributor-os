@@ -38,6 +38,9 @@ export default function DashboardPage() {
         if (resp.ok) {
           const profileData = await resp.json();
           setUserProfile(profileData);
+          if (profileData.tenant?.name) {
+            localStorage.setItem("tenant_name", profileData.tenant.name);
+          }
           
           // If no tenant is selected or in localStorage, default to user's assigned tenant
           if (!storedTenant && profileData.tenant?.id) {
@@ -72,19 +75,10 @@ export default function DashboardPage() {
 
   // Get active tenant name
   const getTenantName = () => {
-    if (userProfile?.tenant?.id === tenantId) {
-      return userProfile.tenant.name || "My Workspace";
+    if (userProfile?.tenant?.name) {
+      return userProfile.tenant.name;
     }
-    switch (tenantId) {
-      case "d3b07384-d113-4956-a5d2-64be7357c11d":
-        return "S.V. Distributors";
-      case "e1c08495-d224-4a67-b6e3-75cf8468d22e":
-        return "Reliance Distribution";
-      case "f2d095a6-e335-5b78-c7f4-86df9579e33f":
-        return "Vikas Sales Corp";
-      default:
-        return "S.V. Distributors";
-    }
+    return "Loading Workspace...";
   };
 
   const [startDate, setStartDate] = useState("");
