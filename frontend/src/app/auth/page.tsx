@@ -83,6 +83,13 @@ export default function AuthPage() {
       localStorage.setItem("userPhoneNumber", resData.user.phone_number);
       localStorage.setItem("accessToken", resData.token);
 
+      if (resData.tenant_id) {
+        localStorage.setItem("tenant_id", resData.tenant_id);
+      }
+      if (resData.tenant_name) {
+        localStorage.setItem("tenant_name", resData.tenant_name);
+      }
+
       const res = { data: resData };
 
       setTimeout(() => {

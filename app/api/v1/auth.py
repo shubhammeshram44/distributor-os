@@ -96,10 +96,10 @@ def verify_otp(
         (User.phone_number == mobile) | (User.email_or_phone == mobile)
     ).first()
     
-    is_new_user = False
+    is_new_user = True
+    tenant_name = None
     if not user:
         # Create brand-new DistributorTenant for clean-slate setup
-        is_new_user = True
         new_tenant = DistributorTenant(
             id=uuid.uuid4(),
             name="My B2B Distribution"
@@ -120,13 +120,22 @@ def verify_otp(
         )
         db.add(user)
         db.flush()
+        tenant_name = new_tenant.name
+    else:
+        # Enforce Tenant Association Checks
+        if user.tenant_id is not None:
+            is_new_user = False
+            tenant = db.get(DistributorTenant, user.tenant_id)
+            if tenant:
+                tenant_name = tenant.name
         
     db.commit()
     
     # Sign JWT token
     token_payload = {
         "user_id": str(user.id),
-        "tenant_id": str(user.tenant_id),
+        "tenant_id": str(user.tenant_id) if user.tenant_id else None,
+        "sub": user.email_or_phone,
         "role": user.role
     }
     token = sign_jwt(token_payload)
@@ -146,12 +155,16 @@ def verify_otp(
         "is_new_user": is_new_user,
         "is_new_registration": is_new_user,
         "token": token,
+        "access_token": token,
+        "token_type": "bearer",
+        "tenant_id": str(user.tenant_id) if user.tenant_id else None,
+        "tenant_name": tenant_name,
         "user": {
             "id": str(user.id),
-            "tenant_id": str(user.tenant_id),
+            "tenant_id": str(user.tenant_id) if user.tenant_id else None,
             "role": user.role,
             "full_name": user.full_name,
-            "phone_number": user.phone_number
+            "phone_number": user.phone_number or ""
         }
     }
 
