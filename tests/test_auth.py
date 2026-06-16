@@ -1,7 +1,7 @@
 """
 test_auth.py — Firebase Authentication Tests
 =============================================
-Covers the POST /auth/firebase-login endpoint and the unchanged /me, /logout routes.
+Covers POST /auth/firebase-login, POST /auth/signup, and /me, /logout routes.
 Firebase Admin SDK calls are fully mocked so no real Firebase project is needed.
 """
 import uuid
@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.models.user import User
 from app.models.tenant import DistributorTenant
+from app.utils.security import sign_jwt
 
 client = TestClient(app)
 
@@ -50,6 +51,98 @@ def _seed_existing_user(db_session) -> tuple:
     db_session.add(user)
     db_session.commit()
     return tenant, user
+
+
+def _make_signup_token(
+    phone: str = MOCK_PHONE,
+    uid: str = MOCK_UID,
+    expires_in: int = 3600,
+) -> str:
+    return sign_jwt(
+        {
+            "sub": phone,
+            "firebase_uid": uid,
+            "phone_number": phone,
+            "intent": "signup",
+        },
+        expires_in=expires_in,
+    )
+
+
+# ---------------------------------------------------------------------------
+# POST /auth/signup
+# ---------------------------------------------------------------------------
+
+def test_signup_valid_token(db_session):
+    """
+    Valid signup_token must create Tenant + User and return a session payload.
+    """
+    signup_token = _make_signup_token()
+
+    response = client.post(
+        "/api/v1/auth/signup",
+        json={"signup_token": signup_token, "full_name": "New Distributor"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["is_new_registration"] is True
+    assert "token" in data
+    assert data["tenant_name"] == "My B2B Distribution"
+    assert data["user"]["full_name"] == "New Distributor"
+    assert data["user"]["phone_number"] == MOCK_PHONE
+    assert data["user"]["role"] == "SUPER_ADMIN"
+    assert "access_token=" in response.headers.get("set-cookie", "")
+
+    assert db_session.query(DistributorTenant).count() == 1
+    user = db_session.query(User).first()
+    assert user is not None
+    assert user.firebase_uid == MOCK_UID
+    assert user.phone_number == MOCK_PHONE
+
+
+def test_signup_expired_token(db_session):
+    """
+    Expired signup_token must return 401.
+    """
+    import time
+
+    expired_token = sign_jwt(
+        {
+            "sub": MOCK_PHONE,
+            "firebase_uid": MOCK_UID,
+            "phone_number": MOCK_PHONE,
+            "intent": "signup",
+            "exp": int(time.time()) - 60,
+        },
+    )
+
+    response = client.post(
+        "/api/v1/auth/signup",
+        json={"signup_token": expired_token},
+    )
+
+    assert response.status_code == 401
+    assert db_session.query(User).count() == 0
+    assert db_session.query(DistributorTenant).count() == 0
+
+
+def test_signup_already_registered(db_session):
+    """
+    If the phone already exists, signup must return 409 without creating rows.
+    """
+    _seed_existing_user(db_session)
+    signup_token = _make_signup_token()
+
+    response = client.post(
+        "/api/v1/auth/signup",
+        json={"signup_token": signup_token},
+    )
+
+    assert response.status_code == 409
+    assert db_session.query(DistributorTenant).count() == 1
+    assert db_session.query(User).count() == 1
 
 
 # ---------------------------------------------------------------------------

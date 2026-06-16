@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Building2, Sparkles, Rocket, ArrowRight, Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Building2, Sparkles, ArrowRight, Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -12,21 +12,15 @@ export default function OnboardingPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [accessToken, setAccessToken] = useState<string | null>(null);
-  const [tenantId, setTenantId] = useState<string | null>(null);
+  const [signupToken, setSignupToken] = useState<string | null>(null);
 
   useEffect(() => {
-    const token = localStorage.getItem("accessToken");
-    const storedTenantId = localStorage.getItem("tenant_id");
-    
-    // Safety redirect if not logged in
+    const token = localStorage.getItem("signup_token");
     if (!token) {
       router.push("/auth");
       return;
     }
-
-    setAccessToken(token);
-    setTenantId(storedTenantId);
+    setSignupToken(token);
   }, [router]);
 
   const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
@@ -37,32 +31,72 @@ export default function OnboardingPage() {
       setError("Please enter your Business Name.");
       return;
     }
+    if (!signupToken) {
+      setError("Signup session expired. Please log in again.");
+      router.push("/auth");
+      return;
+    }
+
     setError(null);
     setLoading(true);
 
     try {
-      const response = await fetch(`${apiBase}/api/v1/tenant/profile`, {
+      const signupResponse = await fetch(`${apiBase}/api/v1/auth/signup`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          signup_token: signupToken,
+          full_name: businessName.trim(),
+        }),
+      });
+
+      const signupData = await signupResponse.json();
+      if (!signupResponse.ok) {
+        throw new Error(signupData.detail || "Failed to complete registration.");
+      }
+
+      const sessionToken = signupData.token || signupData.access_token || "";
+      const activeTenantId = signupData.tenant_id || signupData.user?.tenant_id || "";
+
+      localStorage.setItem("accessToken", sessionToken);
+      localStorage.setItem("tenant_id", activeTenantId);
+      localStorage.setItem("userRole", signupData.user?.role || "");
+      localStorage.setItem("userFullName", signupData.user?.full_name || "");
+      localStorage.setItem("userPhoneNumber", signupData.user?.phone_number || "");
+      localStorage.removeItem("signup_token");
+
+      if (signupData.tenant_name) {
+        localStorage.setItem("tenant_name", signupData.tenant_name);
+      }
+
+      const profileResponse = await fetch(`${apiBase}/api/v1/tenant/profile`, {
         method: "PUT",
-        credentials: "include",  // MANDATORY: Cross-domain session cookie transfer
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${accessToken}`,
-          "X-Tenant-ID": tenantId || "",
+          Authorization: `Bearer ${sessionToken}`,
+          "X-Tenant-ID": activeTenantId,
         },
         body: JSON.stringify({
-          name: businessName,
+          name: businessName.trim(),
           category: category,
         }),
       });
 
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.detail || "Failed to update tenant profile.");
+      const profileData = await profileResponse.json();
+      if (!profileResponse.ok) {
+        throw new Error(profileData.detail || "Failed to update tenant profile.");
+      }
+
+      if (profileData.tenant?.name) {
+        localStorage.setItem("tenant_name", profileData.tenant.name);
       }
 
       setStep(2);
-    } catch (err: any) {
-      setError(err.message || "An unexpected error occurred.");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "An unexpected error occurred.";
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -72,15 +106,17 @@ export default function OnboardingPage() {
     router.push("/dashboard");
   };
 
+  if (!signupToken) {
+    return null;
+  }
+
   return (
     <div className="flex min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/50 items-center justify-center p-6">
       <div className="w-full max-w-lg bg-white border border-slate-100/80 rounded-3xl shadow-2xl p-10 flex flex-col justify-between relative overflow-hidden">
-        
-        {/* Glow decoration */}
+
         <div className="absolute -top-10 -right-10 w-32 h-32 bg-blue-400/10 rounded-full blur-2xl pointer-events-none" />
         <div className="absolute -bottom-10 -left-10 w-32 h-32 bg-indigo-400/10 rounded-full blur-2xl pointer-events-none" />
 
-        {/* Step Indicator Header */}
         <div className="flex items-center justify-between mb-8 pb-6 border-b border-slate-100">
           <div className="flex items-center gap-3">
             <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
@@ -186,7 +222,7 @@ export default function OnboardingPage() {
             <div className="w-16 h-16 rounded-3xl bg-blue-600 flex items-center justify-center mx-auto mb-6 text-white shadow-xl shadow-blue-200 animate-bounce">
               <Sparkles className="w-8 h-8" />
             </div>
-            
+
             <h2 className="text-2xl font-bold text-slate-800 tracking-tight">Your Workspace is Ready!</h2>
             <p className="text-xs text-slate-400 font-bold mt-1 uppercase tracking-widest text-blue-600">
               WhatsApp AI Ingestion Activated

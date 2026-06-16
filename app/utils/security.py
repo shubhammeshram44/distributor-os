@@ -82,3 +82,18 @@ def verify_jwt(token: str, secret: str = JWT_SECRET) -> dict | None:
         return payload
     except Exception:
         return None
+
+
+def verify_signup_token(token: str, secret: str = JWT_SECRET) -> dict | None:
+    """
+    Validates a short-lived registration JWT issued by firebase-login for new users.
+    Requires intent=signup plus verified phone_number and firebase_uid claims.
+    """
+    payload = verify_jwt(token, secret)
+    if not payload:
+        return None
+    if payload.get("intent") != "signup":
+        return None
+    if not payload.get("phone_number") or not payload.get("firebase_uid"):
+        return None
+    return payload

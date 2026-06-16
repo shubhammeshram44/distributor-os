@@ -7,6 +7,7 @@ on the Firebase side, then submits that token here for cryptographic validation.
 
 Endpoints:
   POST /auth/firebase-login — verify Firebase token, return session or new-user flag
+  POST /auth/signup          — complete registration using signup_token
   GET  /auth/me             — return current session user (unchanged)
   POST /auth/logout         — clear session cookie (unchanged)
 """
@@ -18,7 +19,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.user import User
 from app.models.tenant import DistributorTenant
-from app.utils.security import sign_jwt, verify_jwt
+from app.utils.security import sign_jwt, verify_jwt, verify_signup_token
 from app.config import settings
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -30,6 +31,11 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 class FirebaseLoginPayload(BaseModel):
     firebase_token: str = Field(..., min_length=10)
+
+
+class SignupPayload(BaseModel):
+    signup_token: str = Field(..., min_length=10)
+    full_name: str = Field(default="Mobile User", min_length=1)
 
 
 # ---------------------------------------------------------------------------
@@ -189,6 +195,111 @@ def firebase_login(
             "phone_number": user.phone_number or phone_number,
         },
     }
+
+
+# ---------------------------------------------------------------------------
+# POST /auth/signup
+# ---------------------------------------------------------------------------
+
+def _issue_session_response(
+    user: User,
+    tenant: DistributorTenant | None,
+    phone_number: str,
+    response: Response,
+) -> dict:
+    """Sign session JWT, set cookie, and return the standard login payload."""
+    token_payload = {
+        "user_id": str(user.id),
+        "tenant_id": str(user.tenant_id) if user.tenant_id else None,
+        "sub": user.email_or_phone or phone_number,
+        "role": user.role,
+    }
+    token = sign_jwt(token_payload)
+
+    response.set_cookie(
+        key="access_token",
+        value=token,
+        httponly=True,
+        secure=True,
+        samesite="none",
+        max_age=3600 * 24,
+    )
+
+    return {
+        "status": "success",
+        "is_new_user": False,
+        "is_new_registration": True,
+        "token": token,
+        "access_token": token,
+        "token_type": "bearer",
+        "tenant_id": str(user.tenant_id) if user.tenant_id else None,
+        "tenant_name": tenant.name if tenant else "My Workspace",
+        "user": {
+            "id": str(user.id),
+            "tenant_id": str(user.tenant_id) if user.tenant_id else None,
+            "role": user.role,
+            "full_name": user.full_name,
+            "phone_number": user.phone_number or phone_number,
+        },
+    }
+
+
+@router.post("/signup", status_code=status.HTTP_200_OK)
+def complete_signup(
+    payload: SignupPayload,
+    response: Response,
+    db: Session = Depends(get_db),
+):
+    """
+    Completes registration for a new user who passed Firebase Phone Auth.
+    Consumes the short-lived signup_token from firebase-login — no auto-provisioning
+    occurs until this endpoint is called from the onboarding flow.
+    """
+    signup_payload = verify_signup_token(payload.signup_token)
+    if not signup_payload:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Signup token is invalid, expired, or missing required claims.",
+        )
+
+    phone_number: str = signup_payload["phone_number"]
+    firebase_uid: str = signup_payload["firebase_uid"]
+
+    existing_user = db.query(User).filter(
+        (User.phone_number == phone_number)
+        | (User.email_or_phone == phone_number)
+        | (User.firebase_uid == firebase_uid)
+    ).first()
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An account with this phone number already exists. Please log in.",
+        )
+
+    new_tenant = DistributorTenant(
+        id=uuid.uuid4(),
+        name="My B2B Distribution",
+        plan_type="FREE",
+        monthly_order_count=0,
+    )
+    db.add(new_tenant)
+    db.flush()
+
+    user = User(
+        id=uuid.uuid4(),
+        tenant_id=new_tenant.id,
+        full_name=payload.full_name,
+        phone_number=phone_number,
+        email_or_phone=phone_number,
+        hashed_password=None,
+        role="SUPER_ADMIN",
+        is_active=True,
+        firebase_uid=firebase_uid,
+    )
+    db.add(user)
+    db.commit()
+
+    return _issue_session_response(user, new_tenant, phone_number, response)
 
 
 # ---------------------------------------------------------------------------

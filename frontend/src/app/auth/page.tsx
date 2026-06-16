@@ -1,26 +1,52 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Phone, KeyRound, Loader2, ArrowRight, ShieldCheck, AlertCircle } from "lucide-react";
+import { RecaptchaVerifier, signInWithPhoneNumber, ConfirmationResult } from "firebase/auth";
+import { auth } from "@/lib/firebase";
+
+function normalizePhone(input: string): string {
+  const raw = input.trim().replace(/[\s-]/g, "");
+  if (raw.startsWith("+")) return raw;
+  if (raw.startsWith("91") && raw.length === 12) return `+${raw}`;
+  if (raw.length === 10) return `+91${raw}`;
+  return `+${raw}`;
+}
 
 export default function AuthPage() {
   const router = useRouter();
   const [mobileNumber, setMobileNumber] = useState("");
   const [otpCode, setOtpCode] = useState("");
-  const [step, setStep] = useState<1 | 2>(1); // 1 = Request OTP, 2 = Verify OTP
+  const [step, setStep] = useState<1 | 2>(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const confirmationRef = useRef<ConfirmationResult | null>(null);
+  const recaptchaRef = useRef<RecaptchaVerifier | null>(null);
 
   const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+
+  useEffect(() => {
+    return () => {
+      recaptchaRef.current?.clear();
+      recaptchaRef.current = null;
+    };
+  }, []);
+
+  const getRecaptchaVerifier = () => {
+    if (recaptchaRef.current) return recaptchaRef.current;
+    recaptchaRef.current = new RecaptchaVerifier(auth, "recaptcha-container", {
+      size: "invisible",
+    });
+    return recaptchaRef.current;
+  };
 
   const handleRequestOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setSuccessMessage(null);
 
-    // Basic validation
     const cleanMobile = mobileNumber.replace(/\D/g, "");
     if (cleanMobile.length < 10) {
       setError("Please enter a valid 10-digit mobile number.");
@@ -29,22 +55,16 @@ export default function AuthPage() {
 
     setLoading(true);
     try {
-      const res = await fetch(`${apiBase}/api/v1/auth/request-otp`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mobile_number: mobileNumber }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.detail || "Failed to request OTP. Please try again.");
-      }
-
-      setSuccessMessage("Verification code sent successfully to WhatsApp!");
+      const e164 = normalizePhone(mobileNumber);
+      const verifier = getRecaptchaVerifier();
+      confirmationRef.current = await signInWithPhoneNumber(auth, e164, verifier);
+      setSuccessMessage("Verification code sent to your phone.");
       setStep(2);
-    } catch (err: any) {
-      setError(err.message || "Something went wrong.");
+    } catch (err: unknown) {
+      recaptchaRef.current?.clear();
+      recaptchaRef.current = null;
+      const message = err instanceof Error ? err.message : "Failed to send OTP. Please try again.";
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -60,52 +80,74 @@ export default function AuthPage() {
       return;
     }
 
+    if (!confirmationRef.current) {
+      setError("Session expired. Please request a new code.");
+      setStep(1);
+      return;
+    }
+
     setLoading(true);
     try {
-      const response = await fetch(`${apiBase}/api/v1/auth/verify-otp`, {
+      const credential = await confirmationRef.current.confirm(otpCode);
+      const firebaseToken = await credential.user.getIdToken();
+
+      const response = await fetch(`${apiBase}/api/v1/auth/firebase-login`, {
         method: "POST",
-        credentials: "include",  // CRITICAL: Captures the HttpOnly Set-Cookie from server
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mobile_number: mobileNumber, otp_code: otpCode }),
+        body: JSON.stringify({ firebase_token: firebaseToken }),
       });
 
       const resData = await response.json();
       if (!response.ok) {
-        throw new Error(resData.detail || "Invalid or expired OTP code.");
+        throw new Error(resData.detail || "Authentication failed.");
       }
 
-      setSuccessMessage("OTP verified! Directing to workspace...");
-      
-      // Save credentials defensively in client storage
+      setSuccessMessage("Verified! Directing to workspace...");
+
+      if (resData.is_new_user) {
+        localStorage.setItem("signup_token", resData.signup_token || "");
+        localStorage.setItem("userPhoneNumber", resData.phone_number || "");
+        localStorage.removeItem("accessToken");
+        localStorage.removeItem("tenant_id");
+        setTimeout(() => router.push("/auth/onboarding"), 1000);
+        return;
+      }
+
       const activeTenantId = resData.tenant_id || resData.user?.tenant_id || "";
       localStorage.setItem("tenant_id", activeTenantId);
       localStorage.setItem("userRole", resData.user?.role || "");
       localStorage.setItem("userFullName", resData.user?.full_name || "");
       localStorage.setItem("userPhoneNumber", resData.user?.phone_number || "");
       localStorage.setItem("accessToken", resData.token || resData.access_token || "");
-      
+      localStorage.removeItem("signup_token");
+
       if (resData.tenant_name) {
         localStorage.setItem("tenant_name", resData.tenant_name);
       }
 
-      const res = { data: resData };
-
-      setTimeout(() => {
-        if (res.data.is_new_user) { router.push('/auth/onboarding'); } else { router.push('/dashboard'); }
-      }, 1000);
-
-    } catch (err: any) {
-      setError(err.message || "Failed to verify OTP.");
+      setTimeout(() => router.push("/dashboard"), 1000);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to verify OTP.";
+      setError(message);
     } finally {
       setLoading(false);
     }
   };
 
+  const handleChangePhone = () => {
+    confirmationRef.current = null;
+    recaptchaRef.current?.clear();
+    recaptchaRef.current = null;
+    setOtpCode("");
+    setStep(1);
+  };
+
   return (
     <div className="flex min-h-screen bg-slate-50 items-center justify-center p-4">
+      <div id="recaptcha-container" />
       <div className="w-full max-w-md bg-white border border-slate-150 rounded-2xl shadow-xl p-8 flex flex-col justify-between">
-        
-        {/* Branding header */}
+
         <div className="text-center mb-8">
           <div className="w-12 h-12 rounded-2xl bg-blue-600 flex items-center justify-center mx-auto mb-4 text-white text-xl font-black shadow-md shadow-blue-200">
             D
@@ -116,7 +158,6 @@ export default function AuthPage() {
           </p>
         </div>
 
-        {/* Auth Steps Forms */}
         {step === 1 ? (
           <form onSubmit={handleRequestOtp} className="space-y-5">
             <div>
@@ -152,11 +193,11 @@ export default function AuthPage() {
               {loading ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Requesting OTP...</span>
+                  <span>Sending OTP...</span>
                 </>
               ) : (
                 <>
-                  <span>Send OTP via WhatsApp</span>
+                  <span>Send OTP via SMS</span>
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}
@@ -218,7 +259,7 @@ export default function AuthPage() {
 
               <button
                 type="button"
-                onClick={() => setStep(1)}
+                onClick={handleChangePhone}
                 className="w-full py-2 bg-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50 rounded-xl text-xs font-bold transition-all cursor-pointer"
                 disabled={loading}
               >
@@ -228,11 +269,10 @@ export default function AuthPage() {
           </form>
         )}
 
-        {/* Footer Terms */}
         <div className="mt-8 text-center">
           <p className="text-[10px] text-slate-400 font-semibold leading-relaxed">
             By authenticating, you agree to our Terms of Service & Privacy Policy.<br />
-            Secure verification provided by WhatsApp Business integrations.
+            Secure phone verification powered by Firebase Authentication.
           </p>
         </div>
 
