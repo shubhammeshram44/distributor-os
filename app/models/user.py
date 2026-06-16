@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import String
+from sqlalchemy import String, Index
 from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base, TenantMixin
 
@@ -13,3 +13,5 @@ class User(Base, TenantMixin):
     hashed_password: Mapped[str | None] = mapped_column(String(255), nullable=True)
     role: Mapped[str] = mapped_column(String(50), nullable=False) # "SUPER_ADMIN", "FINANCE", "OPERATOR", "DRIVER"
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
+    firebase_uid: Mapped[str | None] = mapped_column(String(128), unique=True, index=True, nullable=True, default=None)
+

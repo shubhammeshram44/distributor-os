@@ -1,213 +1,232 @@
+"""
+Authentication Router — Firebase Admin SDK
+==========================================
+Identity verification is now fully delegated to Firebase Phone Auth.
+The client obtains a Firebase ID token after the user passes OTP verification
+on the Firebase side, then submits that token here for cryptographic validation.
+
+Endpoints:
+  POST /auth/firebase-login — verify Firebase token, return session or new-user flag
+  GET  /auth/me             — return current session user (unchanged)
+  POST /auth/logout         — clear session cookie (unchanged)
+"""
+import json
 import uuid
-import random
-from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Cookie, Header
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models.auth import WhatsAppVerification
 from app.models.user import User
 from app.models.tenant import DistributorTenant
 from app.utils.security import sign_jwt, verify_jwt
+from app.config import settings
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
-class RequestOTPPayload(BaseModel):
-    mobile_number: str = Field(..., min_length=10, max_length=15)
 
-class VerifyOTPPayload(BaseModel):
-    mobile_number: str = Field(..., min_length=10, max_length=15)
-    otp_code: str = Field(..., min_length=6, max_length=6)
+# ---------------------------------------------------------------------------
+# Pydantic schemas
+# ---------------------------------------------------------------------------
 
-@router.post("/request-otp", status_code=status.HTTP_200_OK)
-def request_otp(
-    payload: RequestOTPPayload,
-    db: Session = Depends(get_db)
-):
+class FirebaseLoginPayload(BaseModel):
+    firebase_token: str = Field(..., min_length=10)
+
+
+# ---------------------------------------------------------------------------
+# Firebase SDK initialisation helper (lazy, singleton-guarded)
+# ---------------------------------------------------------------------------
+
+def _get_firebase_app():
     """
-    Generates a 6-digit OTP code, saves it to database, and dispatches via SMS gateway.
+    Lazily initialise the Firebase Admin SDK from the FIREBASE_CREDENTIALS_JSON
+    environment variable. Guards against double-initialisation.
+    Returns the firebase_auth module ready to call verify_id_token().
+    Raises RuntimeError if credentials are not configured.
     """
-    # Clean/normalize mobile number and force true Indian E.164 country routing rules
-    raw_mobile = payload.mobile_number.strip().replace(" ", "").replace("-", "")
-    if not raw_mobile.startswith("+"):
-        if raw_mobile.startswith("91") and len(raw_mobile) == 12:
-            mobile = f"+{raw_mobile}"
-        elif len(raw_mobile) == 10:
-            mobile = f"+91{raw_mobile}"
-        else:
-            mobile = f"+{raw_mobile}"
-    else:
-        mobile = raw_mobile
-    
-    # Generate random 6-digit code
-    otp = f"{random.randint(100000, 999999)}"
-    
-    # Create verification record with 5-minute window
-    expiry = datetime.utcnow() + timedelta(minutes=5)
-    verification = WhatsAppVerification(
-        id=uuid.uuid4(),
-        mobile_number=mobile,
-        otp_code=otp,
-        expires_at=expiry,
-        is_verified=False
-    )
-    db.add(verification)
-    db.commit()
-    
-    # Trigger dynamic SMS provider factory layout
+    import firebase_admin
+    from firebase_admin import credentials as fb_credentials, auth as fb_auth
+
+    if not settings.FIREBASE_CREDENTIALS_JSON:
+        raise RuntimeError(
+            "FIREBASE_CREDENTIALS_JSON is not configured. "
+            "Set this environment variable to your Firebase service account JSON string."
+        )
+
     try:
-        from app.services.sms_factory import get_sms_gateway
-        sms_client = get_sms_gateway()
-        sms_client.send_otp(mobile_number=mobile, otp_code=otp)
-    except Exception as e:
-        print(f"Gateway Transmission Exception: {e}")
-        
-    return {
-        "status": "success",
-        "message": "OTP sent successfully"
-    }
+        # Return existing app if already initialised
+        firebase_admin.get_app()
+    except ValueError:
+        # App not yet initialised — parse JSON string and create credentials
+        try:
+            cred_dict = json.loads(settings.FIREBASE_CREDENTIALS_JSON)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"FIREBASE_CREDENTIALS_JSON is not valid JSON: {exc}") from exc
 
-@router.post("/verify-otp", status_code=status.HTTP_200_OK)
-def verify_otp(
-    payload: VerifyOTPPayload,
+        cred = fb_credentials.Certificate(cred_dict)
+        firebase_admin.initialize_app(cred)
+
+    return fb_auth
+
+
+# ---------------------------------------------------------------------------
+# POST /auth/firebase-login
+# ---------------------------------------------------------------------------
+
+@router.post("/firebase-login", status_code=status.HTTP_200_OK)
+def firebase_login(
+    payload: FirebaseLoginPayload,
     response: Response,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
-    Verifies OTP code and issues JWT access token in an HttpOnly cookie.
-    Creates new Tenant/User if registering for the first time.
+    Accepts a Firebase ID token issued after the user passes Phone OTP verification
+    on the client side (Firebase Phone Auth flow).
+
+    Flow:
+      1. Verify the ID token cryptographically using the Firebase Admin SDK.
+      2. Extract uid and phone_number from the decoded token.
+      3. If the phone number is not found in our database → new user path:
+         Return is_new_user=True so the frontend can route to the Company Name
+         registration step. No DB writes occur here.
+      4. If the user already exists → existing user path:
+         Persist firebase_uid if not already stored, sign an internal JWT,
+         set the access_token HttpOnly cookie, and return the session payload.
     """
-    mobile = payload.mobile_number.strip()
-    code = payload.otp_code.strip()
-    
-    # Check verification record
-    now = datetime.utcnow()
-    record = db.query(WhatsAppVerification).filter(
-        WhatsAppVerification.mobile_number == mobile,
-        WhatsAppVerification.otp_code == code,
-        WhatsAppVerification.is_verified == False,
-        WhatsAppVerification.expires_at > now
-    ).order_by(WhatsAppVerification.expires_at.desc()).first()
-    
-    if not record:
+    # Step 1: Verify Firebase token
+    try:
+        fb_auth = _get_firebase_app()
+        decoded_token = fb_auth.verify_id_token(payload.firebase_token)
+    except RuntimeError as exc:
+        # SDK not configured — surface as 503
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        )
+    except Exception:
+        # Any Firebase verification failure → 401
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Firebase token is invalid or has expired. Please re-authenticate.",
+        )
+
+    uid: str = decoded_token.get("uid", "")
+    phone_number: str = decoded_token.get("phone_number", "")
+
+    if not phone_number:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid or expired OTP code"
+            detail="Firebase token does not contain a verified phone_number claim.",
         )
-        
-    # Mark as verified
-    record.is_verified = True
-    db.flush()
-    
-    # Lookup User by mobile
+
+    # Step 2: Look up existing user by phone number or firebase_uid
     user = db.query(User).filter(
-        (User.phone_number == mobile) | (User.email_or_phone == mobile)
+        (User.phone_number == phone_number)
+        | (User.email_or_phone == phone_number)
+        | (User.firebase_uid == uid)
     ).first()
-    
-    is_new_user = True
-    tenant_name = None
+
+    # Step 3: New user path — no DB writes, return flag + short-lived signup token
+    # The signup_token encodes the verified phone/uid so the frontend can complete
+    # the Company Name registration step without a second Firebase round-trip.
     if not user:
-        # Create brand-new DistributorTenant for clean-slate setup
-        new_tenant = DistributorTenant(
-            id=uuid.uuid4(),
-            name="My B2B Distribution"
+        signup_token = sign_jwt(
+            {
+                "sub": phone_number,
+                "firebase_uid": uid,
+                "phone_number": phone_number,
+                "intent": "signup",
+            },
+            expires_in=3600,  # 1-hour window to complete registration
         )
-        db.add(new_tenant)
-        db.flush()
-        
-        # Create user
-        user = User(
-            id=uuid.uuid4(),
-            tenant_id=new_tenant.id,
-            full_name="Mobile User",
-            phone_number=mobile,
-            email_or_phone=mobile,
-            hashed_password=None,
-            role="SUPER_ADMIN",
-            is_active=True
-        )
-        db.add(user)
-        db.flush()
-        tenant_name = new_tenant.name
-    else:
-        # Enforce Tenant Association Checks
-        if user.tenant_id is not None:
-            is_new_user = False
-            tenant = db.get(DistributorTenant, user.tenant_id)
-            if tenant:
-                tenant_name = tenant.name
-        
-    db.commit()
-    
-    # Sign JWT token
+        return {
+            "status": "success",
+            "is_new_user": True,
+            "phone_number": phone_number,
+            "signup_token": signup_token,
+        }
+
+
+    # Step 4: Existing user path — update firebase_uid if not yet stored
+    if not user.firebase_uid:
+        user.firebase_uid = uid
+        db.commit()
+
+    # Step 5: Sign internal JWT
     token_payload = {
         "user_id": str(user.id),
         "tenant_id": str(user.tenant_id) if user.tenant_id else None,
-        "sub": user.email_or_phone,
-        "role": user.role
+        "sub": user.email_or_phone or phone_number,
+        "role": user.role,
     }
     token = sign_jwt(token_payload)
-    
-    # Return access token in HttpOnly response cookie wrapper
+
+    # Step 6: Set HttpOnly session cookie
     response.set_cookie(
         key="access_token",
         value=token,
         httponly=True,
         secure=True,
-        samesite="none",  # MANDATORY for cross-site cookie transmission on decoupled domains
-        max_age=3600 * 24
+        samesite="none",
+        max_age=3600 * 24,
     )
-    
+
+    tenant = db.get(DistributorTenant, user.tenant_id) if user.tenant_id else None
+
     return {
         "status": "success",
-        "is_new_user": is_new_user,
-        "is_new_registration": is_new_user,
+        "is_new_user": False,
+        "is_new_registration": False,
         "token": token,
         "access_token": token,
         "token_type": "bearer",
         "tenant_id": str(user.tenant_id) if user.tenant_id else None,
-        "tenant_name": tenant_name or "My Workspace",
+        "tenant_name": tenant.name if tenant else "My Workspace",
         "user": {
             "id": str(user.id),
             "tenant_id": str(user.tenant_id) if user.tenant_id else None,
             "role": user.role,
             "full_name": user.full_name,
-            "phone_number": user.phone_number or ""
-        }
+            "phone_number": user.phone_number or phone_number,
+        },
     }
+
+
+# ---------------------------------------------------------------------------
+# GET /auth/me  (unchanged)
+# ---------------------------------------------------------------------------
 
 @router.get("/me", status_code=status.HTTP_200_OK)
 def get_me(
     access_token: str | None = Cookie(None),
     authorization: str | None = Header(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     token = access_token
     if not token and authorization and authorization.startswith("Bearer "):
         token = authorization.split(" ")[1]
-        
+
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated"
+            detail="Not authenticated",
         )
-        
-    payload = verify_jwt(token)
-    if not payload or "user_id" not in payload:
+
+    token_payload = verify_jwt(token)
+    if not token_payload or "user_id" not in token_payload:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid session token"
+            detail="Invalid session token",
         )
-        
-    user = db.get(User, uuid.UUID(payload["user_id"]))
+
+    user = db.get(User, uuid.UUID(token_payload["user_id"]))
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found"
+            detail="User not found",
         )
-        
+
     tenant = db.get(DistributorTenant, user.tenant_id)
-    
+
     return {
         "id": str(user.id),
         "full_name": user.full_name,
@@ -216,9 +235,14 @@ def get_me(
         "tenant": {
             "id": str(tenant.id) if tenant else None,
             "name": tenant.name if tenant else None,
-            "category": tenant.category if tenant else None
-        }
+            "category": tenant.category if tenant else None,
+        },
     }
+
+
+# ---------------------------------------------------------------------------
+# POST /auth/logout  (unchanged)
+# ---------------------------------------------------------------------------
 
 @router.post("/logout", status_code=status.HTTP_200_OK)
 def logout(response: Response):
@@ -229,7 +253,6 @@ def logout(response: Response):
         key="access_token",
         httponly=True,
         secure=True,
-        samesite="none"  # Must match login options footprint exactly
+        samesite="none",
     )
     return {"status": "success", "message": "Session logged out successfully"}
-

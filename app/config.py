@@ -9,6 +9,10 @@ class Settings(BaseSettings):
     SMS_PROVIDER: str = "MSG91"
     SMS_GATEWAY_API_KEY: str = "MOCK_KEY"
 
+    # Firebase Authentication
+    FIREBASE_CREDENTIALS_JSON: str | None = None
+
+
     # Allow configuration via environment variables or .env file
     model_config = SettingsConfigDict(
         env_file=".env",

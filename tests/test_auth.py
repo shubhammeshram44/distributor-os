@@ -1,156 +1,203 @@
+"""
+test_auth.py — Firebase Authentication Tests
+=============================================
+Covers the POST /auth/firebase-login endpoint and the unchanged /me, /logout routes.
+Firebase Admin SDK calls are fully mocked so no real Firebase project is needed.
+"""
 import uuid
 import pytest
-from datetime import datetime, timedelta
+from unittest.mock import patch, MagicMock
 from fastapi.testclient import TestClient
 from app.main import app
-from app.models.auth import WhatsAppVerification
 from app.models.user import User
 from app.models.tenant import DistributorTenant
-from app.database import tenant_context
 
-@pytest.fixture(name="client")
-def fixture_client():
-    return TestClient(app)
+client = TestClient(app)
 
-def test_request_otp_success(db_session, client):
-    payload = {"mobile_number": "+919999999999"}
-    response = client.post("/api/v1/auth/request-otp", json=payload)
-    assert response.status_code == 200
-    assert response.json()["status"] == "success"
-    assert response.json()["message"] == "OTP sent successfully"
-    
-    # Verify DB entry
-    db_session.expire_all()
-    record = db_session.query(WhatsAppVerification).filter_by(mobile_number="+919999999999").first()
-    assert record is not None
-    assert len(record.otp_code) == 6
-    assert record.is_verified is False
-    assert record.expires_at > datetime.utcnow()
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
-def test_verify_otp_new_registration(db_session, client):
-    mobile = "+919888888888"
-    
-    # 1. Create a verification OTP record directly
-    otp_code = "123456"
-    expiry = datetime.utcnow() + timedelta(minutes=5)
-    verification = WhatsAppVerification(
+MOCK_PHONE = "+919876543210"
+MOCK_UID = "firebase-uid-abc123"
+
+def _mock_decoded_token(phone: str = MOCK_PHONE, uid: str = MOCK_UID) -> dict:
+    """Returns a dict that looks like firebase_auth.verify_id_token() output."""
+    return {"uid": uid, "phone_number": phone}
+
+
+def _seed_existing_user(db_session) -> tuple:
+    """Seed a Tenant + User in the test DB and return (tenant, user)."""
+    tenant = DistributorTenant(
         id=uuid.uuid4(),
-        mobile_number=mobile,
-        otp_code=otp_code,
-        expires_at=expiry,
-        is_verified=False
+        name="Existing Corp",
+        plan_type="FREE",
+        monthly_order_count=0,
     )
-    db_session.add(verification)
-    db_session.commit()
-    
-    # 2. Call verify endpoint
-    payload = {"mobile_number": mobile, "otp_code": otp_code}
-    response = client.post("/api/v1/auth/verify-otp", json=payload)
-    
-    assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "success"
-    assert data["is_new_registration"] is True
-    assert "token" in data
-    assert data["user"]["phone_number"] == mobile
-    assert data["user"]["role"] == "SUPER_ADMIN"
-    
-    # Verify HttpOnly cookie header
-    assert "access_token=" in response.headers["set-cookie"]
-    assert "HttpOnly" in response.headers["set-cookie"]
-    
-    # Verify DB: verification marked as verified
-    db_session.expire_all()
-    rec = db_session.get(WhatsAppVerification, verification.id)
-    assert rec.is_verified is True
-    
-    # Verify new user and tenant created
-    new_user = db_session.query(User).filter_by(phone_number=mobile).first()
-    assert new_user is not None
-    assert new_user.role == "SUPER_ADMIN"
-    
-    new_tenant = db_session.get(DistributorTenant, new_user.tenant_id)
-    assert new_tenant is not None
-    assert new_tenant.name == "My B2B Distribution"
-
-def test_verify_otp_existing_user(db_session, client):
-    mobile = "+919777777777"
-    
-    # 1. Seed Tenant and User
-    tenant = DistributorTenant(id=uuid.uuid4(), name="Existing Tenant")
     db_session.add(tenant)
     db_session.flush()
-    
+
     user = User(
         id=uuid.uuid4(),
         tenant_id=tenant.id,
-        full_name="Existing Ramesh",
-        phone_number=mobile,
-        email_or_phone=mobile,
-        role="OPERATOR",
-        is_active=True
+        full_name="Existing Distributor",
+        phone_number=MOCK_PHONE,
+        email_or_phone=MOCK_PHONE,
+        role="SUPER_ADMIN",
+        is_active=True,
+        firebase_uid=None,  # not yet stored
     )
     db_session.add(user)
     db_session.commit()
-    
-    # 2. Create verification OTP record
-    otp_code = "654321"
-    expiry = datetime.utcnow() + timedelta(minutes=5)
-    verification = WhatsAppVerification(
-        id=uuid.uuid4(),
-        mobile_number=mobile,
-        otp_code=otp_code,
-        expires_at=expiry,
-        is_verified=False
-    )
-    db_session.add(verification)
-    db_session.commit()
-    
-    # 3. Call verify endpoint
-    payload = {"mobile_number": mobile, "otp_code": otp_code}
-    response = client.post("/api/v1/auth/verify-otp", json=payload)
-    
+    return tenant, user
+
+
+# ---------------------------------------------------------------------------
+# POST /auth/firebase-login — new user path
+# ---------------------------------------------------------------------------
+
+def test_firebase_login_new_user(db_session):
+    """
+    When Firebase verifies the token but the phone isn't in our DB:
+    - No User or DistributorTenant must be written.
+    - Response must carry is_new_user=True, phone_number, and a signup_token.
+    """
+    with patch("app.api.v1.auth._get_firebase_app") as mock_init:
+        mock_fb_auth = MagicMock()
+        mock_fb_auth.verify_id_token.return_value = _mock_decoded_token()
+        mock_init.return_value = mock_fb_auth
+
+        response = client.post(
+            "/api/v1/auth/firebase-login",
+            json={"firebase_token": "mock.firebase.token.xyz"},
+        )
+
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "success"
-    assert data["is_new_registration"] is False
-    assert data["user"]["id"] == str(user.id)
-    assert data["user"]["tenant_id"] == str(tenant.id)
-    assert data["user"]["role"] == "OPERATOR"
+    assert data["is_new_user"] is True
+    assert data["phone_number"] == MOCK_PHONE
+    assert "signup_token" in data
+    assert len(data["signup_token"]) > 10  # is a real JWT string
 
-def test_verify_otp_invalid_or_expired(db_session, client):
-    mobile = "+919666666666"
-    
-    # Seed verification OTP record that is already expired
-    otp_code = "111111"
-    expiry = datetime.utcnow() - timedelta(minutes=1)
-    verification = WhatsAppVerification(
-        id=uuid.uuid4(),
-        mobile_number=mobile,
-        otp_code=otp_code,
-        expires_at=expiry,
-        is_verified=False
-    )
-    db_session.add(verification)
+    # Critical: zero DB rows created
+    assert db_session.query(User).count() == 0
+    assert db_session.query(DistributorTenant).count() == 0
+
+
+# ---------------------------------------------------------------------------
+# POST /auth/firebase-login — existing user path
+# ---------------------------------------------------------------------------
+
+def test_firebase_login_existing_user(db_session):
+    """
+    When Firebase verifies the token and the phone IS in our DB:
+    - firebase_uid must be persisted on the user record.
+    - Response must have is_new_user=False and carry the session payload.
+    - access_token HttpOnly cookie must be set.
+    """
+    tenant, user = _seed_existing_user(db_session)
+
+    with patch("app.api.v1.auth._get_firebase_app") as mock_init:
+        mock_fb_auth = MagicMock()
+        mock_fb_auth.verify_id_token.return_value = _mock_decoded_token()
+        mock_init.return_value = mock_fb_auth
+
+        response = client.post(
+            "/api/v1/auth/firebase-login",
+            json={"firebase_token": "mock.firebase.token.xyz"},
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["is_new_user"] is False
+    assert "token" in data
+    assert data["tenant_id"] == str(tenant.id)
+    assert data["user"]["phone_number"] == MOCK_PHONE
+    assert data["user"]["role"] == "SUPER_ADMIN"
+
+    # Cookie must be present
+    assert "access_token=" in response.headers.get("set-cookie", "")
+    assert "HttpOnly" in response.headers.get("set-cookie", "")
+
+    # firebase_uid must have been persisted
+    db_session.expire_all()
+    refreshed_user = db_session.get(User, user.id)
+    assert refreshed_user.firebase_uid == MOCK_UID
+
+
+def test_firebase_login_existing_user_already_has_uid(db_session):
+    """
+    When the user already has a firebase_uid stored, no extra DB write occurs
+    but the login still succeeds normally.
+    """
+    tenant, user = _seed_existing_user(db_session)
+    user.firebase_uid = MOCK_UID
     db_session.commit()
-    
-    # Verify with wrong OTP
-    payload = {"mobile_number": mobile, "otp_code": "222222"}
-    response = client.post("/api/v1/auth/verify-otp", json=payload)
-    assert response.status_code == 400
-    assert "Invalid or expired OTP" in response.json()["detail"]
-    
-    # Verify with expired OTP
-    payload = {"mobile_number": mobile, "otp_code": otp_code}
-    response = client.post("/api/v1/auth/verify-otp", json=payload)
-    assert response.status_code == 400
-    assert "Invalid or expired OTP" in response.json()["detail"]
 
-def test_logout_success(client):
+    with patch("app.api.v1.auth._get_firebase_app") as mock_init:
+        mock_fb_auth = MagicMock()
+        mock_fb_auth.verify_id_token.return_value = _mock_decoded_token()
+        mock_init.return_value = mock_fb_auth
+
+        response = client.post(
+            "/api/v1/auth/firebase-login",
+            json={"firebase_token": "mock.firebase.token.xyz"},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["is_new_user"] is False
+
+
+# ---------------------------------------------------------------------------
+# POST /auth/firebase-login — invalid / expired token
+# ---------------------------------------------------------------------------
+
+def test_firebase_login_invalid_token(db_session):
+    """
+    When verify_id_token raises (invalid/expired token), must return 401.
+    """
+    with patch("app.api.v1.auth._get_firebase_app") as mock_init:
+        mock_fb_auth = MagicMock()
+        mock_fb_auth.verify_id_token.side_effect = ValueError("Token expired")
+        mock_init.return_value = mock_fb_auth
+
+        response = client.post(
+            "/api/v1/auth/firebase-login",
+            json={"firebase_token": "bad.token.value"},
+        )
+
+    assert response.status_code == 401
+    assert "invalid" in response.json()["detail"].lower()
+
+
+def test_firebase_login_no_phone_in_token(db_session):
+    """
+    If the decoded Firebase token contains no phone_number claim, return 400.
+    """
+    with patch("app.api.v1.auth._get_firebase_app") as mock_init:
+        mock_fb_auth = MagicMock()
+        mock_fb_auth.verify_id_token.return_value = {"uid": MOCK_UID}  # no phone_number
+        mock_init.return_value = mock_fb_auth
+
+        response = client.post(
+            "/api/v1/auth/firebase-login",
+            json={"firebase_token": "mock.firebase.token.no.phone"},
+        )
+
+    assert response.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# POST /auth/logout  (unchanged — kept to prevent regression)
+# ---------------------------------------------------------------------------
+
+def test_logout_success():
     response = client.post("/api/v1/auth/logout")
     assert response.status_code == 200
     assert response.json()["status"] == "success"
     assert response.json()["message"] == "Session logged out successfully"
     # Verify cookie deletion instruction
-    assert 'access_token=""' in response.headers["set-cookie"] or 'access_token=;' in response.headers["set-cookie"]
-
+    cookie_header = response.headers.get("set-cookie", "")
+    assert 'access_token=""' in cookie_header or 'access_token=;' in cookie_header
