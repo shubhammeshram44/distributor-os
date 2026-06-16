@@ -115,10 +115,7 @@ def get_active_shipments(
         invoice = db.query(Invoice).filter(Invoice.order_id == order.id).first()
         if invoice:
             invoice_amount = float(invoice.total_amount)
-            # Calculate payment status
-            from app.models.payment import PaymentInvoiceLink
-            allocated = db.query(func.sum(PaymentInvoiceLink.amount_allocated)).filter(PaymentInvoiceLink.invoice_id == invoice.id).scalar() or 0.0
-            is_paid = allocated >= invoice.total_amount
+            is_paid = s.payment_status == "PAID" or invoice.payment_status == "PAID"
         else:
             invoice_amount = db.query(func.sum(OrderLineItem.quantity * OrderLineItem.unit_price)).filter(OrderLineItem.order_id == order.id).scalar() or 0.0
             is_paid = False

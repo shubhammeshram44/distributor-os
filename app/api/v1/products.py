@@ -108,7 +108,7 @@ def adjust_stock(
             tenant_id=tenant_id,
             sku_id=product.id,
             location="Aisle-A1",
-            quantity_on_hand=payload.quantity_received,
+            quantity_on_hand=product.stock_quantity,
             quantity_committed=0,
             low_stock_threshold=10
         )

@@ -12,3 +12,4 @@ class Shipment(Base, TenantMixin):
     tracking_id: Mapped[str] = mapped_column(String(100), nullable=False)
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="Created")
     destination: Mapped[str] = mapped_column(String(500), nullable=False)
+    payment_status: Mapped[str] = mapped_column(String(50), default="UNPAID", nullable=False)

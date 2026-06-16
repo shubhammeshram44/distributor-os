@@ -51,7 +51,7 @@ def list_orders(
         status_resolved = "Pending" if status_raw == "Draft" else status_raw
 
         # Payment status attributes
-        payment_status = inv.payment_status if inv else "UNPAID"
+        payment_status = o.payment_status if o.payment_status != "UNPAID" else (inv.payment_status if inv else "UNPAID")
         amount_paid = float(inv.amount_paid) if inv else 0.0
 
         results.append({
@@ -175,6 +175,27 @@ def update_order_status(
                 amount=current_order_total,
                 reference_id=order.internal_order_id
             ))
+
+            # Create Invoice directly
+            from datetime import datetime
+            invoice = Invoice(
+                tenant_id=order.tenant_id,
+                order_id=order.id,
+                gstin=customer.gstin if customer.gstin else "29AAAAA1111A1Z1",
+                total_amount=current_order_total,
+                irn_status="Cleared",
+                qr_code_status="Generated",
+                customer_id=order.customer_id,
+                payment_status="UNPAID",
+                amount_paid=0.0,
+                created_at=datetime.utcnow()
+            )
+            db.add(invoice)
+            db.flush()
+
+            # Reconcile customer payments immediately to consume any credits
+            from app.services.payment_service import reconcile_payments_and_invoices
+            reconcile_payments_and_invoices(db, order.tenant_id, order.customer_id)
 
         # Record state transition to OrderStateLedger
 
@@ -568,7 +589,7 @@ def get_order_by_id(
     return {
         "id": str(order.id),
         "order_id": order.internal_order_id,
-        "payment_status": invoice.payment_status if invoice else "UNPAID",
+        "payment_status": order.payment_status if order.payment_status != "UNPAID" else (invoice.payment_status if invoice else "UNPAID"),
         "amount_paid": float(invoice.amount_paid) if invoice else 0.0,
         "payments_allocated": payments_allocated
     }
@@ -647,6 +668,39 @@ def create_order(
         to_status=payload.status,
         updated_by="operator"
     ))
+
+    if payload.status == "Confirmed":
+        customer = db.get(Customer, payload.customer_id)
+        if customer:
+            amount_sum = sum(float(item.quantity * item.unit_price) for item in payload.items)
+            customer.outstanding_balance = float(customer.outstanding_balance) + amount_sum
+            
+            db.add(CustomerLedger(
+                id=uuid.uuid4(),
+                tenant_id=payload.tenant_id,
+                customer_id=payload.customer_id,
+                type="DEBIT",
+                amount=amount_sum,
+                reference_id=generated_order_id
+            ))
+            
+            invoice = Invoice(
+                tenant_id=payload.tenant_id,
+                order_id=new_order.id,
+                gstin=customer.gstin if customer.gstin else "29AAAAA1111A1Z1",
+                total_amount=amount_sum,
+                irn_status="Cleared",
+                qr_code_status="Generated",
+                customer_id=payload.customer_id,
+                payment_status="UNPAID",
+                amount_paid=0.0,
+                created_at=new_order.created_at
+            )
+            db.add(invoice)
+            db.flush()
+            
+            from app.services.payment_service import reconcile_payments_and_invoices
+            reconcile_payments_and_invoices(db, payload.tenant_id, payload.customer_id)
 
     db.commit()
     return {

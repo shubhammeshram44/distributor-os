@@ -13,6 +13,7 @@ class Order(Base, TenantMixin):
     customer_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("customers.id", ondelete="CASCADE"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    payment_status: Mapped[str] = mapped_column(String(50), default="UNPAID", nullable=False)
 
     line_items: Mapped[list["OrderLineItem"]] = relationship(back_populates="order", cascade="all, delete-orphan")
     ledger_entries: Mapped[list["OrderStateLedger"]] = relationship(back_populates="order", cascade="all, delete-orphan")
