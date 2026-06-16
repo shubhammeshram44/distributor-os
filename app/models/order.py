@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime
 from sqlalchemy import String, ForeignKey, Integer, Numeric, DateTime, JSON, select, desc
 from sqlalchemy.orm import Mapped, mapped_column, relationship, object_session
+from sqlalchemy.ext.hybrid import hybrid_property
 from app.database import Base, TenantMixin
 
 class Order(Base, TenantMixin):
@@ -13,6 +14,30 @@ class Order(Base, TenantMixin):
     customer_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("customers.id", ondelete="CASCADE"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    @hybrid_property
+    def customer_mobile(self) -> str:
+        session = object_session(self)
+        if session is not None:
+            from app.models.customer import CustomerAlias
+            alias = session.query(CustomerAlias).filter(CustomerAlias.customer_id == self.customer_id).first()
+            if alias:
+                return alias.alias_value
+        return ""
+
+    @customer_mobile.expression
+    def customer_mobile(cls):
+        from app.models.customer import CustomerAlias
+        return (
+            select(CustomerAlias.alias_value)
+            .where(CustomerAlias.customer_id == cls.customer_id)
+            .correlate_except(CustomerAlias)
+            .scalar_subquery()
+        )
+
+    @property
+    def total_amount(self) -> float:
+        return sum(float(item.quantity * item.unit_price) for item in self.line_items)
     @property
     def payment_status(self) -> str:
         session = object_session(self)

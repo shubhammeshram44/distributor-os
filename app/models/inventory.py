@@ -12,3 +12,11 @@ class Inventory(Base, TenantMixin):
     quantity_on_hand: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     quantity_committed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     low_stock_threshold: Mapped[int] = mapped_column(Integer, nullable=False, default=10)
+
+    @property
+    def physical_stock(self) -> int:
+        return self.quantity_on_hand
+
+    @physical_stock.setter
+    def physical_stock(self, value: int):
+        self.quantity_on_hand = value

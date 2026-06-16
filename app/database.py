@@ -21,8 +21,44 @@ engine = create_engine(
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
+from sqlalchemy.types import TypeDecorator, CHAR
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+
+class SafeUUID(TypeDecorator):
+    impl = CHAR(36)
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == "postgresql":
+            return dialect.type_descriptor(PG_UUID(as_uuid=True))
+        else:
+            return dialect.type_descriptor(CHAR(36))
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return None
+        if isinstance(value, uuid.UUID):
+            if dialect.name == "postgresql":
+                return value
+            else:
+                return str(value)
+        return str(value)
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return None
+        if isinstance(value, uuid.UUID):
+            return value
+        try:
+            return uuid.UUID(str(value))
+        except ValueError:
+            return value
+
 class Base(DeclarativeBase):
-    pass
+    type_annotation_map = {
+        uuid.UUID: SafeUUID
+    }
+
 
 class TenantMixin:
     """
@@ -42,10 +78,12 @@ def _apply_tenant_filtering(orm_execute_state):
     """
     tenant_id = tenant_context.get()
     if tenant_id is not None and not orm_execute_state.is_column_load:
+        dialect_name = orm_execute_state.session.get_bind().dialect.name
+        bind_val = str(tenant_id) if dialect_name == "sqlite" else tenant_id
         orm_execute_state.statement = orm_execute_state.statement.options(
             with_loader_criteria(
                 TenantMixin,
-                lambda cls: cls.tenant_id == tenant_id,
+                lambda cls: cls.tenant_id == bind_val,
                 include_aliases=True
             )
         )

@@ -13,3 +13,25 @@ class CustomerLedger(Base, TenantMixin):
     amount: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
     reference_id: Mapped[str] = mapped_column(String(100), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    @property
+    def credit(self) -> float:
+        if self.type == "CREDIT":
+            return float(self.amount)
+        return 0.0
+
+    @credit.setter
+    def credit(self, val: float):
+        self.type = "CREDIT"
+        self.amount = val
+
+    @property
+    def debit(self) -> float:
+        if self.type == "DEBIT":
+            return float(self.amount)
+        return 0.0
+
+    @debit.setter
+    def debit(self, val: float):
+        self.type = "DEBIT"
+        self.amount = val

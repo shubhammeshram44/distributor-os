@@ -5,6 +5,10 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite:///./distributor_os.db"
     GEMINI_API_KEY: str = ""
 
+    # SMS Provider Configuration
+    SMS_PROVIDER: str = "TWILIO"
+    SMS_GATEWAY_API_KEY: str = "MOCK_KEY"
+
     # Allow configuration via environment variables or .env file
     model_config = SettingsConfigDict(
         env_file=".env",

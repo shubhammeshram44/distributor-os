@@ -8,7 +8,6 @@ from app.database import get_db
 from app.models.auth import WhatsAppVerification
 from app.models.user import User
 from app.models.tenant import DistributorTenant
-from app.services.whatsapp_service import WhatsAppService
 from app.utils.security import sign_jwt, verify_jwt
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -26,10 +25,19 @@ def request_otp(
     db: Session = Depends(get_db)
 ):
     """
-    Generates a 6-digit OTP code, saves it to database, and pushes it via WhatsApp.
+    Generates a 6-digit OTP code, saves it to database, and dispatches via SMS gateway.
     """
-    # Clean/normalize mobile number
-    mobile = payload.mobile_number.strip()
+    # Clean/normalize mobile number and force true Indian E.164 country routing rules
+    raw_mobile = payload.mobile_number.strip().replace(" ", "").replace("-", "")
+    if not raw_mobile.startswith("+"):
+        if raw_mobile.startswith("91") and len(raw_mobile) == 12:
+            mobile = f"+{raw_mobile}"
+        elif len(raw_mobile) == 10:
+            mobile = f"+91{raw_mobile}"
+        else:
+            mobile = f"+{raw_mobile}"
+    else:
+        mobile = raw_mobile
     
     # Generate random 6-digit code
     otp = f"{random.randint(100000, 999999)}"
@@ -46,13 +54,13 @@ def request_otp(
     db.add(verification)
     db.commit()
     
-    # Trigger simulation to push OTP message
+    # Trigger dynamic SMS provider factory layout
     try:
-        whatsapp = WhatsAppService()
-        whatsapp.send_otp_message(mobile, otp)
+        from app.services.sms_factory import get_sms_gateway
+        sms_client = get_sms_gateway()
+        sms_client.send_otp(mobile_number=mobile, otp_code=otp)
     except Exception as e:
-        # Log error but don't fail transaction
-        print(f"Failed to push OTP: {e}")
+        print(f"Gateway Transmission Exception: {e}")
         
     return {
         "status": "success",

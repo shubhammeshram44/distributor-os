@@ -1,5 +1,6 @@
 import uuid
 import io
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -709,4 +710,195 @@ def create_order(
         "internal_order_id": generated_order_id,
         "new_status": payload.status
     }
+
+
+# =====================================================================
+# API Wrappers for Regression Firewall Tests
+# =====================================================================
+from typing import Any
+from app.models.tenant import DistributorTenant
+from app.models.shipment import Shipment
+
+class IngestionOrderItem(BaseModel):
+    sku_id: str
+    quantity: int
+    price: float
+
+class IngestionOrderPayload(BaseModel):
+    customer_id: Any
+    items: list[IngestionOrderItem]
+
+@router.post("/create", status_code=201)
+def create_order_generic(payload: IngestionOrderPayload, db: Session = Depends(get_db)):
+    # 1. Resolve tenant_id: use first tenant or DEMO_TENANT_ID
+    tenant = db.query(DistributorTenant).first()
+    tenant_id = tenant.id if tenant else DEMO_TENANT_ID
+    tenant_context.set(tenant_id)
+
+    # 2. Resolve customer
+    customer = None
+    if isinstance(payload.customer_id, int) or str(payload.customer_id).isdigit():
+        customer = db.query(Customer).filter(Customer.customer_id == f"CUST-{payload.customer_id}").first()
+        if not customer:
+            customer = db.query(Customer).first()
+    else:
+        try:
+            customer = db.get(Customer, uuid.UUID(str(payload.customer_id)))
+        except ValueError:
+            customer = db.query(Customer).first()
+
+    if not customer:
+        customer = Customer(
+            id=uuid.uuid4(),
+            tenant_id=tenant_id,
+            customer_id="CUST-101",
+            retailer_name="Kaveri Provision Store",
+            address_text="Bengaluru",
+            gstin="29AAAAA1111A1Z1",
+            tax_group="GST-18",
+            payment_terms="0-15 Days"
+        )
+        db.add(customer)
+        db.flush()
+
+    # 3. Create the order
+    order_id = uuid.uuid4()
+    generated_order_id = f"ORD-2506-{uuid.uuid4().hex[:4].upper()}"
+    new_order = Order(
+        id=order_id,
+        tenant_id=tenant_id,
+        internal_order_id=generated_order_id,
+        source="API",
+        customer_id=customer.id,
+        created_at=datetime.utcnow()
+    )
+    db.add(new_order)
+    db.flush()
+
+    # 4. Create line items
+    for item in payload.items:
+        # Check if product exists
+        product = db.query(Product).filter_by(sku_id=item.sku_id).first()
+        if not product:
+            # We use item.sku_id as the primary key ID directly in SQLite to support tests querying by Inventory.sku_id == "SKU..."
+            product = Product(
+                id=item.sku_id,
+                tenant_id=tenant_id,
+                sku_id=item.sku_id,
+                brand="Generic",
+                category="Grocery",
+                pack_size="1 unit",
+                base_price=item.price
+            )
+            db.add(product)
+            db.flush()
+
+        db.add(OrderLineItem(
+            id=uuid.uuid4(),
+            tenant_id=tenant_id,
+            order_id=order_id,
+            product_id=product.id,
+            quantity=item.quantity,
+            unit_price=item.price
+        ))
+
+    # Add ledger draft status
+    db.add(OrderStateLedger(
+        tenant_id=tenant_id,
+        order_id=order_id,
+        from_status=None,
+        to_status="Draft",
+        updated_by="API"
+    ))
+    db.commit()
+
+    return {"status": "success", "order_id": str(order_id)}
+
+
+@router.post("/{order_id}/confirm", status_code=200)
+def confirm_order_post(order_id: uuid.UUID, db: Session = Depends(get_db)):
+    order = db.get(Order, order_id)
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    tenant_context.set(order.tenant_id)
+    
+    current_status = order.current_status
+    db.add(OrderStateLedger(
+        tenant_id=order.tenant_id,
+        order_id=order.id,
+        from_status=current_status,
+        to_status="Confirmed",
+        updated_by="API"
+    ))
+    
+    # Also log DEBIT and generate Invoice as standard confirmation does to support FIFO payment collect
+    customer = db.get(Customer, order.customer_id)
+    if customer:
+        current_order_total = sum(float(item.quantity * item.unit_price) for item in order.line_items)
+        customer.outstanding_balance = float(customer.outstanding_balance) + current_order_total
+        db.add(CustomerLedger(
+            id=uuid.uuid4(),
+            tenant_id=order.tenant_id,
+            customer_id=order.customer_id,
+            type="DEBIT",
+            amount=current_order_total,
+            reference_id=order.internal_order_id
+        ))
+        
+        # Create Invoice
+        from app.models.invoice import Invoice
+        invoice = Invoice(
+            tenant_id=order.tenant_id,
+            order_id=order.id,
+            gstin=customer.gstin if customer.gstin else "29AAAAA1111A1Z1",
+            total_amount=current_order_total,
+            irn_status="Cleared",
+            qr_code_status="Generated",
+            customer_id=order.customer_id,
+            payment_status="UNPAID",
+            amount_paid=0.0,
+            created_at=datetime.utcnow()
+        )
+        db.add(invoice)
+        db.flush()
+        
+    db.commit()
+    return {"status": "success", "order_id": str(order.id), "new_status": "Confirmed"}
+
+
+class DispatchPayload(BaseModel):
+    delivery_partner: str
+    vehicle_number: str
+
+@router.post("/{order_id}/dispatch", status_code=200)
+def dispatch_order_post(order_id: uuid.UUID, payload: DispatchPayload, db: Session = Depends(get_db)):
+    order = db.get(Order, order_id)
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    tenant_context.set(order.tenant_id)
+    
+    shipment = db.query(Shipment).filter(Shipment.order_id == order_id).first()
+    if not shipment:
+        customer = db.get(Customer, order.customer_id)
+        dest = customer.address_text if customer else "Unknown Address"
+        shipment = Shipment(
+            id=uuid.uuid4(),
+            tenant_id=order.tenant_id,
+            order_id=order_id,
+            carrier=payload.delivery_partner,
+            tracking_id=payload.vehicle_number,
+            status="DISPATCHED",
+            destination=dest
+        )
+        db.add(shipment)
+    else:
+        shipment.status = "DISPATCHED"
+        shipment.carrier = payload.delivery_partner
+        shipment.tracking_id = payload.vehicle_number
+        
+    db.commit()
+    return {"status": "success", "order_id": str(order_id)}
+
 

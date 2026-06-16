@@ -5,10 +5,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy import select, func
 from sqlalchemy.orm import Session
-from app.database import get_db
+from app.database import get_db, tenant_context
 from app.models.customer import Customer, CustomerAlias
 from app.models.product import Product, ProductAlias
 from app.models.order import Order, OrderLineItem, OrderStateLedger
+from app.models.tenant import DistributorTenant
 from app.services.gemini_service import GeminiService
 
 router = APIRouter(prefix="/whatsapp", tags=["WhatsApp"])
@@ -20,7 +21,10 @@ class WebhookPayload(BaseModel):
     tenant_id: typing.Optional[uuid.UUID] = None
     phone_number: typing.Optional[str] = None
     sender_phone: typing.Optional[str] = None
-    message_text: str
+    sender: typing.Optional[str] = None  # Fallback for regression firewall test
+    receiver: typing.Optional[str] = None  # Operational phone number (B)
+    message_text: typing.Optional[str] = None
+    message: typing.Optional[str] = None  # Fallback for regression firewall test
 
 @router.post("/webhook")
 def handle_whatsapp_webhook(
@@ -28,53 +32,50 @@ def handle_whatsapp_webhook(
     db: Session = Depends(get_db)
 ):
     try:
+        # Normalize and resolve fallback values
+        msg_text = payload.message_text or payload.message or ""
+        phone = payload.sender_phone or payload.phone_number or payload.sender or ""
+        
         # 1. Print the raw incoming message
         print("\n================== INCOMING RAW WHATSAPP MESSAGE ==================")
-        print(f"Sender: {payload.sender_phone}")
-        print(f"Message: {payload.message_text}")
+        print(f"Sender: {phone}")
+        print(f"Message: {msg_text}")
         print("=====================================================================\n")
 
         # Normalize message text for scanning
-        msg = payload.message_text.lower()
+        msg = msg_text.lower()
         resolved_tenant_id = payload.tenant_id or DEMO_TENANT_ID
-        phone = payload.sender_phone or payload.phone_number or ""
+        receiver_phone = payload.receiver
+        if receiver_phone:
+            tenant = db.query(DistributorTenant).filter(DistributorTenant.whatsapp_order_phone == receiver_phone).first()
+            if tenant:
+                resolved_tenant_id = tenant.id
 
-        # 1. Dynamically parse customer attributes based on keywords or phone aliases
+        tenant_context.set(resolved_tenant_id)
+
+        # 1. Dynamically parse customer attributes based on phone aliases (Layer 1 Whitelist)
         customer = None
         if phone:
             customer = db.query(Customer).join(CustomerAlias).filter(CustomerAlias.alias_value == phone).first()
+            if not customer:
+                customer = db.query(Customer).filter(Customer.phone_number == phone).first()
 
         if not customer:
-            if "maruthi" in msg:
-                customer_name = "Maruthi Stores"
-            elif "kaveri" in msg:
-                customer_name = "Kaveri Provision Store"
-            else:
-                customer_name = "Kaveri Provision Store" # Default fallback
+            print(f"Clean ignore: Sender {phone} is not whitelisted for tenant {resolved_tenant_id}")
+            return {
+                "status": "ignored",
+                "message": "Sender not whitelisted or not found for this tenant.",
+                "job_id": None,
+                "successful_rows": 0,
+                "failed_rows": 0,
+                "error_message": None
+            }
 
-            customer = db.query(Customer).filter_by(retailer_name=customer_name).first()
-            if not customer:
-                cust_id = "CUST-101" if customer_name == "Kaveri Provision Store" else "CUST-102"
-                customer = db.query(Customer).filter_by(customer_id=cust_id).first()
-                if not customer:
-                    customer = Customer(
-                        id=uuid.uuid4(),
-                        tenant_id=resolved_tenant_id,
-                        customer_id=cust_id,
-                        retailer_name=customer_name,
-                        address_text="Bengaluru",
-                        gstin="29AAAAA1111A1Z1",
-                        tax_group="GST-18",
-                        payment_terms="0-15 Days"
-                    )
-                    db.add(customer)
-                    db.flush()
-        else:
-            customer_name = customer.retailer_name
+        customer_name = customer.retailer_name
 
         # 2. Parse unstructured text using Gemini Service or fall back to keyword logic
         gemini_service = GeminiService()
-        parsed_order = gemini_service.parse_order_text(payload.message_text)
+        parsed_order = gemini_service.parse_order_text(msg_text)
 
         raw_tokens = []
         if parsed_order.items:
