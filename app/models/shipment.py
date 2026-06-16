@@ -1,6 +1,6 @@
 import uuid
 from sqlalchemy import String, ForeignKey
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, object_session
 from app.database import Base, TenantMixin
 
 class Shipment(Base, TenantMixin):
@@ -12,4 +12,17 @@ class Shipment(Base, TenantMixin):
     tracking_id: Mapped[str] = mapped_column(String(100), nullable=False)
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="Created")
     destination: Mapped[str] = mapped_column(String(500), nullable=False)
-    payment_status: Mapped[str] = mapped_column(String(50), default="UNPAID", nullable=False)
+
+    @property
+    def payment_status(self) -> str:
+        session = object_session(self)
+        if session is not None:
+            from app.models.invoice import Invoice
+            inv = session.query(Invoice).filter(Invoice.order_id == self.order_id).first()
+            if inv:
+                return inv.payment_status
+        return "UNPAID"
+
+    @payment_status.setter
+    def payment_status(self, value: str):
+        pass

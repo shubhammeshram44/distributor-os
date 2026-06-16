@@ -176,19 +176,13 @@ def handle_whatsapp_webhook(
                     "rate": float(product.base_price)
                 })
             else:
-                # Unmatched State: Assign parameters and flag unmatched
-                has_unmatched = True
-                parsed_items.append({
-                    "product_name": f"Unmatched: {token}",
-                    "sku_code": "UNMATCHED_SKU",
-                    "sku_id": "UNMATCHED_SKU",
-                    "brand": "Generic",
-                    "category": "Grocery",
-                    "pack_size": "1 unit",
-                    "qty": qty,
-                    "wholesale_rate": 0.0,
-                    "rate": 0.0
-                })
+                return {
+                    "status": "error",
+                    "message": f"Could not find matching product in your catalog for token: '{token}'",
+                    "error_message": f"Could not find matching product in your catalog for token: '{token}'",
+                    "failed_rows": [token],
+                    "job_id": "ERR-VAL-404"
+                }
 
         # 3. Create unique Parent Order ID string
         generated_order_id = f"ORD-2506-{uuid.uuid4().hex[:4].upper()}"

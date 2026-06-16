@@ -1,5 +1,7 @@
 import uuid
 import pytest
+from fastapi.testclient import TestClient
+from app.main import app
 from app.models.tenant import DistributorTenant
 from app.models.customer import Customer, CustomerAlias
 from app.models.product import Product, ProductAlias
@@ -7,6 +9,10 @@ from app.models.order import Order, OrderLineItem, OrderStateLedger
 from app.models.ingestion import IngestionJob, IngestionStaging
 from app.services.whatsapp_service import WhatsAppService
 from app.database import tenant_context
+
+@pytest.fixture(name="client")
+def fixture_client():
+    return TestClient(app)
 
 def test_whatsapp_ingestion_success(db_session):
     # 1. Setup Tenant
@@ -179,3 +185,87 @@ def test_whatsapp_ingestion_unmapped_product(db_session):
 
     # Verify no order is created
     assert db_session.query(Order).count() == 0
+
+
+def test_whatsapp_webhook_success(db_session, client):
+    # Setup Tenant
+    tenant = DistributorTenant(name="Test Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+
+    tenant_context.set(tenant.id)
+
+    # Setup Customer
+    customer = Customer(
+        retailer_name="Kaveri Provision Store",
+        customer_id="CUST-101",
+        address_text="Bengaluru",
+        gstin="29AAAAA1111A1Z1",
+        tax_group="GST-18",
+        payment_terms="0-15 Days"
+    )
+    db_session.add(customer)
+    db_session.flush()
+
+    cust_alias = CustomerAlias(customer_id=customer.id, alias_value="+919999888877")
+    db_session.add(cust_alias)
+
+    # Setup Product & Alias
+    product = Product(sku_id="PROD-HUL-SOAP", brand="HUL", category="Soap", pack_size="100g", base_price=45.00)
+    db_session.add(product)
+    db_session.flush()
+
+    alias = ProductAlias(product_id=product.id, alias_name="HUL Soap")
+    db_session.add(alias)
+    db_session.commit()
+
+    response = client.post("/api/v1/whatsapp/webhook", json={
+        "tenant_id": str(tenant.id),
+        "phone_number": "+919999888877",
+        "message_text": "Need 50 HUL Soap"
+    })
+    
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["failed_rows"] == 0
+    assert data["successful_rows"] == 1
+
+
+def test_whatsapp_webhook_mismatch_error(db_session, client):
+    # Setup Tenant
+    tenant = DistributorTenant(name="Test Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+
+    tenant_context.set(tenant.id)
+
+    # Setup Customer
+    customer = Customer(
+        retailer_name="Kaveri Provision Store",
+        customer_id="CUST-101",
+        address_text="Bengaluru",
+        gstin="29AAAAA1111A1Z1",
+        tax_group="GST-18",
+        payment_terms="0-15 Days"
+    )
+    db_session.add(customer)
+    db_session.flush()
+
+    cust_alias = CustomerAlias(customer_id=customer.id, alias_value="+919999888877")
+    db_session.add(cust_alias)
+    db_session.commit()
+
+    # Post with unmatched product
+    response = client.post("/api/v1/whatsapp/webhook", json={
+        "tenant_id": str(tenant.id),
+        "phone_number": "+919999888877",
+        "message_text": "10 PatanjaliDantKanti"
+    })
+    
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "error"
+    assert data["job_id"] == "ERR-VAL-404"
+    assert "PatanjaliDantKanti" in data["failed_rows"]
+    assert "Could not find matching product in your catalog" in data["error_message"]

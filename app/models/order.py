@@ -13,7 +13,19 @@ class Order(Base, TenantMixin):
     customer_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("customers.id", ondelete="CASCADE"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    payment_status: Mapped[str] = mapped_column(String(50), default="UNPAID", nullable=False)
+    @property
+    def payment_status(self) -> str:
+        session = object_session(self)
+        if session is not None:
+            from app.models.invoice import Invoice
+            inv = session.query(Invoice).filter(Invoice.order_id == self.id).first()
+            if inv:
+                return inv.payment_status
+        return "UNPAID"
+
+    @payment_status.setter
+    def payment_status(self, value: str):
+        pass
 
     line_items: Mapped[list["OrderLineItem"]] = relationship(back_populates="order", cascade="all, delete-orphan")
     ledger_entries: Mapped[list["OrderStateLedger"]] = relationship(back_populates="order", cascade="all, delete-orphan")
