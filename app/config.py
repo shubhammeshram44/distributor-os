@@ -6,7 +6,7 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str = ""
 
     # SMS Provider Configuration
-    SMS_PROVIDER: str = "TWILIO"
+    SMS_PROVIDER: str = "MSG91"
     SMS_GATEWAY_API_KEY: str = "MOCK_KEY"
 
     # Allow configuration via environment variables or .env file

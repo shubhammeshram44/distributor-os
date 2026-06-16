@@ -7,8 +7,10 @@ to insulate database transactions from external failures.
 """
 
 import httpx
+import requests
 from app.services.sms_base import BaseSMSProvider
 from app.config import settings
+
 
 
 class TwilioSMSProvider(BaseSMSProvider):
@@ -73,43 +75,39 @@ class TwilioSMSProvider(BaseSMSProvider):
 class MSG91Provider(BaseSMSProvider):
     """
     MSG91 SMS gateway implementation.
-    Uses MSG91's Send OTP and Verify OTP REST APIs.
-    Requires SMS_GATEWAY_API_KEY to be set to the MSG91 authkey.
+    Uses MSG91's streamlined SendOTP and VerifyOTP REST API endpoints.
+    Accepts auth_key via constructor (injected by factory from settings).
     """
 
-    MSG91_SEND_URL = "https://control.msg91.com/api/v5/otp"
-    MSG91_VERIFY_URL = "https://control.msg91.com/api/v5/otp/verify"
-
-    def __init__(self):
-        self.api_key = settings.SMS_GATEWAY_API_KEY
+    def __init__(self, auth_key: str):
+        self.auth_key = auth_key
+        self.url = "https://control.msg91.com/api/v5/otp"
+        self.verify_url = "https://control.msg91.com/api/v5/otp/verify"
 
     def send_otp(self, mobile_number: str, otp_code: str) -> dict:
         """Send OTP via MSG91 OTP API."""
+        # Format the number for MSG91 (strip the '+' symbol as MSG91 expects pure country code + digits)
+        clean_mobile = mobile_number.replace("+", "")
+
+        payload = {
+            "otp": otp_code,
+            "mobile": clean_mobile
+        }
+        headers = {
+            "authkey": self.auth_key,
+            "Content-Type": "application/json"
+        }
+
         try:
-            with httpx.Client(timeout=10.0) as client:
-                resp = client.post(
-                    self.MSG91_SEND_URL,
-                    headers={"authkey": self.api_key},
-                    json={
-                        "mobile": mobile_number,
-                        "otp": otp_code,
-                        "otp_length": 6,
-                    },
-                )
-
-            if resp.status_code == 200:
-                data = resp.json()
-                if data.get("type") == "success":
-                    print(f"[MSG91] OTP sent to {mobile_number}")
-                    return {"success": True, "message": "OTP dispatched via MSG91"}
-                else:
-                    print(f"[MSG91] API responded with: {data}")
-                    return {"success": False, "message": f"MSG91 error: {data.get('message', 'unknown')}"}
+            response = requests.post(self.url, json=payload, headers=headers, timeout=10)
+            if response.status_code in [200, 202]:
+                print(f"[MSG91] OTP sent to {mobile_number}")
+                return {"success": True, "message": "OTP dispatched via MSG91"}
             else:
-                print(f"[MSG91] API error {resp.status_code}: {resp.text}")
-                return {"success": False, "message": f"MSG91 API error: {resp.status_code}"}
+                print(f"[MSG91] Error sending OTP: {response.text}")
+                raise Exception(f"MSG91 Gateway returned status {response.status_code}")
 
-        except httpx.TimeoutException:
+        except requests.exceptions.Timeout:
             print(f"[MSG91] Timeout sending OTP to {mobile_number}")
             return {"success": False, "message": "MSG91 request timed out"}
         except Exception as e:
@@ -118,30 +116,30 @@ class MSG91Provider(BaseSMSProvider):
 
     def verify_otp_gateway(self, mobile_number: str, otp_code: str) -> dict:
         """Verify OTP via MSG91's server-side verification endpoint."""
-        try:
-            with httpx.Client(timeout=10.0) as client:
-                resp = client.get(
-                    self.MSG91_VERIFY_URL,
-                    headers={"authkey": self.api_key},
-                    params={
-                        "mobile": mobile_number,
-                        "otp": otp_code,
-                    },
-                )
+        clean_mobile = mobile_number.replace("+", "")
 
-            if resp.status_code == 200:
-                data = resp.json()
+        try:
+            response = requests.get(
+                self.verify_url,
+                headers={"authkey": self.auth_key},
+                params={"mobile": clean_mobile, "otp": otp_code},
+                timeout=10
+            )
+
+            if response.status_code == 200:
+                data = response.json()
                 if data.get("type") == "success":
                     print(f"[MSG91] OTP verified for {mobile_number}")
                     return {"verified": True, "message": "OTP verified via MSG91"}
                 else:
                     return {"verified": False, "message": f"MSG91 verification failed: {data.get('message', 'unknown')}"}
             else:
-                return {"verified": False, "message": f"MSG91 verify API error: {resp.status_code}"}
+                return {"verified": False, "message": f"MSG91 verify API error: {response.status_code}"}
 
-        except httpx.TimeoutException:
+        except requests.exceptions.Timeout:
             print(f"[MSG91] Timeout verifying OTP for {mobile_number}")
             return {"verified": False, "message": "MSG91 verify request timed out"}
         except Exception as e:
             print(f"[MSG91] Unexpected error during verification: {e}")
             return {"verified": False, "message": f"MSG91 verification failed: {e}"}
+

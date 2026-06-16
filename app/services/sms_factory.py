@@ -29,7 +29,8 @@ def get_sms_gateway() -> BaseSMSProvider:
 
     elif provider_name == "MSG91":
         from app.services.sms_providers import MSG91Provider
-        return MSG91Provider()
+        return MSG91Provider(auth_key=settings.SMS_GATEWAY_API_KEY)
+
 
     else:
         raise ValueError(
