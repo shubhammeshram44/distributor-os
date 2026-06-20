@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { MessageSquare, Send, User, Phone, Layers, Radio, Sparkles } from "lucide-react";
+import { MessageSquare, Send, User, Phone, Radio, Sparkles, Inbox } from "lucide-react";
 
 interface Customer {
   id: string;
@@ -21,9 +21,8 @@ export default function WhatsAppSimulator({ activeTenantId, onSuccess }: WhatsAp
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [isLoadingCustomers, setIsLoadingCustomers] = useState(false);
   
-  // Simulation Inputs
   const [selectedCustomerId, setSelectedCustomerId] = useState("custom");
-  const [customName, setCustomName] = useState("New Store Test");
+  const [customName, setCustomName] = useState("Manual Operational Node");
   const [customPhone, setCustomPhone] = useState("+919999888877");
   const [messageText, setMessageText] = useState("Bhaiya, send 10 cases of Britannia Marie Gold and 5 cases of HUL Surf Excel immediately.");
   const [isSending, setIsSending] = useState(false);
@@ -49,8 +48,17 @@ export default function WhatsAppSimulator({ activeTenantId, onSuccess }: WhatsAp
 
         if (response.ok) {
           const data = await response.json();
-          // Adjust parsing logic based on endpoint array encapsulation structures
-          setCustomers(Array.isArray(data) ? data : data.items || []);
+          
+          // COMPATIBILITY GUARD: Explicitly handles flat arrays, .items, or .customers wrappers
+          if (Array.isArray(data)) {
+            setCustomers(data);
+          } else if (data.customers && Array.isArray(data.customers)) {
+            setCustomers(data.customers);
+          } else if (data.items && Array.isArray(data.items)) {
+            setCustomers(data.items);
+          } else {
+            setCustomers([]);
+          }
         }
       } catch (err) {
         console.error("Failed to sync client workspace entities into simulator:", err);
@@ -60,9 +68,8 @@ export default function WhatsAppSimulator({ activeTenantId, onSuccess }: WhatsAp
     };
 
     fetchWorkspaceCustomers();
-  }, [activeTenantId]);
+  }, [activeTenantId, isOpen]); // Re-fetch on open toggle for instant synchronization tracking
 
-  // Adjust inputs when choosing a live whitelisted customer option
   const handleCustomerSelection = (id: string) => {
     setSelectedCustomerId(id);
     if (id === "custom") {
@@ -101,12 +108,12 @@ export default function WhatsAppSimulator({ activeTenantId, onSuccess }: WhatsAp
                   contacts: [
                     {
                       profile: { name: customName },
-                      wa_id: customPhone.replace("+", "")
+                      wa_id: customPhone.replace("+", "").trim()
                     }
                   ],
                   messages: [
                     {
-                      from: customPhone.replace("+", ""),
+                      from: customPhone.replace("+", "").trim(),
                       id: `wamid.HBgLOTE5OTk5ODg4ODc3FQIAERgSQjRDQzhCQzNDQzRFQzVGMDVCAA==`,
                       timestamp: Math.floor(Date.now() / 1000).toString(),
                       text: { body: messageText },
@@ -131,12 +138,11 @@ export default function WhatsAppSimulator({ activeTenantId, onSuccess }: WhatsAp
 
       if (response.ok) {
         setMessageText("");
+        showToast?.("Ingestion simulation request sent successfully!", "success");
         if (onSuccess) onSuccess();
-      } else {
-        console.error("Simulation Webhook endpoint rejected payload configurations.");
       }
     } catch (err) {
-      console.error("Fatal operational connection issue mapping payload execution:", err);
+      console.error("Simulation connection error:", err);
     } finally {
       setIsSending(false);
     }
@@ -145,14 +151,14 @@ export default function WhatsAppSimulator({ activeTenantId, onSuccess }: WhatsAp
   return (
     <div className="fixed bottom-6 right-6 z-40 flex flex-col items-end">
       {isOpen && (
-        <div className="bg-white border border-slate-100 rounded-2xl shadow-2xl p-5 mb-3 w-96 animate-slide-up text-slate-700">
+        <div className="bg-white border border-slate-100 rounded-2xl shadow-2xl p-5 mb-3 w-96 text-slate-700 animate-in fade-in slide-in-from-bottom-4 duration-200">
           <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
             <Radio className="w-4 h-4 text-emerald-500 animate-pulse" />
             <h3 className="text-xs font-bold tracking-tight text-slate-800">WhatsApp Ingestion Pipeline Simulator</h3>
           </div>
 
-          <form onSubmit={handleFireWebhookSimulation} className="mt-4 space-y-3.5">
-            {/* Whitelisted Customer Dynamic Picker Context */}
+          <div className="mt-4 space-y-3.5">
+            {/* Whitelisted Customer Dropdown Selection */}
             <div className="space-y-1">
               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Target Ingest Profile</label>
               <select
@@ -164,18 +170,18 @@ export default function WhatsAppSimulator({ activeTenantId, onSuccess }: WhatsAp
                 {isLoadingCustomers ? (
                   <option disabled>Loading live whitelisted customers...</option>
                 ) : customers.length === 0 ? (
-                  <option disabled>No customers synced to active tenant</option>
+                  <option disabled>No customers found with phone numbers</option>
                 ) : (
                   customers.map((customer) => (
                     <option key={customer.id} value={customer.id}>
-                      👤 {customer.retailer_name} ({customer.phone_number || "No Phone Key"})
+                      👤 {customer.retailer_name} ({customer.phone_number || "No Phone Number Specified"})
                     </option>
                   ))
                 )}
               </select>
             </div>
 
-            {/* Custom Attributes Configuration Fields */}
+            {/* Custom Inputs */}
             <div className="grid grid-cols-2 gap-2.5">
               <div className="space-y-1">
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide flex items-center gap-1">
@@ -204,36 +210,32 @@ export default function WhatsAppSimulator({ activeTenantId, onSuccess }: WhatsAp
               </div>
             </div>
 
-            {/* Simulated Order Text Area */}
+            {/* Payload content text input */}
             <div className="space-y-1">
               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Order Content Payload</label>
               <textarea
                 rows={3}
                 value={messageText}
                 onChange={(e) => setMessageText(e.target.value)}
-                placeholder="Type unstructured order copy text logs..."
+                placeholder="Type unstructured order message text logs..."
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-medium text-slate-600 outline-none focus:border-emerald-500 transition-all resize-none leading-relaxed"
               />
             </div>
 
-            {/* Execution Dispatch Anchor */}
             <button
-              type="submit"
+              onClick={handleFireWebhookSimulation}
               disabled={isSending || !customPhone || !messageText}
               className="w-full bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Send className="w-3.5 h-3.5" />
               <span>{isSending ? "Processing AI Extraction..." : "Dispatch Ingestion Mock"}</span>
             </button>
-          </form>
+          </div>
         </div>
       )}
 
-      {/* Floating Toggle Button Core Wrapper */}
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="bg-emerald-600 hover:bg-emerald-500 text-white rounded-full p-3.5 shadow-2xl flex items-center justify-center transition-all hover:scale-105 active:scale-95"
-        title="Open WhatsApp Pipeline Simulator"
       >
         <MessageSquare className="w-5 h-5" />
       </button>
