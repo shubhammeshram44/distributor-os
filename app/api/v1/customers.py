@@ -6,7 +6,6 @@ from sqlalchemy.orm import Session
 from app.database import get_db, tenant_context
 from app.models.customer import Customer, CustomerAlias
 from app.models.ledger import CustomerLedger
-from app.api.v1.dashboard import ensure_demo_data
 
 router = APIRouter(prefix="/customers", tags=["Customers"])
 
@@ -84,7 +83,6 @@ def onboard_customer(
         payment_terms=payload.billing_terms,
         credit_limit=payload.credit_limit,
         outstanding_balance=0.0,
-        # FIXED: Directly stores phone information during ingestion lifecycle
         phone_number=payload.contact_number
     )
     db.add(new_cust)
@@ -109,18 +107,18 @@ def onboard_customer(
     }
 
 
-# FIXED: Added missing live query selection route mapping logic
 @router.get("", status_code=status.HTTP_200_OK)
 def list_customers(
     tenant_id: uuid.UUID,
     db: Session = Depends(get_db)
 ):
     """
-    Fetches real customer profiles synchronized from active workspace tenant data maps.
+    Fetches real customer profiles synchronized strictly from active database rows,
+    completely decoupled from historical demo-data generation overrides.
     """
     tenant_context.set(tenant_id)
-    ensure_demo_data(db, tenant_id) # Safe demo population fallback alignment execution pass
     
+    # CLEAN SELECT: Stripped out ensure_demo_data to prevent mock side effects
     records = db.query(Customer).filter(Customer.tenant_id == tenant_id).all()
     
     response_payload = []
@@ -135,8 +133,7 @@ def list_customers(
             "payment_terms": customer.payment_terms if customer.payment_terms else "Net 30",
             "credit_limit": float(customer.credit_limit) if customer.credit_limit else 0.0,
             "outstanding_balance": float(customer.outstanding_balance) if customer.outstanding_balance else 0.0,
-            # FIELD FORMAT UNIFICATION MARSHALING:
-            # Resolves parameters seamlessly so both simulator dropdowns and tables bind to active properties
+            # Explicitly forwards the true column state fields to the UI layer
             "phone": customer.phone_number if customer.phone_number else "N/A"
         })
         
@@ -149,7 +146,6 @@ def get_customer_statement(
     tenant_id: uuid.UUID,
     db: Session = Depends(get_db)
 ):
-    ensure_demo_data(db, tenant_id)
     tenant_context.set(tenant_id)
     
     customer = db.get(Customer, customer_id)
