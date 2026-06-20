@@ -13,3 +13,4 @@ reportlab==4.1.0
 psycopg2-binary>=2.9.9
 firebase-admin>=6.4.0
 requests>=2.31.0
+alembic>=1.13.0

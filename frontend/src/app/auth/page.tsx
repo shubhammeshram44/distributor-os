@@ -6,12 +6,16 @@ import { Phone, KeyRound, Loader2, ArrowRight, ShieldCheck, AlertCircle } from "
 import { RecaptchaVerifier, signInWithPhoneNumber, ConfirmationResult } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 
-function normalizePhone(input: string): string {
-  const raw = input.trim().replace(/[\s-]/g, "");
-  if (raw.startsWith("+")) return raw;
-  if (raw.startsWith("91") && raw.length === 12) return `+${raw}`;
-  if (raw.length === 10) return `+91${raw}`;
-  return `+${raw}`;
+function cleanAndNormalizePhone(input: string): string | null {
+  // Strip all non-digit components (spaces, dashes, parentheses, etc.)
+  const digits = input.replace(/\D/g, "");
+  if (digits.length === 10) {
+    return `+91${digits}`;
+  }
+  if (digits.length === 12 && digits.startsWith("91")) {
+    return `+91${digits.slice(2)}`;
+  }
+  return null;
 }
 
 export default function AuthPage() {
@@ -47,15 +51,14 @@ export default function AuthPage() {
     setError(null);
     setSuccessMessage(null);
 
-    const cleanMobile = mobileNumber.replace(/\D/g, "");
-    if (cleanMobile.length < 10) {
-      setError("Please enter a valid 10-digit mobile number.");
+    const e164 = cleanAndNormalizePhone(mobileNumber);
+    if (!e164) {
+      setError("Please enter a valid 10-digit Indian mobile number (e.g. 98765 43210).");
       return;
     }
 
     setLoading(true);
     try {
-      const e164 = normalizePhone(mobileNumber);
       const verifier = getRecaptchaVerifier();
       confirmationRef.current = await signInWithPhoneNumber(auth, e164, verifier);
       setSuccessMessage("Verification code sent to your phone.");
