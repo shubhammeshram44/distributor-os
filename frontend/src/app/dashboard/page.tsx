@@ -13,6 +13,17 @@ import { useDashboardData } from "@/hooks/useDashboardData";
 import { ChevronDown, SlidersHorizontal, RefreshCw, CheckCircle2, AlertCircle, X, Inbox } from "lucide-react";
 import WhatsAppSimulator from "@/components/WhatsAppSimulator";
 
+// Reusable micro-component to protect child components when data arrays are empty
+const InlineCardEmptyState = ({ title, description }: { title: string; description: string }) => (
+  <div className="flex flex-col items-center justify-center h-full w-full bg-white rounded-xl p-6 text-center border border-slate-100">
+    <div className="w-9 h-9 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 mb-2 border border-slate-100">
+      <Inbox className="w-4 h-4" />
+    </div>
+    <h4 className="text-xs font-bold text-slate-700">{title}</h4>
+    <p className="text-[11px] text-slate-400 max-w-[220px] mt-1 leading-normal">{description}</p>
+  </div>
+);
+
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState("Dashboard");
   const [tenantId, setTenantId] = useState("");
@@ -145,12 +156,6 @@ export default function DashboardPage() {
     isLoading
   } = useDashboardData(isHydrating ? "" : tenantId, startDate, endDate);
 
-  // Determine if backend analytical values are functionally empty
-  const hasNoData = 
-    !isLoading && 
-    (!recentOrders || recentOrders.length === 0) && 
-    (!activities || activities.length === 0);
-
   if (!tenantId || tenantId === "") {
     return (
       <div className="flex items-center justify-center min-h-screen bg-slate-50">
@@ -183,7 +188,7 @@ export default function DashboardPage() {
             </div>
           ) : (
             <>
-              {/* Dashboard Control Header */}
+              {/* Controls and Header Remain Unaltered and Viewable */}
               <div className="flex items-center justify-between">
                 <div>
                   <h1 className="text-xl font-bold text-slate-800 tracking-tight">Dashboard</h1>
@@ -239,185 +244,130 @@ export default function DashboardPage() {
                           className="text-xs font-semibold text-slate-600 bg-transparent focus:outline-none cursor-pointer"
                         />
                       </div>
-                      {(startDate || endDate) && (
-                        <button
-                          onClick={() => {
-                            setStartDate("");
-                            setEndDate("");
-                          }}
-                          className="p-1.5 text-slate-400 hover:text-slate-600 bg-white border border-dashboard-border rounded-lg shadow-sm"
-                          title="Clear date filters"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      )}
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* DYNAMIC VIEW INTERCEPTOR: Handle Empty State Explicitly */}
-              {hasNoData ? (
-                <div className="flex flex-col items-center justify-center bg-white border border-dashed border-slate-200 rounded-2xl p-16 text-center shadow-sm min-h-[450px] w-full">
-                  <div className="w-12 h-12 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 mb-4 border border-slate-100">
-                    <Inbox className="w-6 h-6" />
-                  </div>
-                  <h3 className="text-sm font-bold text-slate-800">No Ingested Data Streams</h3>
-                  <p className="text-xs text-slate-400 max-w-sm mt-1.5 leading-relaxed">
-                    This workspace environment is configured correctly, but hasn't received transaction details yet. Use the WhatsApp Simulator panel to ingest sample audio entries or text logs.
-                  </p>
+              {/* A. Core Operational Metrics Row - Displays zero states cleanly */}
+              <MetricCards metrics={metrics} />
+
+              {/* B. Split Middle Pane - Row 2 */}
+              <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+                
+                {/* Left Col: Recent Orders Card Frame */}
+                <div className="lg:col-span-3 h-[340px]">
+                  {isLoading ? (
+                    <div className="bg-white p-5 rounded-xl border border-dashboard-border shadow-sm flex flex-col h-full justify-between">
+                      <div className="h-6 bg-slate-100 rounded animate-pulse w-32" />
+                      <div className="flex-1 space-y-4 my-2">
+                        <div className="h-5 bg-slate-100 rounded w-full animate-pulse" />
+                        <div className="h-5 bg-slate-50 rounded w-full animate-pulse" />
+                      </div>
+                    </div>
+                  ) : !recentOrders || recentOrders.length === 0 ? (
+                    <InlineCardEmptyState 
+                      title="No Recent Orders Found" 
+                      description="WhatsApp incoming order receipts or structured catalog checkout text pipelines haven't logged entries yet."
+                    />
+                  ) : (
+                    <RecentOrders
+                      orders={recentOrders}
+                      fetchOrderDetails={fetchOrderDetails}
+                      selectedOrderDetails={selectedOrderDetails}
+                      loadingDetails={loadingDetails}
+                      closeDetails={closeDetails}
+                      onSuccess={(msg) => { showToast(msg, "success"); refreshAll(); }}
+                      onError={(msg) => showToast(msg, "error")}
+                      activeTenantId={tenantId}
+                      viewAllHref="/dashboard/orders"
+                    />
+                  )}
                 </div>
-              ) : (
-                <>
-                  {/* A. Core Operational Metrics Row */}
-                  <MetricCards metrics={metrics} />
 
-                  {/* B. Split Middle Pane - Row 2 */}
-                  <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-                    <div className="lg:col-span-3 h-[340px]">
-                      {isLoading ? (
-                        <div className="bg-white p-5 rounded-xl border border-dashboard-border shadow-sm flex flex-col h-full justify-between">
-                          <div className="flex items-center justify-between pb-4 border-b border-dashboard-border mb-4">
-                            <div className="h-6 bg-slate-100 rounded animate-pulse w-32" />
-                            <div className="h-4 bg-slate-100 rounded animate-pulse w-16" />
-                          </div>
-                          <div className="flex-1 space-y-4 my-2">
-                            <div className="h-5 bg-slate-100 rounded w-full animate-pulse" />
-                            <div className="h-5 bg-slate-50 rounded w-full animate-pulse" />
-                            <div className="h-5 bg-slate-50 rounded w-full animate-pulse" />
-                          </div>
-                        </div>
-                      ) : (
-                        <RecentOrders
-                          orders={recentOrders}
-                          fetchOrderDetails={fetchOrderDetails}
-                          selectedOrderDetails={selectedOrderDetails}
-                          loadingDetails={loadingDetails}
-                          closeDetails={closeDetails}
-                          onSuccess={(msg) => {
-                            showToast(msg, "success");
-                            refreshAll();
-                          }}
-                          onError={(msg) => {
-                            showToast(msg, "error");
-                            console.error("Inventory/Order Adjustment Exception:", msg);
-                          }}
-                          activeTenantId={tenantId}
-                          viewAllHref="/dashboard/orders"
-                        />
-                      )}
+                {/* Right Col: Collections Donut Card Frame */}
+                <div className="lg:col-span-2 h-[340px]">
+                  {isLoading ? (
+                    <div className="bg-white p-5 rounded-xl border border-dashboard-border shadow-sm flex flex-col h-full justify-between">
+                      <div className="h-6 bg-slate-100 rounded animate-pulse w-40" />
+                      <div className="w-28 h-28 rounded-full border-8 border-slate-100 mx-auto animate-pulse" />
                     </div>
+                  ) : !donutData || donutData.length === 0 ? (
+                    <InlineCardEmptyState 
+                      title="No Outstanding Balance Records" 
+                      description="Payment aging charts ledger data splits will construct once ledger invoices populate outstanding summaries."
+                    />
+                  ) : (
+                    <CollectionsDonut
+                      data={donutData}
+                      viewReportHref="/dashboard/collections"
+                      overdue60Count={metrics?.overdue_60_count}
+                    />
+                  )}
+                </div>
+              </div>
 
-                    <div className="lg:col-span-2 h-[340px]">
-                      {isLoading ? (
-                        <div className="bg-white p-5 rounded-xl border border-dashboard-border shadow-sm flex flex-col h-full justify-between">
-                          <div className="flex items-center justify-between pb-3 border-b border-dashboard-border mb-3">
-                            <div className="h-6 bg-slate-100 rounded animate-pulse w-40" />
-                            <div className="h-4 bg-slate-100 rounded animate-pulse w-16" />
-                          </div>
-                          <div className="flex flex-col sm:flex-row lg:flex-col xl:flex-row items-center justify-between gap-4 py-1 flex-1">
-                            <div className="relative w-36 h-36 flex items-center justify-center">
-                              <div className="w-28 h-28 rounded-full border-8 border-slate-100 animate-pulse" />
-                            </div>
-                            <div className="flex-1 space-y-2.5 w-full">
-                              <div className="h-4 bg-slate-100 rounded w-full animate-pulse" />
-                              <div className="h-4 bg-slate-100 rounded w-5/6 animate-pulse" />
-                            </div>
-                          </div>
-                        </div>
-                      ) : (
-                        <CollectionsDonut
-                          data={donutData}
-                          viewReportHref="/dashboard/collections"
-                          overdue60Count={metrics?.overdue_60_count}
-                        />
-                      )}
+              {/* C. Operations Row 3 */}
+              <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+                <div className="lg:col-span-3 h-[280px]">
+                  {isLoading ? (
+                    <div className="bg-white p-5 rounded-xl border border-dashboard-border shadow-sm flex flex-col h-full justify-between">
+                      <div className="h-4 bg-slate-100 rounded w-24 animate-pulse" />
                     </div>
+                  ) : !metrics ? (
+                    <InlineCardEmptyState 
+                      title="Inventory Analytics Unavailable" 
+                      description="Connect a read-only database tracking anchor or ERP integration node to read live ledger distributions."
+                    />
+                  ) : (
+                    <InventorySummary data={metrics} />
+                  )}
+                </div>
+
+                {/* Coming Soon Feature Card Block Frame */}
+                <div className="lg:col-span-2 relative border border-slate-100 rounded-2xl p-6 bg-white overflow-hidden h-[280px]">
+                  <div className="absolute inset-0 bg-slate-50/60 backdrop-blur-[2px] z-10 flex flex-col items-center justify-center text-center p-4">
+                    <span className="bg-blue-50 text-blue-700 text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-1 rounded-full mb-2 shadow-sm border border-blue-100">
+                      Coming Soon
+                    </span>
+                    <p className="text-xs font-bold text-slate-700">Real-Time Driver GPS Tracking</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5 max-w-[200px]">Lightweight PWA driver location tracking rails are under development.</p>
                   </div>
-
-                  {/* C. Operations Row 3 */}
-                  <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-                    <div className="lg:col-span-3 h-[280px]">
-                      {isLoading ? (
-                        <div className="bg-white p-5 rounded-xl border border-dashboard-border shadow-sm flex flex-col h-full justify-between">
-                          <div className="flex items-center justify-between pb-3 border-b border-dashboard-border mb-3">
-                            <div className="h-6 bg-slate-100 rounded animate-pulse w-36" />
-                            <div className="h-4 bg-slate-100 rounded animate-pulse w-16" />
-                          </div>
-                          <div className="flex-1 space-y-3.5 py-2">
-                            {[...Array(4)].map((_, i) => (
-                              <div key={i} className="flex justify-between items-center">
-                                <div className="h-4 bg-slate-100 rounded w-24 animate-pulse" />
-                                <div className="h-4 bg-slate-100 rounded w-12 animate-pulse" />
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ) : (
-                        <InventorySummary data={metrics || undefined} />
-                      )}
-                    </div>
-
-                    <div className="lg:col-span-2 relative border border-slate-100 rounded-2xl p-6 bg-white overflow-hidden h-[280px]">
-                      <div className="absolute inset-0 bg-slate-50/60 backdrop-blur-[2px] z-10 flex flex-col items-center justify-center text-center p-4">
-                        <span className="bg-blue-50 text-blue-700 text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-1 rounded-full mb-2 shadow-sm border border-blue-100">
-                          Coming Soon
-                        </span>
-                        <p className="text-xs font-bold text-slate-700">Real-Time Driver GPS Tracking</p>
-                        <p className="text-[11px] text-slate-400 mt-0.5 max-w-[200px]">Lightweight PWA integration with browser-native HTML5 location tracking is on the immediate horizon.</p>
-                      </div>
-                      <div className="opacity-25 pointer-events-none h-full">
-                        <LiveDeliveries viewAllHref="/dashboard/shipments" />
-                      </div>
-                    </div>
+                  <div className="opacity-25 pointer-events-none h-full">
+                    <LiveDeliveries viewAllHref="/dashboard/shipments" />
                   </div>
+                </div>
+              </div>
 
-                  {/* D. Audit Log Row 4 */}
-                  <div className="w-full">
-                    {isLoading ? (
-                      <div className="bg-white p-5 rounded-xl border border-dashboard-border shadow-sm flex flex-col justify-between">
-                        <div className="flex items-center justify-between pb-3 border-b border-dashboard-border mb-3">
-                          <div className="h-6 bg-slate-100 rounded animate-pulse w-32" />
-                        </div>
-                        <div className="space-y-4 my-2 flex-1">
-                          <div className="h-5 bg-slate-100 rounded w-full animate-pulse" />
-                        </div>
-                      </div>
-                    ) : (
-                      <ActivityFeed activities={activities} viewAllHref="/dashboard/reports" />
-                    )}
+              {/* D. Audit Log Row 4 */}
+              <div className="w-full">
+                {isLoading ? (
+                  <div className="bg-white p-5 rounded-xl border border-dashboard-border shadow-sm">
+                    <div className="h-5 bg-slate-100 rounded w-full animate-pulse" />
                   </div>
-                </>
-              )}
+                ) : !activities || activities.length === 0 ? (
+                  <div className="bg-white border border-slate-100 rounded-xl p-8 text-center text-xs font-semibold text-slate-400">
+                    No active internal webhook system audit logging items mapped yet.
+                  </div>
+                ) : (
+                  <ActivityFeed activities={activities} viewAllHref="/dashboard/reports" />
+                )}
+              </div>
             </>
           )}
         </main>
       </div>
 
-      <WhatsAppSimulator
-        activeTenantId={tenantId}
-        onSuccess={refreshAll}
-      />
+      <WhatsAppSimulator activeTenantId={tenantId} onSuccess={refreshAll} />
 
+      {/* Floating System Toast Alerts */}
       {toast.show && (
-        <div className="fixed top-5 right-5 z-50 flex items-center gap-3 bg-white/95 backdrop-blur-md border border-slate-100 shadow-2xl px-4 py-3.5 rounded-xl animate-slide-in pointer-events-auto max-w-sm">
-          {toast.type === "success" ? (
-            <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0 shadow-sm">
-              <CheckCircle2 className="w-4.5 h-4.5" />
-            </div>
-          ) : (
-            <div className="w-8 h-8 rounded-full bg-rose-50 flex items-center justify-center text-rose-600 shrink-0 shadow-sm">
-              <AlertCircle className="w-4.5 h-4.5" />
-            </div>
-          )}
+        <div className="fixed top-5 right-5 z-50 flex items-center gap-3 bg-white/95 backdrop-blur-md border border-slate-100 shadow-2xl px-4 py-3.5 rounded-xl pointer-events-auto max-w-sm">
           <div className="flex-1 min-w-0">
             <p className="text-xs font-bold text-slate-800">{toast.type === "success" ? "Success" : "Error"}</p>
             <p className="text-[11px] text-slate-500 font-semibold mt-0.5 break-words">{toast.message}</p>
           </div>
-          <button 
-            onClick={() => setToast(prev => ({ ...prev, show: false }))}
-            className="text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-50 transition-all shrink-0"
-          >
+          <button onClick={() => setToast(prev => ({ ...prev, show: false }))} className="text-slate-400 hover:text-slate-600">
             <X className="w-3.5 h-3.5" />
           </button>
         </div>
