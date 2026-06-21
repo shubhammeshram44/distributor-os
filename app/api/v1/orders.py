@@ -1,5 +1,7 @@
 import uuid
 import io
+import logging
+import typing
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
@@ -13,6 +15,8 @@ from app.models.customer import Customer
 from app.models.ledger import CustomerLedger
 from app.models.invoice import Invoice
 from app.models.inventory import Inventory
+
+logger = logging.getLogger(__name__)
 
 
 class OrderResponse(BaseModel):
@@ -764,6 +768,63 @@ def create_order(
         "order_id": str(new_order.id),
         "internal_order_id": generated_order_id,
         "new_status": payload.status
+    }
+
+
+class OrderPatchPayload(BaseModel):
+    invoice_type: typing.Literal["GST_TAX_INVOICE", "RETAIL_CASH_INVOICE", "UNSPECIFIED"]
+
+
+@router.patch("/{order_id}", status_code=status.HTTP_200_OK)
+def patch_order(
+    order_id: uuid.UUID,
+    payload: OrderPatchPayload,
+    access_token: str | None = Cookie(None),
+    authorization: str | None = Header(None),
+    db: Session = Depends(get_db)
+):
+    """
+    Updates the invoice type preference for an order.
+    """
+    import typing
+    from app.utils.security import verify_jwt
+    from app.models.user import User
+
+    token = None
+    if access_token:
+        token = access_token
+    elif authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ")[1]
+
+    current_user = None
+    if token:
+        try:
+            token_payload = verify_jwt(token)
+            if token_payload and "user_id" in token_payload:
+                current_user = db.get(User, uuid.UUID(token_payload["user_id"]))
+        except Exception:
+            pass
+
+    if not current_user:
+        current_user = type('User', (object,), {'id': 'SYSTEM'})()
+
+    order = db.get(Order, order_id)
+    if not order:
+        raise HTTPException(
+            status_code=404,
+            detail="Order not found"
+        )
+
+    tenant_context.set(order.tenant_id)
+    order.invoice_type = payload.invoice_type
+
+    logger.info(f"INVOICE_TYPE_CHANGE: order_id={order_id} new_type={payload.invoice_type} user={current_user.id}")
+
+    db.commit()
+    return {
+        "status": "success",
+        "order_id": str(order.id),
+        "invoice_type": order.invoice_type
     }
 
 

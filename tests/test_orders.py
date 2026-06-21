@@ -709,3 +709,51 @@ def test_create_order_from_payload(db_session, client):
     assert line_items[0].product_id == prod.id
     assert line_items[0].quantity == 5
     assert line_items[0].unit_price == 50.0
+
+
+def test_patch_order_invoice_type(db_session, client):
+    # Setup Tenant
+    tenant = DistributorTenant(name="Patch Order Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+
+    tenant_context.set(tenant.id)
+
+    # Setup Customer
+    cust = Customer(
+        retailer_name="Patch Order Stores",
+        customer_id="C-PATCH-1",
+        address_text="Test Address",
+        gstin="29AAAAA1111A1Z1",
+        tax_group="GST-18",
+        payment_terms="0-15 Days"
+    )
+    db_session.add(cust)
+    db_session.flush()
+
+    # Setup Order
+    order = Order(
+        tenant_id=tenant.id,
+        internal_order_id="ORD-PATCH-1",
+        source="WhatsApp",
+        customer_id=cust.id,
+        invoice_type="UNSPECIFIED"
+    )
+    db_session.add(order)
+    db_session.commit()
+
+    # 1. Success Patch
+    response = client.patch(f"/api/v1/orders/{order.id}", json={"invoice_type": "GST_TAX_INVOICE"})
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["invoice_type"] == "GST_TAX_INVOICE"
+
+    # Verify db updated
+    db_session.refresh(order)
+    assert order.invoice_type == "GST_TAX_INVOICE"
+
+    # 2. Validation Failure
+    response_fail = client.patch(f"/api/v1/orders/{order.id}", json={"invoice_type": "INVALID_TYPE"})
+    assert response_fail.status_code == 422
+

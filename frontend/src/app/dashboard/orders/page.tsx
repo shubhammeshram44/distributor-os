@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import Sidebar from "@/components/Sidebar";
 import DashboardHeader from "@/components/DashboardHeader";
+import { InvoiceTypes, InvoiceType } from "@/types/order";
 import {
   Search,
   Loader2,
@@ -40,6 +41,7 @@ interface OrderRow {
   eta: string;
   payment_status: string;
   amount_paid: number;
+  invoice_type: InvoiceType;
 }
 
 export default function OrdersPage() {
@@ -49,6 +51,7 @@ export default function OrdersPage() {
   const [selectedStatus, setSelectedStatus] = useState<"All" | "Pending" | "Confirmed" | "Needs Review">("All");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isEditingInvoiceType, setIsEditingInvoiceType] = useState(false);
 
   // Drawer States
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
@@ -182,12 +185,14 @@ export default function OrdersPage() {
   };
 
   const handleOrderIdClick = async (order: OrderRow) => {
+    setIsEditingInvoiceType(false);
     setSelectedOrderId(order.id);
     setSelectedOrderNo(order.order_id);
     await fetchOrderDetails(order.id);
   };
 
   const handleCloseDetails = () => {
+    setIsEditingInvoiceType(false);
     setSelectedOrderId(null);
     setSelectedOrderDetails(null);
     setSelectedOrderPayments(null);
@@ -245,6 +250,58 @@ export default function OrdersPage() {
       showToast("Network connection breakdown during order item resolution.", "error");
     } finally {
       setResolvingItemId(null);
+    }
+  };
+
+  const handleUpdateInvoiceType = async (orderId: string, newType: InvoiceType) => {
+    const previousOrderState = [...orders];
+
+    setOrders(prevOrders =>
+      prevOrders.map(o => (o.id === orderId ? { ...o, invoice_type: newType } : o))
+    );
+
+    try {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const response = await fetch(`${apiBase}/api/v1/orders/${orderId}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ invoice_type: newType })
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to update invoice type.");
+      }
+      showToast("Invoice type updated successfully!", "success");
+    } catch (err: any) {
+      console.error("Failed to update invoice type:", err);
+      setOrders(previousOrderState);
+      showToast(err.message || "Failed to update invoice type.", "error");
+    } finally {
+      setIsEditingInvoiceType(false);
+    }
+  };
+
+  const renderInvoiceTypeBadge = (type: InvoiceType) => {
+    switch (type) {
+      case InvoiceTypes.GST:
+        return (
+          <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-full text-xs font-bold leading-none bg-purple-50 text-purple-700 border border-purple-200 shadow-sm">
+            GST Bill
+          </span>
+        );
+      case InvoiceTypes.NORMAL:
+        return (
+          <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-full text-xs font-bold leading-none bg-blue-50 text-blue-700 border border-blue-200 shadow-sm">
+            Normal Bill
+          </span>
+        );
+      default:
+        return (
+          <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-full text-xs font-bold leading-none bg-slate-50 text-slate-500 border border-slate-200 shadow-sm">
+            Unspecified
+          </span>
+        );
     }
   };
 
@@ -437,6 +494,7 @@ export default function OrdersPage() {
                       <th className="py-3 px-6 text-right">Amount</th>
                       <th className="py-3 px-6 text-center">Status</th>
                       <th className="py-3 px-6 text-center">PAYMENT</th>
+                      <th className="py-3 px-6 text-center">Invoice Type</th>
                       <th className="py-3 px-6">Created On</th>
                       <th className="py-3 px-6 text-right">Actions</th>
                     </tr>
@@ -497,6 +555,9 @@ export default function OrdersPage() {
                               : "🔴 Unpaid"}
                           </span>
                         </td>
+                        <td className="py-4 px-6 text-center">
+                          {renderInvoiceTypeBadge(order.invoice_type)}
+                        </td>
                         <td className="py-4 px-6 text-xs font-semibold text-slate-500">
                           {order.created_on}
                         </td>
@@ -548,6 +609,48 @@ export default function OrdersPage() {
                 </div>
               ) : selectedOrderDetails ? (
                 <>
+                  {/* Order Overview / Settings */}
+                  <div className="bg-slate-50/50 border border-dashboard-border rounded-xl p-4 mb-4 space-y-3 relative z-30">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Retailer</span>
+                      <span className="text-sm font-bold text-slate-700">{selectedOrder?.customer}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Channel</span>
+                      <span className="text-xs font-bold text-slate-700 capitalize">{selectedOrder?.channel}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-400 uppercase tracking-wider font-semibold">Invoice Type</span>
+                      <div className="flex items-center gap-2">
+                        {isEditingInvoiceType ? (
+                          <select
+                            value={selectedOrder?.invoice_type || InvoiceTypes.UNSPECIFIED}
+                            onChange={(e) => {
+                              if (selectedOrderId) {
+                                handleUpdateInvoiceType(selectedOrderId, e.target.value as InvoiceType);
+                              }
+                            }}
+                            className="p-1 border border-slate-200 rounded-lg text-xs bg-white text-slate-700 font-bold focus:outline-none focus:ring-2 focus:ring-brand-blue cursor-pointer z-40 relative shadow-sm"
+                          >
+                            <option value={InvoiceTypes.GST}>GST Tax Invoice</option>
+                            <option value={InvoiceTypes.NORMAL}>Normal Cash Bill</option>
+                            <option value={InvoiceTypes.UNSPECIFIED}>Unspecified</option>
+                          </select>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            {renderInvoiceTypeBadge(selectedOrder?.invoice_type || InvoiceTypes.UNSPECIFIED)}
+                            <button
+                              onClick={() => setIsEditingInvoiceType(true)}
+                              className="text-xs font-bold text-brand-blue hover:text-brand-blueHover hover:underline focus:outline-none cursor-pointer"
+                            >
+                              Edit
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
                   <h4 className="font-bold text-slate-800 text-sm border-b pb-2 mb-3">Line Items</h4>
                   {selectedOrderDetails.map((item, idx) => {
                     const isUnmatched = item.sku_id === "UNMATCHED_SKU" || item.sku_id === "UNMATCHED_TRIAGE_SKU";
