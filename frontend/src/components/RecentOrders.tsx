@@ -258,7 +258,7 @@ export default function RecentOrders({
                 <>
                   <h4 className="font-bold text-slate-800 text-sm border-b pb-2 mb-3">Line Items</h4>
                   {selectedOrderDetails.map((item, idx) => {
-                    const isUnmatched = item.sku_id === "UNMATCHED_SKU";
+                    const isUnmatched = item.sku_id === "UNMATCHED_SKU" || item.sku_id === "UNMATCHED_TRIAGE_SKU";
                     return (
                       <div key={idx} className="p-4 rounded-xl border border-dashboard-border bg-slate-50/50 flex flex-col justify-between gap-2">
                         <div className="flex items-start justify-between">

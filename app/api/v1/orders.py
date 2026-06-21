@@ -56,7 +56,13 @@ def list_orders(
 
         # Status badge conversion: Draft = "Pending", Confirmed = "Confirmed", Needs Review = "Needs Review"
         status_raw = o.current_status
-        status_resolved = "Pending" if status_raw == "Draft" else status_raw
+        has_triage_sku = any(
+            db.get(Product, item.product_id) is not None and db.get(Product, item.product_id).sku_id == "UNMATCHED_TRIAGE_SKU"
+            for item in o.line_items
+        )
+        if has_triage_sku:
+            status_raw = "NEEDS_REVIEW"
+        status_resolved = "Pending" if status_raw == "Draft" else ("Needs Review" if status_raw == "NEEDS_REVIEW" else status_raw)
 
         # Payment status attributes
         payment_status = o.payment_status if o.payment_status != "UNPAID" else (inv.payment_status if inv else "UNPAID")
