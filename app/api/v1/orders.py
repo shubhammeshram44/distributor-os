@@ -70,13 +70,19 @@ def list_orders(
     resolved_tenant_id = resolve_tenant_id(tenant_id, access_token, authorization)
     ensure_demo_data(db, resolved_tenant_id)
     tenant_context.set(resolved_tenant_id)
-    orders_invoices = (
-        db.query(Order, Invoice)
+    from sqlalchemy.orm import joinedload
+    from sqlalchemy import select
+
+    query = (
+        select(Order, Invoice)
         .outerjoin(Invoice, Invoice.order_id == Order.id)
+        .options(
+            joinedload(Order.line_items).joinedload(OrderLineItem.product)
+        )
         .filter(Order.tenant_id == resolved_tenant_id)
         .order_by(Order.created_at.desc())
-        .all()
     )
+    orders_invoices = db.execute(query).unique().all()
     results = []
     
     for o, inv in orders_invoices:
@@ -89,7 +95,7 @@ def list_orders(
         # Status badge conversion: Draft = "Pending", Confirmed = "Confirmed", Needs Review = "Needs Review"
         status_raw = o.current_status
         has_triage_sku = any(
-            db.get(Product, item.product_id) is not None and db.get(Product, item.product_id).sku_id == "UNMATCHED_TRIAGE_SKU"
+            item.product is not None and item.product.sku_id == "UNMATCHED_TRIAGE_SKU"
             for item in o.line_items
         )
         if has_triage_sku:

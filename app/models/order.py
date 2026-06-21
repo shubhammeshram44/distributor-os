@@ -96,6 +96,7 @@ class OrderLineItem(Base, TenantMixin):
     unit_price: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
 
     order: Mapped[Order] = relationship(back_populates="line_items")
+    product: Mapped["Product"] = relationship()
 
 class OrderStateLedger(Base, TenantMixin):
     __tablename__ = "order_state_ledger"
