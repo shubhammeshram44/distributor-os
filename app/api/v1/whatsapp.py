@@ -63,14 +63,47 @@ def handle_whatsapp_webhook(
         print("=====================================================================\n")
 
         # 2. Tenant Resolution Layer
-        resolved_tenant_id = canonical_msg.tenant_id or DEMO_TENANT_ID
-        if receiver_phone:
-            tenant = db.query(DistributorTenant).filter(DistributorTenant.whatsapp_order_phone == receiver_phone).first()
+        bot_phone_id = None
+        extra = getattr(payload, "model_extra", None) or {}
+        entry = extra.get("entry")
+        if not entry and isinstance(payload, dict):
+            entry = payload.get("entry")
+        
+        if entry and isinstance(entry, list) and len(entry) > 0:
+            changes = entry[0].get("changes", [])
+            if changes and isinstance(changes, list) and len(changes) > 0:
+                value = changes[0].get("value", {})
+                if value and isinstance(value, dict):
+                    msg_metadata = value.get("metadata", {})
+                    bot_phone_id = msg_metadata.get("phone_number_id")
+
+        if bot_phone_id:
+            tenant = db.query(DistributorTenant).filter(DistributorTenant.whatsapp_phone_id == bot_phone_id).first()
             if tenant:
                 resolved_tenant_id = tenant.id
+            else:
+                if canonical_msg.tenant_id:
+                    resolved_tenant_id = canonical_msg.tenant_id
+                else:
+                    logger.warning("[Ingestion - %s] Webhook message dropped: No tenant found with whatsapp_phone_id=%s", correlation_id, bot_phone_id)
+                    return {
+                        "status": "ignored",
+                        "message": f"No tenant found for phone_number_id: {bot_phone_id}",
+                        "job_id": None,
+                        "successful_rows": 0,
+                        "failed_rows": 0,
+                        "error_message": None
+                    }
+        else:
+            resolved_tenant_id = canonical_msg.tenant_id or DEMO_TENANT_ID
+            if receiver_phone:
+                tenant = db.query(DistributorTenant).filter(DistributorTenant.whatsapp_order_phone == receiver_phone).first()
+                if tenant:
+                    resolved_tenant_id = tenant.id
         
         logger.info("[Ingestion - %s] Resolved active Tenant ID: %s", correlation_id, resolved_tenant_id)
         tenant_context.set(resolved_tenant_id)
+
 
         # 3. Phone Number Normalization Layer
         normalized_phone = normalize_phone_number(phone)

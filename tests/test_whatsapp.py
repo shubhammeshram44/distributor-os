@@ -231,3 +231,224 @@ def test_whatsapp_webhook_success(db_session, client):
     assert data["failed_rows"] == 0
     assert data["successful_rows"] == 1
 
+
+def test_whatsapp_integrations_endpoints(db_session, client):
+    # 1. Setup Tenant
+    tenant = DistributorTenant(name="Integration Test Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+    
+    # 2. Call PATCH endpoint
+    patch_payload = {
+        "whatsapp_phone_id": "test-phone-id-12345",
+        "whatsapp_access_token": "super-secret-token-value-999"
+    }
+    response = client.patch(
+        f"/api/v1/tenant/integrations/whatsapp?tenant_id={tenant.id}",
+        json=patch_payload
+    )
+    assert response.status_code == 200
+    assert response.json()["status"] == "success"
+    
+    # Verify DB update
+    db_session.refresh(tenant)
+    assert tenant.whatsapp_phone_id == "test-phone-id-12345"
+    assert tenant.whatsapp_access_token == "super-secret-token-value-999"
+    
+    # 3. Call GET endpoint
+    response = client.get(f"/api/v1/tenant/integrations/whatsapp?tenant_id={tenant.id}")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["whatsapp_phone_id"] == "test-phone-id-12345"
+    # Token must be masked (Correction 1)
+    assert data["whatsapp_access_token"].startswith("•")
+    assert data["whatsapp_access_token"].endswith("-999")
+    
+    # 4. Call PATCH again with masked token (Correction 1)
+    patch_payload_masked = {
+        "whatsapp_phone_id": "test-phone-id-modified",
+        "whatsapp_access_token": data["whatsapp_access_token"]
+    }
+    response = client.patch(
+        f"/api/v1/tenant/integrations/whatsapp?tenant_id={tenant.id}",
+        json=patch_payload_masked
+    )
+    assert response.status_code == 200
+    
+    # Verify that phone ID is updated, but access token is NOT updated or overwritten by mask
+    db_session.refresh(tenant)
+    assert tenant.whatsapp_phone_id == "test-phone-id-modified"
+    assert tenant.whatsapp_access_token == "super-secret-token-value-999"
+
+
+def test_whatsapp_webhook_dynamic_routing(db_session, client):
+    # 1. Setup Tenant with custom phone ID
+    tenant = DistributorTenant(name="Dynamic Routing Tenant", whatsapp_phone_id="bot-phone-555")
+    db_session.add(tenant)
+    db_session.commit()
+    
+    # Setup Customer
+    customer = Customer(
+        tenant_id=tenant.id,
+        retailer_name="Dynamic Retailer",
+        customer_id="CUST-DYN",
+        address_text="Delhi",
+        gstin="07AAAAA1111A1Z1",
+        tax_group="GST-18",
+        payment_terms="Net 15"
+    )
+    db_session.add(customer)
+    db_session.flush()
+    
+    alias = CustomerAlias(tenant_id=tenant.id, customer_id=customer.id, alias_value="+919999888877")
+    db_session.add(alias)
+    
+    product = Product(tenant_id=tenant.id, sku_id="PROD-HUL-SOAP", brand="HUL", category="Soap", pack_size="100g", base_price=45.00)
+    db_session.add(product)
+    db_session.flush()
+    
+    prod_alias = ProductAlias(tenant_id=tenant.id, product_id=product.id, alias_name="HUL Soap")
+    db_session.add(prod_alias)
+    db_session.commit()
+
+
+    # 2. Trigger webhook with Meta payload containing bot_phone_id
+    payload = {
+        "object": "whatsapp_business_account",
+        "entry": [
+            {
+                "id": "WHATSAPP_BUSINESS_ACCOUNT_ID",
+                "changes": [
+                    {
+                        "value": {
+                            "messaging_product": "whatsapp",
+                            "metadata": {
+                                "display_phone_number": "15555555555",
+                                "phone_number_id": "bot-phone-555"
+                            },
+                            "contacts": [
+                                {
+                                    "profile": { "name": "Dynamic Retailer" },
+                                    "wa_id": "919999888877"
+                                }
+                            ],
+                            "messages": [
+                                {
+                                    "from": "919999888877",
+                                    "id": "wamid.id123",
+                                    "timestamp": "1718873099",
+                                    "text": { "body": "Need 50 HUL Soap" },
+                                    "type": "text"
+                                }
+                            ]
+                        },
+                        "field": "messages"
+                    }
+                ]
+            }
+        ]
+    }
+    
+    response = client.post("/api/v1/whatsapp/webhook", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    
+    # Verify order is routed to Dynamic Routing Tenant
+    order = db_session.query(Order).filter_by(customer_id=customer.id).first()
+    assert order is not None
+    assert order.tenant_id == tenant.id
+
+
+def test_whatsapp_webhook_dynamic_routing_unmapped_dropped(db_session, client):
+    # 1. Trigger webhook with unmapped phone ID and no explicit tenant ID
+    payload = {
+        "object": "whatsapp_business_account",
+        "entry": [
+            {
+                "id": "WHATSAPP_BUSINESS_ACCOUNT_ID",
+                "changes": [
+                    {
+                        "value": {
+                            "messaging_product": "whatsapp",
+                            "metadata": {
+                                "display_phone_number": "15555555555",
+                                "phone_number_id": "bot-phone-unmapped"
+                            },
+                            "contacts": [
+                                {
+                                    "profile": { "name": "Dynamic Retailer" },
+                                    "wa_id": "919999888877"
+                                }
+                            ],
+                            "messages": [
+                                {
+                                    "from": "919999888877",
+                                    "id": "wamid.id123",
+                                    "timestamp": "1718873099",
+                                    "text": { "body": "Need 50 HUL Soap" },
+                                    "type": "text"
+                                }
+                            ]
+                        },
+                        "field": "messages"
+                    }
+                ]
+            }
+        ]
+    }
+    
+    response = client.post("/api/v1/whatsapp/webhook", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "ignored"
+    assert "No tenant found for phone_number_id" in data["message"]
+
+
+def test_whatsapp_outgoing_adapter_mocked(db_session, monkeypatch):
+    from app.services.whatsapp_adapter import send_whatsapp_message
+    
+    # Setup Tenant with custom credentials
+    tenant = DistributorTenant(
+        name="Adapter Test Tenant",
+        whatsapp_phone_id="phone-id-99",
+        whatsapp_access_token="token-99"
+    )
+    db_session.add(tenant)
+    db_session.commit()
+    
+    # Mock requests.post to capture the call details
+    called_url = None
+    called_headers = None
+    called_json = None
+    
+    class MockResponse:
+        def raise_for_status(self):
+            pass
+        def json(self):
+            return {"messaging_product": "whatsapp", "messages": [{"id": "wamid.test"}]}
+
+    def mock_post(url, json, headers, timeout):
+        nonlocal called_url, called_headers, called_json
+        called_url = url
+        called_headers = headers
+        called_json = json
+        return MockResponse()
+
+    import requests
+    monkeypatch.setattr(requests, "post", mock_post)
+    
+    res = send_whatsapp_message(
+        db=db_session,
+        tenant_id=tenant.id,
+        to_phone="+919999999999",
+        message_text="Hello adapter test"
+    )
+    
+    assert res == {"messaging_product": "whatsapp", "messages": [{"id": "wamid.test"}]}
+    assert called_url == "https://graph.facebook.com/v18.0/phone-id-99/messages"
+    assert called_headers["Authorization"] == "Bearer token-99"
+    assert called_json["to"] == "+919999999999"
+    assert called_json["text"]["body"] == "Hello adapter test"
+
+

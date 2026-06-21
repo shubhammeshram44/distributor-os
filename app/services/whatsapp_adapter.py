@@ -1,7 +1,11 @@
 import uuid
 import typing
 import logging
+import os
+import requests
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
+from app.models.tenant import DistributorTenant
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -111,3 +115,54 @@ def adapt_to_canonical(payload: typing.Any) -> CanonicalWhatsAppMessage:
         )
 
     raise ValueError("Unsupported webhook payload format")
+
+
+def send_whatsapp_message(
+    db: Session,
+    tenant_id: uuid.UUID,
+    to_phone: str,
+    message_text: str
+) -> dict:
+    """
+    Sends a WhatsApp message using Meta Graph API with dynamic multi-tenant credentials.
+    """
+    # 1. Fetch tenant from database
+    tenant = db.query(DistributorTenant).filter_by(id=tenant_id).first()
+    
+    # 2. Resolve credentials (dynamic fallback to env)
+    access_token = None
+    phone_number_id = None
+    if tenant:
+        access_token = tenant.whatsapp_access_token
+        phone_number_id = tenant.whatsapp_phone_id
+        
+    if not access_token:
+        access_token = os.getenv("WHATSAPP_ACCESS_TOKEN")
+    if not phone_number_id:
+        phone_number_id = os.getenv("WHATSAPP_PHONE_NUMBER_ID")
+        
+    if not access_token or not phone_number_id:
+        logger.error("Missing WhatsApp credentials for tenant %s. Cannot send message.", tenant_id)
+        raise ValueError("Missing WhatsApp credentials (access token or phone number ID)")
+
+    url = f"https://graph.facebook.com/v18.0/{phone_number_id}/messages"
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "messaging_product": "whatsapp",
+        "recipient_type": "individual",
+        "to": to_phone,
+        "type": "text",
+        "text": {
+            "preview_url": False,
+            "body": message_text
+        }
+    }
+    
+    logger.info("Sending WhatsApp message via Meta Graph API for tenant %s to %s", tenant_id, to_phone)
+    response = requests.post(url, json=payload, headers=headers, timeout=10)
+    response.raise_for_status()
+    return response.json()
+

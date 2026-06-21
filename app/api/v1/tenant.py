@@ -80,3 +80,68 @@ def update_tenant_profile(
             "category": tenant.category
         }
     }
+
+class WhatsAppConfigPayload(BaseModel):
+    whatsapp_phone_id: str = Field(..., min_length=1)
+    whatsapp_access_token: str = Field(..., min_length=1)
+
+@router.get("/integrations/whatsapp", status_code=status.HTTP_200_OK)
+def get_whatsapp_integration(
+    tenant_id: uuid.UUID | None = None,
+    access_token: str | None = Cookie(None),
+    authorization: str | None = Header(None),
+    db: Session = Depends(get_db)
+):
+    from app.services.tenant_service import resolve_tenant_id
+    resolved_tenant_id = resolve_tenant_id(tenant_id, access_token, authorization)
+    
+    tenant = db.get(DistributorTenant, resolved_tenant_id)
+    if not tenant:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Tenant not found."
+        )
+        
+    masked_token = ""
+    if tenant.whatsapp_access_token:
+        if len(tenant.whatsapp_access_token) >= 4:
+            masked_token = "•" * 12 + tenant.whatsapp_access_token[-4:]
+        else:
+            masked_token = "•" * 12
+            
+    return {
+        "status": "success",
+        "whatsapp_phone_id": tenant.whatsapp_phone_id or "",
+        "whatsapp_access_token": masked_token
+    }
+
+@router.patch("/integrations/whatsapp", status_code=status.HTTP_200_OK)
+def update_whatsapp_integration(
+    payload: WhatsAppConfigPayload,
+    tenant_id: uuid.UUID | None = None,
+    access_token: str | None = Cookie(None),
+    authorization: str | None = Header(None),
+    db: Session = Depends(get_db)
+):
+    from app.services.tenant_service import resolve_tenant_id
+    resolved_tenant_id = resolve_tenant_id(tenant_id, access_token, authorization)
+    
+    tenant = db.get(DistributorTenant, resolved_tenant_id)
+    if not tenant:
+        raise HTTPException(
+            status_code=status.HTTP_440_NOT_FOUND,
+            detail="Tenant not found."
+        )
+        
+    tenant.whatsapp_phone_id = payload.whatsapp_phone_id
+    
+    if not payload.whatsapp_access_token.startswith("•"):
+        tenant.whatsapp_access_token = payload.whatsapp_access_token
+        
+    db.commit()
+    
+    return {
+        "status": "success",
+        "message": "WhatsApp integration details updated successfully"
+    }
+

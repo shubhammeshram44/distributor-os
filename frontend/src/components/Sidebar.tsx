@@ -17,8 +17,10 @@ import {
   ChevronLeft,
   ChevronRight,
   MessageSquare,
-  Settings
+  Settings,
+  Link2
 } from "lucide-react";
+
 
 interface SidebarProps {
   activeTab: string;
@@ -63,9 +65,12 @@ export default function Sidebar({ activeTab, setActiveTab, tenantName }: Sidebar
     { name: "Collections", icon: CreditCard, href: "/dashboard/collections" },
     { name: "Sales Analytics", icon: BarChart3, href: "/dashboard/sales-analytics" },
     { name: "Reports", icon: FileText, href: "/dashboard/reports" },
+    { type: "category", name: "Settings" },
     { name: "Team Settings", icon: Settings, href: "/dashboard/settings/team" },
+    { name: "Integrations", icon: Link2, href: "/dashboard/settings/integrations" },
     { name: "Automations", icon: Zap }
   ];
+
 
   return (
     <aside className={`${isCollapsed ? 'w-16' : 'w-64'} bg-brand-dark text-white flex flex-col h-screen fixed left-0 top-0 border-r border-brand-darkHover z-20 transition-all duration-300 ease-in-out`}>
@@ -81,11 +86,20 @@ export default function Sidebar({ activeTab, setActiveTab, tenantName }: Sidebar
         )}
       </div>
 
-      {/* Navigation Links */}
       <nav className={`flex-1 ${isCollapsed ? 'px-2' : 'px-4'} py-6 space-y-1.5 overflow-y-auto`}>
         {menuItems.map((item) => {
+          if (item.type === "category") {
+            if (isCollapsed) return <div key={item.name} className="h-px bg-brand-darkHover my-4" />;
+            return (
+              <div key={item.name} className="px-4 pt-4 pb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                {item.name}
+              </div>
+            );
+          }
+
           const Icon = item.icon;
           const isActive = item.href
+
             ? (item.href === "/dashboard" ? pathname === "/dashboard" || pathname === "/" : pathname.startsWith(item.href))
             : activeTab === item.name;
 
