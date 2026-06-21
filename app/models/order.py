@@ -110,3 +110,16 @@ class OrderStateLedger(Base, TenantMixin):
     metadata_json: Mapped[dict | None] = mapped_column(JSON, nullable=True) # For partial fulfillments/shortfalls
 
     order: Mapped[Order] = relationship(back_populates="ledger_entries")
+
+
+class BulkJob(Base):
+    __tablename__ = "bulk_jobs"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    job_id: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    progress: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    status: Mapped[str] = mapped_column(String(50), default="PENDING", nullable=False)
+    result_link: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    metadata_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+

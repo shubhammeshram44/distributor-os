@@ -366,32 +366,7 @@ def resolve_order_item(
     }
 
 
-@router.get("/{order_id}/invoice")
-def get_order_invoice(
-    order_id: uuid.UUID,
-    db: Session = Depends(get_db)
-):
-    """
-    Generates a professional B2B tax invoice PDF for a confirmed order and streams it to the client.
-    """
-    # 1. Fetch the order
-    order = db.get(Order, order_id)
-    if not order:
-        raise HTTPException(
-            status_code=404,
-            detail="Order not found"
-        )
-
-    # Set tenant isolation context
-    tenant_context.set(order.tenant_id)
-
-    # 2. Restrict to Confirmed orders
-    if order.current_status != "Confirmed":
-        raise HTTPException(
-            status_code=400,
-            detail="Invoices can only be generated for Confirmed orders"
-        )
-
+def generate_invoice_pdf_bytes(order: Order, db: Session) -> bytes:
     # 3. Retrieve Tenant Info
     tenant = db.get(DistributorTenant, order.tenant_id)
     tenant_name = tenant.name if tenant else "S.V. Distributors"
@@ -399,13 +374,10 @@ def get_order_invoice(
     # 4. Retrieve Customer Info
     customer = db.get(Customer, order.customer_id)
     if not customer:
-        raise HTTPException(
-            status_code=404,
-            detail="Customer not found associated with this order"
-        )
+        raise ValueError("Customer not found associated with this order")
 
     # 5. Fetch order line items
-    items = db.query(OrderLineItem).filter(OrderLineItem.order_id == order_id).all()
+    items = db.query(OrderLineItem).filter(OrderLineItem.order_id == order.id).all()
 
     # 6. Generate PDF with reportlab
     buffer = io.BytesIO()
@@ -609,9 +581,44 @@ def get_order_invoice(
 
     # Build PDF
     doc.build(story)
-    
-    buffer.seek(0)
-    
+    return buffer.getvalue()
+
+
+@router.get("/{order_id}/invoice")
+def get_order_invoice(
+    order_id: uuid.UUID,
+    db: Session = Depends(get_db)
+):
+    """
+    Generates a professional B2B tax invoice PDF for a confirmed order and streams it to the client.
+    """
+    # 1. Fetch the order
+    order = db.get(Order, order_id)
+    if not order:
+        raise HTTPException(
+            status_code=404,
+            detail="Order not found"
+        )
+
+    # Set tenant isolation context
+    tenant_context.set(order.tenant_id)
+
+    # 2. Restrict to Confirmed orders
+    if order.current_status != "Confirmed":
+        raise HTTPException(
+            status_code=400,
+            detail="Invoices can only be generated for Confirmed orders"
+        )
+
+    try:
+        pdf_bytes = generate_invoice_pdf_bytes(order, db)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=404,
+            detail=str(e)
+        )
+
+    buffer = io.BytesIO(pdf_bytes)
     return StreamingResponse(
         buffer,
         media_type="application/pdf",
@@ -619,6 +626,219 @@ def get_order_invoice(
             "Content-Disposition": f"attachment; filename=invoice_{order_id}.pdf"
         }
     )
+
+
+# =====================================================================
+# Bulk Action Engine (Async Worker & Polling Endpoints)
+# =====================================================================
+
+import threading
+import zipfile
+import os
+import time
+import traceback
+from fastapi import BackgroundTasks
+from app.models.order import BulkJob
+
+# Global Semaphore to restrict concurrency (prevents CPU/RAM exhaustion)
+BULK_SEMAPHORE = threading.Semaphore(3)
+
+
+def cleanup_zip_file_after_delay(filepath: str, delay_seconds: int = 3600):
+    """
+    Deletes the generated ZIP file after the specified TTL to save disk storage.
+    """
+    time.sleep(delay_seconds)
+    try:
+        if os.path.exists(filepath):
+            os.remove(filepath)
+            logger.info(f"BULK_CLEANUP: Removed file={filepath} after TTL expiry")
+    except Exception as e:
+        logger.error(f"BULK_CLEANUP_ERROR: Failed to remove file={filepath}: {e}")
+
+
+def get_bulk_worker_db():
+    from app.main import app
+    from app.database import get_db, SessionLocal
+    if get_db in app.dependency_overrides:
+        override = app.dependency_overrides[get_db]
+        try:
+            gen = override()
+            return next(gen)
+        except TypeError:
+            return override()
+    return SessionLocal()
+
+
+def process_bulk_invoices(job_id: str, order_ids: list[str], tenant_id: uuid.UUID, ttl_seconds: int = 3600):
+    """
+    Background worker that fetches orders, compiles ReportLab PDFs,
+    packages them in a ZIP archive, updates progress in database,
+    and schedules a cleanup thread.
+    """
+    from app.database import tenant_context
+    tenant_context.set(tenant_id)
+    
+    db = get_bulk_worker_db()
+    try:
+        # Enforce concurrency limit on background task execution
+        with BULK_SEMAPHORE:
+            job = db.query(BulkJob).filter(BulkJob.job_id == job_id).first()
+            if not job:
+                return
+
+            job.status = "PROCESSING"
+            job.progress = 0
+            db.commit()
+
+            generated_pdfs = []
+            failed_orders = []
+            total_orders = len(order_ids)
+
+            for idx, order_id_str in enumerate(order_ids):
+                try:
+                    order_id = uuid.UUID(order_id_str)
+                    order = db.get(Order, order_id)
+                    if not order:
+                        raise ValueError("Order not found")
+                    
+                    if order.current_status != "Confirmed":
+                        raise ValueError("Order is not Confirmed")
+
+                    pdf_bytes = generate_invoice_pdf_bytes(order, db)
+                    filename = f"invoice_{order.internal_order_id}.pdf"
+                    generated_pdfs.append((filename, pdf_bytes))
+                except Exception as e:
+                    failed_orders.append({
+                        "order_id": order_id_str,
+                        "error": str(e)
+                    })
+
+                progress = int(((idx + 1) / total_orders) * 100)
+                job.progress = progress
+                db.commit()
+
+            result_link = None
+            zip_filepath = None
+            if generated_pdfs:
+                os.makedirs("static", exist_ok=True)
+                zip_filename = f"bulk_{job_id}.zip"
+                zip_filepath = os.path.join("static", zip_filename)
+                
+                with zipfile.ZipFile(zip_filepath, 'w') as zf:
+                    for filename, pdf_bytes in generated_pdfs:
+                        zf.writestr(filename, pdf_bytes)
+
+                result_link = f"/static/{zip_filename}"
+
+            # Schedule TTL cleanup in a separate daemon thread
+            if zip_filepath:
+                threading.Thread(
+                    target=cleanup_zip_file_after_delay,
+                    args=(zip_filepath, ttl_seconds),
+                    daemon=True
+                ).start()
+
+            # Set final status
+            if len(failed_orders) == 0:
+                job.status = "COMPLETED"
+            elif len(failed_orders) == total_orders:
+                job.status = "FAILED"
+            else:
+                job.status = "PARTIALLY_COMPLETED"
+
+            job.result_link = result_link
+            job.metadata_json = {"failed_orders": failed_orders}
+            db.commit()
+            logger.info(f"BULK_JOB_DONE: job_id={job_id} status={job.status} failed={len(failed_orders)}")
+
+    except Exception as e:
+        logger.error(f"BULK_JOB_FATAL_ERROR: job_id={job_id} error={e}")
+        try:
+            job = db.query(BulkJob).filter(BulkJob.job_id == job_id).first()
+            if job:
+                job.status = "FAILED"
+                job.metadata_json = {"error": str(e), "traceback": traceback.format_exc()}
+                db.commit()
+        except Exception:
+            pass
+    finally:
+        from app.database import get_db
+        from app.main import app
+        if get_db not in app.dependency_overrides:
+            db.close()
+
+
+class BulkActionPayload(BaseModel):
+    order_ids: list[str]
+
+
+class BulkJobStatusResponse(BaseModel):
+    job_id: str
+    status: str
+    progress: int
+    result_link: str | None
+    failed_orders: list[dict] | None = None
+
+
+@router.post("/bulk-action", status_code=status.HTTP_202_ACCEPTED)
+def trigger_bulk_action(
+    payload: BulkActionPayload,
+    background_tasks: BackgroundTasks,
+    tenant_id: uuid.UUID | None = None,
+    access_token: str | None = Cookie(None),
+    authorization: str | None = Header(None),
+    db: Session = Depends(get_db)
+):
+    """
+    Registers a new bulk invoice generation job and runs the compiler in the background.
+    """
+    from app.services.tenant_service import resolve_tenant_id
+    resolved_tenant_id = resolve_tenant_id(tenant_id, access_token, authorization)
+
+    job_id = str(uuid.uuid4())
+    job = BulkJob(
+        job_id=job_id,
+        progress=0,
+        status="PENDING"
+    )
+    db.add(job)
+    db.commit()
+
+    # Pass the actual client-specific resolved tenant ID
+    background_tasks.add_task(
+        process_bulk_invoices,
+        job_id,
+        payload.order_ids,
+        resolved_tenant_id
+    )
+
+    return {"status": "accepted", "job_id": job_id}
+
+
+@router.get("/bulk-action/{job_id}", response_model=BulkJobStatusResponse)
+def get_bulk_job_status(
+    job_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Retrieves the execution status and progress metric for a running bulk job.
+    """
+    job = db.query(BulkJob).filter(BulkJob.job_id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    failed_orders = None
+    if job.metadata_json and "failed_orders" in job.metadata_json:
+        failed_orders = job.metadata_json["failed_orders"]
+
+    return {
+        "job_id": job.job_id,
+        "status": job.status,
+        "progress": job.progress,
+        "result_link": job.result_link,
+        "failed_orders": failed_orders
+    }
 
 
 @router.get("/{order_id}", status_code=status.HTTP_200_OK, response_model=OrderDetailResponse)

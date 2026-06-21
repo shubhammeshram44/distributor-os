@@ -33,6 +33,11 @@ app.add_middleware(
 
 app.include_router(api_router, prefix="/api/v1")
 
+# Mount static folder for serving bulk downloadable ZIP files
+from fastapi.staticfiles import StaticFiles
+os.makedirs("static", exist_ok=True)
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
 @app.get("/")
 def read_root():
     return {"status": "healthy", "service": "Distributor OS Backend Core"}

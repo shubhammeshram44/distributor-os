@@ -53,6 +53,14 @@ export default function OrdersPage() {
   const [error, setError] = useState<string | null>(null);
   const [isEditingInvoiceType, setIsEditingInvoiceType] = useState(false);
 
+  // Bulk Job States
+  const [bulkJobId, setBulkJobId] = useState<string | null>(null);
+  const [bulkProgress, setBulkProgress] = useState<number>(0);
+  const [bulkStatus, setBulkStatus] = useState<"PENDING" | "PROCESSING" | "COMPLETED" | "PARTIALLY_COMPLETED" | "FAILED" | null>(null);
+  const [bulkResultLink, setBulkResultLink] = useState<string | null>(null);
+  const [bulkFailedOrders, setBulkFailedOrders] = useState<{ order_id: string; error: string }[] | null>(null);
+  const [isBulkProcessing, setIsBulkProcessing] = useState<boolean>(false);
+
   // Drawer States
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [selectedOrderNo, setSelectedOrderNo] = useState<string>("");
@@ -305,6 +313,81 @@ export default function OrdersPage() {
     }
   };
 
+  // Poll bulk action progress status
+  useEffect(() => {
+    if (!bulkJobId) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+        const res = await fetch(`${apiBase}/api/v1/orders/bulk-action/${bulkJobId}`, {
+          credentials: "include"
+        });
+        if (!res.ok) throw new Error("Failed to fetch job status");
+        
+        const data = await res.json();
+        setBulkProgress(data.progress);
+        setBulkStatus(data.status);
+        setBulkResultLink(data.result_link);
+        setBulkFailedOrders(data.failed_orders);
+
+        if (data.status === "COMPLETED" || data.status === "PARTIALLY_COMPLETED" || data.status === "FAILED") {
+          clearInterval(interval);
+          setIsBulkProcessing(false);
+          if (data.status === "COMPLETED") {
+            showToast("Bulk invoice generation completed successfully!", "success");
+          } else if (data.status === "PARTIALLY_COMPLETED") {
+            showToast("Bulk invoice generation finished with some errors.", "error");
+          } else {
+            showToast("Bulk invoice generation failed completely.", "error");
+          }
+        }
+      } catch (err) {
+        console.error("Error polling bulk job status:", err);
+      }
+    }, 1500);
+
+    return () => clearInterval(interval);
+  }, [bulkJobId]);
+
+  const handleBulkDownloadInvoices = async () => {
+    const confirmedOrders = orders.filter(o => o.status === "Confirmed");
+    if (confirmedOrders.length === 0) {
+      showToast("No confirmed orders found in this workspace.", "error");
+      return;
+    }
+
+    setIsBulkProcessing(true);
+    setBulkProgress(0);
+    setBulkStatus("PENDING");
+    setBulkResultLink(null);
+    setBulkFailedOrders(null);
+
+    try {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const response = await fetch(`${apiBase}/api/v1/orders/bulk-action`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          order_ids: confirmedOrders.map(o => o.id)
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to trigger bulk action.");
+      }
+
+      const data = await response.json();
+      setBulkJobId(data.job_id);
+    } catch (err: any) {
+      console.error(err);
+      showToast(err.message || "Failed to trigger bulk generation.", "error");
+      setIsBulkProcessing(false);
+      setBulkStatus(null);
+    }
+  };
+
   const selectedOrder = orders.find(o => o.id === selectedOrderId);
 
   // Status Filter Counts
@@ -362,17 +445,34 @@ export default function OrdersPage() {
               </p>
             </div>
 
-            <button
-              onClick={() => {
-                if (activeTenantId) {
-                  fetchOrders(activeTenantId);
-                }
-              }}
-              className="flex items-center gap-1.5 px-3 py-2 border border-dashboard-border bg-white rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-all shadow-sm cursor-pointer"
-            >
-              <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
-              <span>Refresh Orders</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                disabled={orders.filter(o => o.status === "Confirmed").length === 0 || isBulkProcessing}
+                onClick={handleBulkDownloadInvoices}
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-brand-blue text-white rounded-lg text-xs font-bold hover:bg-brand-blueHover disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed transition-all shadow-sm cursor-pointer animate-fade-in"
+              >
+                {isBulkProcessing ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Processing...</span>
+                  </>
+                ) : (
+                  <span>Download Invoices</span>
+                )}
+              </button>
+
+              <button
+                onClick={() => {
+                  if (activeTenantId) {
+                    fetchOrders(activeTenantId);
+                  }
+                }}
+                className="flex items-center gap-1.5 px-3 py-2 border border-dashboard-border bg-white rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-all shadow-sm cursor-pointer"
+              >
+                <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
+                <span>Refresh Orders</span>
+              </button>
+            </div>
 
           </div>
 
@@ -808,6 +908,82 @@ export default function OrdersPage() {
                 Close Details
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Action Sticky Progress Tracker Footer */}
+      {bulkJobId && (
+        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 bg-white/95 backdrop-blur-md border border-slate-100 shadow-2xl p-6 rounded-2xl w-[450px] animate-slide-in pointer-events-auto flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <h4 className="font-bold text-slate-800 text-sm">Bulk Invoice Download</h4>
+            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+              bulkStatus === "COMPLETED"
+                ? "bg-emerald-50 text-emerald-700 border border-emerald-100"
+                : bulkStatus === "PARTIALLY_COMPLETED"
+                ? "bg-amber-50 text-amber-700 border border-amber-100"
+                : bulkStatus === "FAILED"
+                ? "bg-rose-50 text-rose-700 border border-rose-100"
+                : "bg-blue-50 text-brand-blue border border-blue-100 animate-pulse"
+            }`}>
+              {bulkStatus}
+            </span>
+          </div>
+
+          {/* Progress Bar Component */}
+          <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+            <div
+              className={`h-full transition-all duration-300 ${
+                bulkStatus === "FAILED" ? "bg-rose-500" : "bg-brand-blue"
+              }`}
+              style={{ width: `${bulkProgress}%` }}
+            />
+          </div>
+
+          <div className="flex items-center justify-between text-[11px] text-slate-400 font-bold uppercase tracking-wider">
+            <span>Progress: {bulkProgress}%</span>
+            {bulkStatus === "PROCESSING" && <span className="animate-pulse">Generating PDFs...</span>}
+          </div>
+
+          {/* Download Action Links / Failed lists */}
+          <div className="flex flex-col gap-2">
+            {(bulkStatus === "COMPLETED" || bulkStatus === "PARTIALLY_COMPLETED") && bulkResultLink && (
+              <a
+                href={`${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}${bulkResultLink}`}
+                download
+                className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm text-center"
+              >
+                <span>📥 Download Invoices ZIP</span>
+              </a>
+            )}
+
+            {bulkFailedOrders && bulkFailedOrders.length > 0 && (
+              <div className="max-h-24 overflow-y-auto bg-rose-50/50 border border-rose-100/50 rounded-lg p-2.5 text-[10px] text-rose-700 font-medium space-y-1">
+                <p className="font-bold uppercase tracking-wider text-[9px] text-rose-800">Failed Orders ({bulkFailedOrders.length}):</p>
+                {bulkFailedOrders.map((fail, idx) => (
+                  <div key={idx} className="flex justify-between font-mono">
+                    <span>{fail.order_id.slice(0, 8)}...</span>
+                    <span className="italic font-sans text-right truncate max-w-[200px]">{fail.error}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Close tracker */}
+            {!isBulkProcessing && (
+              <button
+                onClick={() => {
+                  setBulkJobId(null);
+                  setBulkStatus(null);
+                  setBulkProgress(0);
+                  setBulkResultLink(null);
+                  setBulkFailedOrders(null);
+                }}
+                className="w-full py-2 bg-slate-800 text-white hover:bg-slate-700 font-bold text-xs rounded-lg transition-all cursor-pointer text-center"
+              >
+                Close Tracking
+              </button>
+            )}
           </div>
         </div>
       )}
