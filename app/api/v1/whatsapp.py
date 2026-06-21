@@ -216,6 +216,7 @@ def handle_whatsapp_webhook(
             internal_order_id=generated_order_id,
             source="WhatsApp",
             customer_id=customer.id,
+            invoice_type=parsed_order.extracted_invoice_preference,
             created_at=datetime.utcnow()
         )
         new_order.status = "NEEDS_REVIEW" if has_unmatched else "Draft"

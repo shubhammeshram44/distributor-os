@@ -151,6 +151,7 @@ class WhatsAppService:
                 internal_order_id=f"WA-{int(datetime.utcnow().timestamp())}",
                 source="WhatsApp",
                 customer_id=customer.id,
+                invoice_type=parsed_order.extracted_invoice_preference,
                 created_at=datetime.utcnow()
             )
             db.add(order)

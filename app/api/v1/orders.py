@@ -15,6 +15,38 @@ from app.models.invoice import Invoice
 from app.models.inventory import Inventory
 
 
+class OrderResponse(BaseModel):
+    id: str
+    order_id: str
+    customer: str
+    channel: str
+    amount: float
+    status: str
+    created_on: str
+    eta: str
+    payment_status: str
+    amount_paid: float
+    invoice_type: str
+
+
+class AllocatedPayment(BaseModel):
+    payment_code: str
+    amount_allocated: float
+    total_voucher_amount: float
+    method: str
+    reference_number: str | None = None
+    created_at: str
+
+
+class OrderDetailResponse(BaseModel):
+    id: str
+    order_id: str
+    payment_status: str
+    amount_paid: float
+    payments_allocated: list[AllocatedPayment]
+    invoice_type: str
+
+
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -23,7 +55,7 @@ from reportlab.lib import colors
 router = APIRouter(prefix="/orders", tags=["Orders"])
 from fastapi import Cookie, Header
 
-@router.get("", status_code=status.HTTP_200_OK)
+@router.get("", status_code=status.HTTP_200_OK, response_model=list[OrderResponse])
 def list_orders(
     tenant_id: uuid.UUID | None = None,
     access_token: str | None = Cookie(None),
@@ -78,7 +110,8 @@ def list_orders(
             "created_on": o.created_at.strftime("%d %b, %Y %I:%M %p"),
             "eta": o.created_at.strftime("%d %b, %Y %I:%M %p"),
             "payment_status": payment_status,
-            "amount_paid": amount_paid
+            "amount_paid": amount_paid,
+            "invoice_type": o.invoice_type
         })
 
     return results
@@ -557,7 +590,7 @@ def get_order_invoice(
     )
 
 
-@router.get("/{order_id}", status_code=status.HTTP_200_OK)
+@router.get("/{order_id}", status_code=status.HTTP_200_OK, response_model=OrderDetailResponse)
 def get_order_by_id(
     order_id: uuid.UUID,
     db: Session = Depends(get_db)
@@ -605,7 +638,8 @@ def get_order_by_id(
         "order_id": order.internal_order_id,
         "payment_status": order.payment_status if order.payment_status != "UNPAID" else (invoice.payment_status if invoice else "UNPAID"),
         "amount_paid": float(invoice.amount_paid) if invoice else 0.0,
-        "payments_allocated": payments_allocated
+        "payments_allocated": payments_allocated,
+        "invoice_type": order.invoice_type
     }
 
 
@@ -621,6 +655,7 @@ class OrderCreatePayload(BaseModel):
     source: str
     status: str
     items: list[OrderItemCreate]
+    invoice_type: str = "UNSPECIFIED"
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -643,6 +678,7 @@ def create_order(
         internal_order_id=generated_order_id,
         source=payload.source,
         customer_id=payload.customer_id,
+        invoice_type=payload.invoice_type,
         created_at=datetime.utcnow()
     )
     db.add(new_order)

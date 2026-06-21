@@ -20,6 +20,19 @@ from app.models.user import User
 from app.models.ledger import CustomerLedger
 from app.utils.security import hash_password, verify_jwt
 
+from pydantic import BaseModel
+
+class RecentOrderResponse(BaseModel):
+    id: str
+    order_id: str
+    customer: str
+    channel: str
+    amount: float
+    status: str
+    created_on: str
+    eta: str
+    invoice_type: str
+
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
 from app.services.tenant_service import resolve_tenant_id, DEMO_TENANT_ID
@@ -226,7 +239,7 @@ def get_dashboard_metrics(
     }
 
 
-@router.get("/recent-orders")
+@router.get("/recent-orders", response_model=list[RecentOrderResponse])
 def get_recent_orders(
     tenant_id: uuid.UUID | None = None,
     access_token: str | None = Cookie(None),
@@ -270,7 +283,8 @@ def get_recent_orders(
             "amount": float(amount),
             "status": status_resolved,
             "created_on": o.created_at.strftime("%d %b, %I:%M %p"),
-            "eta": o.created_at.strftime("%d %b, %I:%M %p")
+            "eta": o.created_at.strftime("%d %b, %I:%M %p"),
+            "invoice_type": o.invoice_type
         })
 
     return results
