@@ -471,12 +471,16 @@ def get_order_invoice(
         fontName='Helvetica-Bold'
     )
 
+    # Check if this should be formatted as a GST tax invoice
+    is_gst = order.invoice_type != "RETAIL_CASH_INVOICE"
+
     # Header section (Tenant & Invoice ID/Date)
     invoice_id = f"INV-{order.internal_order_id}"
     order_date = order.created_at.strftime("%Y-%m-%d")
     
     header_left = f"<b>{tenant_name}</b><br/>B2B Distributor Services<br/>Email: billing@{tenant_name.lower().replace(' ', '').replace('.', '')}.com"
-    header_right = f"<b>TAX INVOICE</b><br/>Invoice ID: {invoice_id}<br/>Date: {order_date}<br/>Status: <b>Confirmed</b>"
+    header_title = "TAX INVOICE" if is_gst else "RETAIL INVOICE"
+    header_right = f"<b>{header_title}</b><br/>Invoice ID: {invoice_id}<br/>Date: {order_date}<br/>Status: <b>Confirmed</b>"
 
     header_table_data = [
         [Paragraph(header_left, body_style), Paragraph(header_right, ParagraphStyle('RightText', parent=body_style, alignment=2))]
@@ -499,8 +503,16 @@ def get_order_invoice(
     story.append(divider)
     story.append(Spacer(1, 15))
 
-    # Customer Profile Section
-    cust_left = f"<b>BILL TO:</b><br/>{customer.retailer_name}<br/>{customer.address_text}<br/>GSTIN: {customer.gstin}"
+    # Customer Profile Section (Conditionally hide GSTIN)
+    cust_left_lines = [
+        "<b>BILL TO:</b>",
+        customer.retailer_name,
+        customer.address_text
+    ]
+    if is_gst and customer.gstin:
+        cust_left_lines.append(f"GSTIN: {customer.gstin}")
+    cust_left = "<br/>".join(cust_left_lines)
+
     cust_right = f"<b>PAYMENT TERMS:</b><br/>{customer.payment_terms}<br/><br/><b>TAX GROUP:</b><br/>{customer.tax_group}"
     
     cust_table_data = [
@@ -557,17 +569,26 @@ def get_order_invoice(
     story.append(grid_table)
     story.append(Spacer(1, 15))
 
-    # Tax Summary Block
-    gst_rate = 0.18
-    gst = subtotal * gst_rate
-    grand_total = subtotal + gst
+    # Tax Summary Block (Conditionally exclude GST)
+    if is_gst:
+        gst_rate = 0.18
+        gst = subtotal * gst_rate
+        grand_total = subtotal + gst
+    else:
+        gst = 0.0
+        grand_total = subtotal
 
     summary_left = "<b>Declaration:</b><br/>We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct."
     summary_right_data = [
-        [Paragraph("Subtotal:", body_style), Paragraph(f"₹ {subtotal:,.2f}", ParagraphStyle('RightAlign', parent=body_style, alignment=2))],
-        [Paragraph("GST (18%):", body_style), Paragraph(f"₹ {gst:,.2f}", ParagraphStyle('RightAlign', parent=body_style, alignment=2))],
-        [Paragraph("<b>Total Payable:</b>", body_bold), Paragraph(f"<b>₹ {grand_total:,.2f}</b>", ParagraphStyle('RightAlignBold', parent=body_bold, alignment=2))]
+        [Paragraph("Subtotal:", body_style), Paragraph(f"₹ {subtotal:,.2f}", ParagraphStyle('RightAlign', parent=body_style, alignment=2))]
     ]
+    if is_gst:
+        summary_right_data.append(
+            [Paragraph("GST (18%):", body_style), Paragraph(f"₹ {gst:,.2f}", ParagraphStyle('RightAlign', parent=body_style, alignment=2))]
+        )
+    summary_right_data.append(
+        [Paragraph("<b>Total Payable:</b>", body_bold), Paragraph(f"<b>₹ {grand_total:,.2f}</b>", ParagraphStyle('RightAlignBold', parent=body_bold, alignment=2))]
+    )
     summary_right_table = Table(summary_right_data, colWidths=[110, 110])
     summary_right_table.setStyle(TableStyle([
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
