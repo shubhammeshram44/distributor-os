@@ -5,18 +5,21 @@ import Link from "next/link";
 import { Search, MessageSquare, ChevronDown, LogOut, HelpCircle, Globe } from "lucide-react";
 
 interface DashboardHeaderProps {
-  activeTenantId: string;
-  setActiveTenantId: (id: string) => void;
-  tenantName: string;
+  activeTenantId?: string;
+  setActiveTenantId?: (id: string) => void;
+  tenantName?: string;
   userProfile?: any;
+  onTenantChange?: (id: string) => void;
 }
 
 export default function DashboardHeader({
-  activeTenantId,
+  activeTenantId = "",
   setActiveTenantId,
-  tenantName,
-  userProfile
+  tenantName = "My Workspace",
+  userProfile,
+  onTenantChange
 }: DashboardHeaderProps) {
+
   const [isProfileOpen, setIsProfileOpen] = useState(false);
 
   const handleLogout = async () => {
@@ -86,7 +89,12 @@ export default function DashboardHeader({
           <div className="relative">
             <select
               value={activeTenantId}
-              onChange={(e) => setActiveTenantId(e.target.value)}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (onTenantChange) onTenantChange(val);
+                if (setActiveTenantId) setActiveTenantId(val);
+              }}
+
               className="pl-3 pr-8 py-1.5 border border-dashboard-border rounded-lg text-xs font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-brand-blue cursor-pointer bg-white appearance-none"
             >
               {displayProfile?.tenant ? (

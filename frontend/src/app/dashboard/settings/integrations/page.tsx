@@ -141,13 +141,20 @@ export default function IntegrationsPage() {
       <Sidebar activeTab="Integrations" setActiveTab={() => {}} tenantName={getTenantName()} />
       
       <div className="flex-1 flex flex-col md:pl-64 min-h-screen">
-        <DashboardHeader
-          title="Integrations & Connections"
-          description="Connect external services, configure webhooks, and manage APIs."
-          onTenantChange={handleTenantChange}
-        />
+        <DashboardHeader onTenantChange={handleTenantChange} />
         
         <main className="flex-1 p-6 space-y-6 max-w-4xl w-full mx-auto">
+
+          <div>
+            <h1 className="text-xl font-bold text-slate-800 tracking-tight flex items-center gap-2">
+              <Link2 className="w-5 h-5 text-brand-blue" />
+              <span>Integrations & Connections</span>
+            </h1>
+            <p className="text-xs text-slate-400 font-semibold mt-0.5">
+              Connect external services, configure webhooks, and manage APIs.
+            </p>
+          </div>
+
           {loading ? (
             <div className="flex flex-col items-center justify-center py-20 space-y-4">
               <Loader2 className="w-10 h-10 text-brand-blue animate-spin" />
