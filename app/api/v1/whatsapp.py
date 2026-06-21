@@ -72,20 +72,44 @@ def handle_whatsapp_webhook(
         logger.info("[Ingestion - %s] Resolved active Tenant ID: %s", correlation_id, resolved_tenant_id)
         tenant_context.set(resolved_tenant_id)
 
-        # 3. Phone Number Normalization Layer
+     # ====================================================================
+        # REPLACED: #3 (Normalization Layer) & #4 (Customer Identification Layer)
+        # Suffix matching logic removes prefix bugs (+91, 91, trailing blanks)
+        # ====================================================================
         normalized_phone = normalize_phone_number(phone)
         logger.info("[Ingestion - %s] Normalized sender phone: %s -> %s", correlation_id, phone, normalized_phone)
 
-        # 4. Customer Identification Layer (Layer 1 Whitelist)
         customer = None
         if normalized_phone:
-            customer = db.query(Customer).join(CustomerAlias).filter(CustomerAlias.alias_value == normalized_phone).first()
+            # Isolate only the core trailing 10 numeric digits to prevent prefix drops
+            phone_suffix = "".join(filter(str.isdigit, normalized_phone))[-10:]
+            logger.info("[Ingestion - %s] Isolated trailing 10 digits for query matching: %s", correlation_id, phone_suffix)
+
+            # Suffix lookup query against Customer Aliases tracking table
+            customer = (
+                db.query(Customer)
+                .join(CustomerAlias)
+                .filter(
+                    Customer.tenant_id == resolved_tenant_id,
+                    CustomerAlias.alias_value.like(f"%{phone_suffix}")
+                )
+                .first()
+            )
+            
+            # Suffix look up fallback query against root Customer profile table
             if not customer:
-                customer = db.query(Customer).filter(Customer.phone_number == normalized_phone).first()
+                customer = (
+                    db.query(Customer)
+                    .filter(
+                        Customer.tenant_id == resolved_tenant_id,
+                        Customer.phone_number.like(f"%{phone_suffix}")
+                    )
+                    .first()
+                )
 
         if not customer:
-            logger.warning("[Ingestion - %s] Clean ignore: Sender %s is not whitelisted for tenant %s", correlation_id, normalized_phone, resolved_tenant_id)
-            print(f"Clean ignore: Sender {normalized_phone} is not whitelisted for tenant {resolved_tenant_id}")
+            logger.warning("[Ingestion - %s] Clean ignore: Sender suffix ending in '%s' not found for tenant %s", correlation_id, phone, resolved_tenant_id)
+            print(f"Clean ignore: Sender suffix for {phone} is not whitelisted for tenant {resolved_tenant_id}")
             return {
                 "status": "ignored",
                 "message": "Sender not whitelisted or not found for this tenant.",
@@ -94,9 +118,7 @@ def handle_whatsapp_webhook(
                 "failed_rows": 0,
                 "error_message": None
             }
-
-        customer_name = customer.retailer_name
-        logger.info("[Ingestion - %s] Customer resolved: %s (ID: %s)", correlation_id, customer_name, customer.id)
+        # ====================================================================
 
         # 5. Core Ingestion Parser Layer (LLM Parsing)
         gemini_service = GeminiService()
