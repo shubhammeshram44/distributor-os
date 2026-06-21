@@ -54,7 +54,12 @@ export default function Sidebar({ activeTab, setActiveTab, tenantName }: Sidebar
     }
   };
 
-  const menuItems = [
+  const menuItems: {
+    name: string;
+    icon?: any;
+    href?: string;
+    type?: string;
+  }[] = [
     { name: "Dashboard", icon: LayoutDashboard, href: "/dashboard" },
     { name: "Messages", icon: MessageSquare, href: "/dashboard/messages" },
     { name: "Orders", icon: ShoppingCart, href: "/dashboard/orders" },
@@ -70,6 +75,7 @@ export default function Sidebar({ activeTab, setActiveTab, tenantName }: Sidebar
     { name: "Integrations", icon: Link2, href: "/dashboard/settings/integrations" },
     { name: "Automations", icon: Zap }
   ];
+
 
 
   return (
