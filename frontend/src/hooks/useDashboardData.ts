@@ -54,7 +54,14 @@ export interface ActivityEvent {
   category: string;
 }
 
-export function useDashboardData(activeTenantId: string, startDate?: string, endDate?: string) {
+export function useDashboardData(
+  activeTenantId: string,
+  startDate?: string,
+  endDate?: string,
+  isAuthenticated: boolean = true,
+  firebaseAuthExpiredFlag: boolean = false
+) {
+
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
   const [donutData, setDonutData] = useState<DonutSegment[]>([]);
@@ -65,7 +72,7 @@ export function useDashboardData(activeTenantId: string, startDate?: string, end
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchStaticData = useCallback(async () => {
-    if (!activeTenantId) return;
+    if (!activeTenantId || !isAuthenticated || firebaseAuthExpiredFlag) return;
     setIsLoading(true);
     try {
       const options = {
@@ -111,7 +118,7 @@ export function useDashboardData(activeTenantId: string, startDate?: string, end
   }, [activeTenantId, startDate, endDate]);
 
   const fetchPolledData = useCallback(async () => {
-    if (!activeTenantId) return;
+    if (!activeTenantId || !isAuthenticated || firebaseAuthExpiredFlag) return;
     try {
       const options = {
         method: "GET",
@@ -133,6 +140,7 @@ export function useDashboardData(activeTenantId: string, startDate?: string, end
   }, [activeTenantId]);
 
   const fetchOrderDetails = async (orderId: string) => {
+    if (!isAuthenticated || firebaseAuthExpiredFlag) return;
     setLoadingDetails(true);
     try {
       const options = {
@@ -157,24 +165,34 @@ export function useDashboardData(activeTenantId: string, startDate?: string, end
     setSelectedOrderDetails(null);
   };
 
+  // Intercept expired or missing auth states before executing queries
+  useEffect(() => {
+    if (!isAuthenticated || firebaseAuthExpiredFlag) {
+      localStorage.removeItem("tenantId");
+      localStorage.removeItem("tenant_id");
+      window.location.href = "/login";
+    }
+  }, [isAuthenticated, firebaseAuthExpiredFlag]);
+
   // Initial and Tenant-switch or Date-switch load
   useEffect(() => {
-    if (activeTenantId) {
+    if (activeTenantId && isAuthenticated && !firebaseAuthExpiredFlag) {
       fetchStaticData();
       fetchPolledData();
     }
-  }, [activeTenantId, startDate, endDate, fetchStaticData, fetchPolledData]);
+  }, [activeTenantId, startDate, endDate, isAuthenticated, firebaseAuthExpiredFlag, fetchStaticData, fetchPolledData]);
 
   // Activity feed polling setup (every 5 seconds)
   useEffect(() => {
-    if (!activeTenantId) return;
+    if (!activeTenantId || !isAuthenticated || firebaseAuthExpiredFlag) return;
 
     const interval = setInterval(() => {
       fetchPolledData();
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [activeTenantId, fetchPolledData]);
+  }, [activeTenantId, isAuthenticated, firebaseAuthExpiredFlag, fetchPolledData]);
+
 
   return {
     metrics,

@@ -35,7 +35,7 @@ class RecentOrderResponse(BaseModel):
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
-from app.services.tenant_service import resolve_tenant_id, DEMO_TENANT_ID
+from app.services.tenant_service import resolve_tenant_id, DEMO_TENANT_ID, get_validated_tenant_id
 from app.services.demo_service import ensure_demo_data
 
 
@@ -43,7 +43,7 @@ from app.services.demo_service import ensure_demo_data
 
 @router.get("/metrics")
 def get_dashboard_metrics(
-    tenant_id: uuid.UUID | None = None,
+    tenant_id: str | None = None,
     start_date: str | None = None,
     end_date: str | None = None,
     access_token: str | None = Cookie(None),
@@ -241,7 +241,7 @@ def get_dashboard_metrics(
 
 @router.get("/recent-orders", response_model=list[RecentOrderResponse])
 def get_recent_orders(
-    tenant_id: uuid.UUID | None = None,
+    tenant_id: str | None = None,
     access_token: str | None = Cookie(None),
     authorization: str | None = Header(None),
     db: Session = Depends(get_db)
@@ -321,7 +321,7 @@ def get_order_details(
 
 @router.get("/collections-donut")
 def get_collections_donut(
-    tenant_id: uuid.UUID | None = None,
+    tenant_id: str | None = None,
     access_token: str | None = Cookie(None),
     authorization: str | None = Header(None),
     db: Session = Depends(get_db)
@@ -389,7 +389,7 @@ def get_collections_donut(
 
 @router.get("/recent-activity")
 def get_recent_activity(
-    tenant_id: uuid.UUID | None = None,
+    tenant_id: str | None = None,
     access_token: str | None = Cookie(None),
     authorization: str | None = Header(None),
     db: Session = Depends(get_db)
@@ -484,7 +484,7 @@ def get_recent_activity(
 
 @router.get("/customers")
 def get_customers(
-    tenant_id: uuid.UUID | None = None,
+    tenant_id: str | None = None,
     access_token: str | None = Cookie(None),
     authorization: str | None = Header(None),
     db: Session = Depends(get_db)

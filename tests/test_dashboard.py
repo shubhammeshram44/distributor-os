@@ -89,3 +89,21 @@ def test_dashboard_metrics_date_filtering(db_session, client):
     # Snapshot collections must still return full value
     assert data["outstanding_collections"] > 0
 
+
+def test_dashboard_tenant_validation_guardrails(client):
+    # 1. Missing tenant context entirely
+    resp = client.get("/api/v1/dashboard/metrics")
+    assert resp.status_code == 401
+    assert "Session expired or token missing" in resp.json()["detail"]
+
+    # 2. Invalid UUID format
+    resp = client.get("/api/v1/dashboard/metrics?tenant_id=not-a-valid-uuid")
+    assert resp.status_code == 401
+    assert "Invalid workspace session context token formatting" in resp.json()["detail"]
+
+    # 3. Empty string tenant ID
+    resp = client.get("/api/v1/dashboard/metrics?tenant_id=")
+    assert resp.status_code == 401
+    assert "Session expired or token missing" in resp.json()["detail"]
+
+
