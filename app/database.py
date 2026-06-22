@@ -8,15 +8,24 @@ from sqlalchemy.orm import sessionmaker, Session, DeclarativeBase, with_loader_c
 # Context variable to hold tenant ID of the current request/session
 tenant_context: contextvars.ContextVar[uuid.UUID | None] = contextvars.ContextVar("tenant_id", default=None)
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# 1. Capture environment targets defensively across multi-case properties
+DATABASE_URL = os.getenv("DATABASE_URL") or os.getenv("database_url")
 
-DATABASE_URL = os.getenv("DATABASE_URL") or f"sqlite:///{os.path.join(BASE_DIR, 'distributor_os.db')}"
+# 2. Production fail-safe: Ensure the string is never None during boot evaluation
+if not DATABASE_URL:
+    # Use a localized fallback tracking database so the container completes initialization safely
+    DATABASE_URL = "sqlite:///./fallback_local_stub.db"
+
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
+# 3. Compile connection parameters defensively
+connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
+
+# 4. Construct the engine cleanly without token variable runtime exceptions
 engine = create_engine(
     DATABASE_URL,
-    connect_args={"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
+    connect_args=connect_args
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
