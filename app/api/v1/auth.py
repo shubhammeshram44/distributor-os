@@ -8,19 +8,31 @@ on the Firebase side, then submits that token here for cryptographic validation.
 Endpoints:
   POST /auth/firebase-login — verify Firebase token, return session or new-user flag
   POST /auth/signup          — complete registration using signup_token
-  GET  /auth/me             — return current session user (unchanged)
-  POST /auth/logout         — clear session cookie (unchanged)
+  GET  /auth/me             — return current session user
+  POST /auth/logout         — clear session cookie
 """
+import os
 import json
 import uuid
+import logging
+import traceback
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Cookie, Header
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
+
+# Firebase Imports
+import firebase_admin
+from firebase_admin import credentials as fb_credentials, auth as fb_auth
+
 from app.database import get_db
 from app.models.user import User
 from app.models.tenant import DistributorTenant
 from app.utils.security import sign_jwt, verify_jwt, verify_signup_token
 from app.config import settings
+
+# Setup standard enterprise logging
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -44,32 +56,43 @@ class SignupPayload(BaseModel):
 
 def _get_firebase_app():
     """
-    Lazily initialise the Firebase Admin SDK from the FIREBASE_CREDENTIALS_JSON
-    environment variable. Guards against double-initialisation.
-    Returns the firebase_auth module ready to call verify_id_token().
-    Raises RuntimeError if credentials are not configured.
+    Lazily initialise the Firebase Admin SDK. 
+    Prefers FIREBASE_CREDENTIALS_PATH (Render Secret File) but falls back 
+    to FIREBASE_CREDENTIALS_JSON string if present.
     """
-    import firebase_admin
-    from firebase_admin import credentials as fb_credentials, auth as fb_auth
-
-    if not settings.FIREBASE_CREDENTIALS_JSON:
-        raise RuntimeError(
-            "FIREBASE_CREDENTIALS_JSON is not configured. "
-            "Set this environment variable to your Firebase service account JSON string."
-        )
-
     try:
         # Return existing app if already initialised
         firebase_admin.get_app()
+        return fb_auth
     except ValueError:
-        # App not yet initialised — parse JSON string and create credentials
+        pass  # App not yet initialised, proceed below
+
+    # 1. Prefer the Secure File Path (Render Secret Files)
+    cred_path = os.getenv("FIREBASE_CREDENTIALS_PATH")
+    # 2. Fallback to Environment JSON string
+    cred_json = os.getenv("FIREBASE_CREDENTIALS_JSON") or getattr(settings, "FIREBASE_CREDENTIALS_JSON", None)
+
+    if cred_path and os.path.exists(cred_path):
+        logger.info(f"Initializing Firebase from Secret File Path: {cred_path}")
+        cred = fb_credentials.Certificate(cred_path)
+    elif cred_json:
+        logger.info("Initializing Firebase from JSON string environment variable.")
         try:
-            cred_dict = json.loads(settings.FIREBASE_CREDENTIALS_JSON)
+            cred_dict = json.loads(cred_json)
+            cred = fb_credentials.Certificate(cred_dict)
         except json.JSONDecodeError as exc:
             raise RuntimeError(f"FIREBASE_CREDENTIALS_JSON is not valid JSON: {exc}") from exc
+    else:
+        raise RuntimeError(
+            "Firebase credentials are not configured. Set either "
+            "FIREBASE_CREDENTIALS_PATH or FIREBASE_CREDENTIALS_JSON."
+        )
 
-        cred = fb_credentials.Certificate(cred_dict)
+    try:
         firebase_admin.initialize_app(cred)
+    except ValueError:
+        # Catch highly unlikely thread race-condition where it initialized in the last millisecond
+        pass 
 
     return fb_auth
 
@@ -85,36 +108,42 @@ def firebase_login(
     db: Session = Depends(get_db),
 ):
     """
-    Accepts a Firebase ID token issued after the user passes Phone OTP verification
-    on the client side (Firebase Phone Auth flow).
-
-    Flow:
-      1. Verify the ID token cryptographically using the Firebase Admin SDK.
-      2. Extract uid and phone_number from the decoded token.
-      3. Normalize lookup parameters using a trailing 10-digit string evaluation 
-         to ignore varying country prefixes (+91, 91, etc.).
-      4. If the phone number is not found in our database → new user path:
-         Return is_new_user=True so the frontend can route to the Company Name
-         registration step. No DB writes occur here.
-      5. If the user already exists → existing user path:
-         Persist firebase_uid if not already stored, sign an internal JWT,
-         set the access_token HttpOnly cookie, and return the session payload.
+    Accepts a Firebase ID token, verifies it securely, and establishes a session.
     """
-    # Step 1: Verify Firebase token
+    # Step 1: Verify Firebase token with explicit exception granularity
     try:
-        fb_auth = _get_firebase_app()
-        decoded_token = fb_auth.verify_id_token(payload.firebase_token)
+        firebase_auth_module = _get_firebase_app()
+        decoded_token = firebase_auth_module.verify_id_token(payload.firebase_token)
+        
     except RuntimeError as exc:
-        # SDK not configured — surface as 503
+        logger.error(f"Firebase Config Error: {exc}")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=str(exc),
+            detail="Authentication service is currently misconfigured on the server."
         )
-    except Exception:
-        # Any Firebase verification failure → 401
+    except fb_auth.ExpiredIdTokenError:
+        logger.warning("Rejected expired Firebase token.")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Firebase token is invalid or has expired. Please re-authenticate.",
+            detail="Firebase token expired. Please request a new OTP."
+        )
+    except fb_auth.InvalidIdTokenError:
+        logger.warning("Rejected invalid Firebase token signature.")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid Firebase token. Please re-authenticate."
+        )
+    except ValueError as ve:
+        logger.error(f"Firebase Initialization/Value Error: {ve}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Server Error: Firebase Admin SDK configuration error."
+        )
+    except Exception as e:
+        logger.error(f"Unexpected Auth Error: {traceback.format_exc()}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error during cryptographic authentication."
         )
 
     uid: str = decoded_token.get("uid", "")
@@ -126,7 +155,7 @@ def firebase_login(
             detail="Firebase token does not contain a verified phone_number claim.",
         )
 
-    # Step 2: Extract trailing 10 digits to normalize against country codes safely
+    # Step 2: Extract trailing 10 digits to normalize against varying country prefixes
     clean_10_digits = phone_number[-10:] if phone_number else ""
 
     # Look up user dynamically by matching trailing digits or explicit firebase_uid
@@ -136,7 +165,7 @@ def firebase_login(
         | (User.firebase_uid == uid)
     ).first()
 
-    # Step 3: New user path — no DB writes, return flag + short-lived signup token
+    # Step 3: New user path — Return signup token to advance to company registration
     if not user:
         signup_token = sign_jwt(
             {
@@ -159,7 +188,7 @@ def firebase_login(
         user.firebase_uid = uid
         db.commit()
 
-    # Step 5: Sign internal JWT
+    # Step 5: Sign internal session JWT
     token_payload = {
         "user_id": str(user.id),
         "tenant_id": str(user.tenant_id) if user.tenant_id else None,
@@ -209,7 +238,7 @@ def _issue_session_response(
     phone_number: str,
     response: Response,
 ) -> dict:
-    """Sign session JWT, set cookie, and return the standard login payload."""
+    """Helper to sign session JWT, set cookie, and return the standard login payload."""
     token_payload = {
         "user_id": str(user.id),
         "tenant_id": str(user.tenant_id) if user.tenant_id else None,
@@ -281,6 +310,7 @@ def complete_signup(
             detail="An account with this phone number already exists. Please log in.",
         )
 
+    # Provision standard initial workspace layout
     new_tenant = DistributorTenant(
         id=uuid.uuid4(),
         name="My B2B Distribution",
@@ -308,7 +338,7 @@ def complete_signup(
 
 
 # ---------------------------------------------------------------------------
-# GET /auth/me (unchanged)
+# GET /auth/me
 # ---------------------------------------------------------------------------
 
 @router.get("/me", status_code=status.HTTP_200_OK)
@@ -317,6 +347,7 @@ def get_me(
     authorization: str | None = Header(None),
     db: Session = Depends(get_db),
 ):
+    """Retrieves session profile data from the active JWT."""
     token = access_token
     if not token and authorization and authorization.startswith("Bearer "):
         token = authorization.split(" ")[1]
@@ -357,7 +388,7 @@ def get_me(
 
 
 # ---------------------------------------------------------------------------
-# POST /auth/logout (unchanged)
+# POST /auth/logout
 # ---------------------------------------------------------------------------
 
 @router.post("/logout", status_code=status.HTTP_200_OK)
