@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 from app.database import get_db, tenant_context, SessionLocal
+from app.models.user import User
 from app.models.customer import Customer, CustomerAlias
 from app.models.product import Product, ProductAlias
 from app.models.order import Order, OrderLineItem, OrderStateLedger
@@ -101,6 +102,7 @@ def process_whatsapp_webhook_payload(
                     msg_metadata = value.get("metadata", {})
                     bot_phone_id = msg_metadata.get("phone_number_id")
 
+        resolved_tenant_id = None
         if bot_phone_id:
             tenant = db.query(DistributorTenant).filter(DistributorTenant.whatsapp_phone_id == bot_phone_id).first()
             if tenant:
@@ -119,12 +121,31 @@ def process_whatsapp_webhook_payload(
                         "error_message": None
                     }
         else:
-            resolved_tenant_id = canonical_msg.tenant_id or DEMO_TENANT_ID
-            if receiver_phone:
-                tenant = db.query(DistributorTenant).filter(DistributorTenant.whatsapp_order_phone == receiver_phone).first()
-                if tenant:
-                    resolved_tenant_id = tenant.id
-        
+            # Query the database to find the matching User record and retrieve their multi-tenant tenant_id
+            normalized_phone = normalize_phone_number(phone)
+            phone_variants = get_phone_number_variants(phone)
+            user = db.query(User).filter(
+                (User.phone_number == phone) |
+                (User.phone_number == normalized_phone) |
+                (User.phone_number.in_(phone_variants)) |
+                (User.email_or_phone == phone) |
+                (User.email_or_phone == normalized_phone) |
+                (User.email_or_phone.in_(phone_variants))
+            ).first()
+            if user:
+                resolved_tenant_id = user.tenant_id
+                logger.info("[Ingestion - %s] Resolved tenant ID via matching User record: %s", correlation_id, resolved_tenant_id)
+            
+            if not resolved_tenant_id:
+                resolved_tenant_id = canonical_msg.tenant_id
+                if not resolved_tenant_id and receiver_phone:
+                    tenant = db.query(DistributorTenant).filter(DistributorTenant.whatsapp_order_phone == receiver_phone).first()
+                    if tenant:
+                        resolved_tenant_id = tenant.id
+
+            if not resolved_tenant_id:
+                resolved_tenant_id = DEMO_TENANT_ID
+
         logger.info("[Ingestion - %s] Resolved active Tenant ID: %s", correlation_id, resolved_tenant_id)
         tenant_context.set(resolved_tenant_id)
 
@@ -396,4 +417,4 @@ def handle_whatsapp_webhook(
 
     background_tasks.add_task(run_async)
     
-    return {"status": "success", "message": "Webhook received and accepted for processing"}
+    return {"status": "received"}
