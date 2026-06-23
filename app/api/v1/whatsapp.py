@@ -418,3 +418,40 @@ def handle_whatsapp_webhook(
     background_tasks.add_task(run_async)
     
     return {"status": "received"}
+
+
+class ProvisionRequest(BaseModel):
+    instance_name: str
+
+
+@router.post("/provision")
+async def provision_whatsapp_instance(payload: ProvisionRequest):
+    from app.services.gateway_service import EvolutionGatewayService
+    service = EvolutionGatewayService()
+    try:
+        try:
+            init_res = await service.initialize_instance(payload.instance_name)
+        except Exception as e:
+            logger.warning("Instance creation skipped or failed (might already exist): %s", str(e))
+            init_res = {"status": "skipped", "message": str(e)}
+
+        webhook_res = await service.configure_webhook(payload.instance_name)
+        qr_base64 = await service.generate_qr_code(payload.instance_name)
+        conn_status = await service.get_connection_status(payload.instance_name)
+
+        return {
+            "status": "success",
+            "message": "Instance provisioned successfully",
+            "instance_name": payload.instance_name,
+            "qr_code": qr_base64,
+            "webhook_configured": True,
+            "connection_status": conn_status,
+            "init_response": init_res,
+            "webhook_response": webhook_res
+        }
+    except Exception as e:
+        logger.error("Provisioning failed: %s", str(e), exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Provisioning failed: {str(e)}"
+        )
