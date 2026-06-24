@@ -10,7 +10,7 @@ class EvolutionGatewayService:
         self.base_url = os.getenv("EVOLUTION_API_URL", "https://evolution-api-latest-vma7.onrender.com").rstrip("/")
         self.api_key = os.getenv("EVOLUTION_API_KEY")
 
-    def _get_headers(self):
+    def _get_headers(self) -> dict:
         headers = {
             "Content-Type": "application/json"
         }
@@ -38,49 +38,75 @@ class EvolutionGatewayService:
                     response.raise_for_status()
                 return response.json()
             except httpx.HTTPStatusError as exc:
-                logger.error("HTTP error during instance initialization: url=%s, payload=%s, error=%s", url, payload, str(exc))
+                logger.error(
+                    "HTTP error during instance initialization: url=%s, payload=%s, status_code=%d, error=%s, response=%s",
+                    url, payload, exc.response.status_code, str(exc), exc.response.text
+                )
                 raise
             except Exception as exc:
                 logger.error("Unexpected error during instance initialization: url=%s, payload=%s, error=%s", url, payload, str(exc))
                 raise
 
- async def generate_qr_code(self, instance_name: str) -> str:
-        # Use POST as per Evolution API v2 documentation
+    async def generate_qr_code(self, instance_name: str) -> str:
+        # 1. Defensive Logic: Check connection status first
+        try:
+            status = await self.get_connection_status(instance_name)
+            if status == "open":
+                logger.info("Instance %s is already open. Returning 'ALREADY_CONNECTED'.", instance_name)
+                return "ALREADY_CONNECTED"
+        except Exception as status_exc:
+            logger.warning(
+                "Could not fetch connection status for %s before QR code generation: %s",
+                instance_name, str(status_exc)
+            )
+
+        # 2. Proceed to the connection call (POST method for /instance/connect/{instanceName})
         url = f"{self.base_url}/instance/connect/{instance_name}"
-        
-        logger.info("Generating QR code via POST: url=%s", url)
+        logger.info("Generating QR code: url=%s", url)
         
         async with httpx.AsyncClient() as client:
             try:
-                # MUST be a POST request
                 response = await client.post(url, headers=self._get_headers())
-                
                 if response.status_code != 200:
                     logger.error(
                         "Evolution API QR generation failed. status_code=%d, url=%s, response=%s",
                         response.status_code, url, response.text
                     )
+                    # Handle case where the connect call returns an error indicating it's already open
+                    if "open" in response.text.lower() or "connected" in response.text.lower() or "already" in response.text.lower():
+                        logger.info("Connect call response indicates instance is already open/connected: %s", response.text)
+                        return "ALREADY_CONNECTED"
                     response.raise_for_status()
                 
                 data = response.json()
-                
-                # Evolution API v2 usually returns base64 inside a 'qrcode' object
-                # or directly in the base64 field of the response
-                qrcode_data = data.get("qrcode") or {}
-                base64_str = qrcode_data.get("base64") if isinstance(qrcode_data, dict) else data.get("base64")
+                qrcode_data = data.get("qrcode", {})
+                if isinstance(qrcode_data, dict):
+                    base64_str = qrcode_data.get("base64")
+                else:
+                    base64_str = data.get("base64")
                 
                 if base64_str:
                     return base64_str
-                else:
-                    logger.error("QR Code generation succeeded but no base64 found in response: %s", data)
-                    raise RuntimeError("QR code data not found in API response.")
-                    
-            except Exception as exc:
-                logger.error("Error during QR code generation: url=%s, error=%s", url, str(exc))
+                
+                # Fallback check of response contents
+                if "open" in response.text.lower() or "connected" in response.text.lower():
+                    logger.info("No base64 string found but response suggests instance is already open/connected: %s", response.text)
+                    return "ALREADY_CONNECTED"
+                
+                raise RuntimeError("QR code base64 not found in response.")
+            except httpx.HTTPStatusError as exc:
+                resp_text = exc.response.text
+                if "open" in resp_text.lower() or "connected" in resp_text.lower() or "already" in resp_text.lower():
+                    logger.info("HTTP Status error indicates already open: %s", resp_text)
+                    return "ALREADY_CONNECTED"
+                logger.error(
+                    "HTTP error during QR code generation: url=%s, status_code=%d, error=%s, response=%s",
+                    url, exc.response.status_code, str(exc), resp_text
+                )
                 raise
-
-    async def configure_webhook(self, instance_name: str) -> dict:
-        # ... (ensure this method is also indented by 4 spaces)
+            except Exception as exc:
+                logger.error("Unexpected error during QR code generation: url=%s, error=%s", url, str(exc))
+                raise
 
     async def configure_webhook(self, instance_name: str) -> dict:
         url = f"{self.base_url}/webhook/set/{instance_name}"
@@ -111,7 +137,10 @@ class EvolutionGatewayService:
                     response.raise_for_status()
                 return response.json()
             except httpx.HTTPStatusError as exc:
-                logger.error("HTTP error during webhook configuration: url=%s, payload=%s, error=%s", url, payload, str(exc))
+                logger.error(
+                    "HTTP error during webhook configuration: url=%s, payload=%s, status_code=%d, error=%s, response=%s",
+                    url, payload, exc.response.status_code, str(exc), exc.response.text
+                )
                 raise
             except Exception as exc:
                 logger.error("Unexpected error during webhook configuration: url=%s, payload=%s, error=%s", url, payload, str(exc))
@@ -135,7 +164,10 @@ class EvolutionGatewayService:
                 status = instance_data.get("state") or instance_data.get("status") or "close"
                 return status
             except httpx.HTTPStatusError as exc:
-                logger.error("HTTP error during connection status check: url=%s, error=%s", url, str(exc))
+                logger.error(
+                    "HTTP error during connection status check: url=%s, status_code=%d, error=%s, response=%s",
+                    url, exc.response.status_code, str(exc), exc.response.text
+                )
                 raise
             except Exception as exc:
                 logger.error("Unexpected error during connection status check: url=%s, error=%s", url, str(exc))

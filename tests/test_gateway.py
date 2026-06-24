@@ -13,43 +13,57 @@ async def test_evolution_gateway_service_methods():
     with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post, \
          patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
          
-        # Mock initialize_instance
-        mock_response = MagicMock()
-        mock_response.status_code = 201
-        mock_response.json.return_value = {"instance": {"instanceName": "test_bot"}}
-        mock_post.return_value = mock_response
-        
+        # Define post side effects
+        def post_side_effect(url, **kwargs):
+            mock_resp = MagicMock()
+            mock_resp.status_code = 200
+            if "instance/create" in url:
+                mock_resp.status_code = 201
+                mock_resp.json.return_value = {"instance": {"instanceName": "test_bot"}}
+            elif "instance/connect" in url:
+                mock_resp.json.return_value = {"qrcode": {"base64": "data:image/png;base64,mockqr"}}
+            elif "webhook/set" in url:
+                mock_resp.json.return_value = {"status": "success"}
+            return mock_resp
+        mock_post.side_effect = post_side_effect
+
+        # Define get side effects where status is closed
+        def get_close_side_effect(url, **kwargs):
+            mock_resp = MagicMock()
+            mock_resp.status_code = 200
+            if "connectionState" in url:
+                mock_resp.json.return_value = {"instance": {"status": "close"}}
+            return mock_resp
+        mock_get.side_effect = get_close_side_effect
+
+        # 1. Test initialize_instance
         res = await service.initialize_instance("test_bot")
         assert res["instance"]["instanceName"] == "test_bot"
         
-        # Mock generate_qr_code success
-        mock_response_qr = MagicMock()
-        mock_response_qr.status_code = 200
-        mock_response_qr.json.return_value = {"qrcode": {"base64": "data:image/png;base64,mockqr"}}
-        mock_get.return_value = mock_response_qr
-        
-        # We try connect first in mock since it will match the second URL in list or the first if it returns 200
-        # For this test, mock_get returns 200 immediately for the first endpoint in endpoints list
+        # 2. Test generate_qr_code when closed (should call connect POST and return mockqr base64)
         qr = await service.generate_qr_code("test_bot")
         assert qr == "data:image/png;base64,mockqr"
         
-        # Mock configure_webhook
-        mock_response_webhook = MagicMock()
-        mock_response_webhook.status_code = 200
-        mock_response_webhook.json.return_value = {"status": "success"}
-        mock_post.return_value = mock_response_webhook
-        
+        # 3. Test configure_webhook
         webhook_res = await service.configure_webhook("test_bot")
         assert webhook_res["status"] == "success"
         
-        # Mock get_connection_status
-        mock_response_status = MagicMock()
-        mock_response_status.status_code = 200
-        mock_response_status.json.return_value = {"instance": {"status": "open"}}
-        mock_get.return_value = mock_response_status
+        # 4. Test get_connection_status
+        # Change mock_get side effect to return open status
+        def get_open_side_effect(url, **kwargs):
+            mock_resp = MagicMock()
+            mock_resp.status_code = 200
+            if "connectionState" in url:
+                mock_resp.json.return_value = {"instance": {"status": "open"}}
+            return mock_resp
+        mock_get.side_effect = get_open_side_effect
         
         status = await service.get_connection_status("test_bot")
         assert status == "open"
+
+        # 5. Test generate_qr_code when open (should immediately return ALREADY_CONNECTED)
+        qr_open = await service.generate_qr_code("test_bot")
+        assert qr_open == "ALREADY_CONNECTED"
 
 
 def test_provision_endpoint_success():
