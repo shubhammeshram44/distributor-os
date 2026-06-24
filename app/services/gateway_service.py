@@ -120,7 +120,7 @@ class EvolutionGatewayService:
 
     async def configure_webhook(self, instance_name: str) -> dict:
         url = f"{self.base_url}/webhook/set/{instance_name}"
-        app_url = os.getenv("APP_URL") or os.getenv("NEXT_PUBLIC_API_URL") or "http://127.0.0.1:8000"
+        app_url = os.getenv("APP_URL") or os.getenv("RENDER_EXTERNAL_URL") or "https://distributor-os-backend.onrender.com"
         webhook_url = f"{app_url.rstrip('/')}/api/v1/whatsapp/webhook"
         
         payload = {
