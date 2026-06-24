@@ -9,7 +9,6 @@ class EvolutionGatewayService:
     def __init__(self, client: Optional[httpx.AsyncClient] = None):
         self.base_url = os.getenv("EVOLUTION_API_URL", "https://evolution-api-latest-vma7.onrender.com").rstrip("/")
         self.api_key = os.getenv("EVOLUTION_API_KEY")
-        # Reuse existing client pool if passed (best practice), or fallback to standalone managed instance
         self._client = client
 
     def _get_headers(self) -> dict:
@@ -21,7 +20,6 @@ class EvolutionGatewayService:
         return headers
 
     def _get_client(self) -> httpx.AsyncClient:
-        # Fallback helper to allow context management if a shared client is not injected
         return self._client if self._client is not None else httpx.AsyncClient()
 
     async def initialize_instance(self, instance_name: str) -> dict:
@@ -69,20 +67,22 @@ class EvolutionGatewayService:
                 instance_name, str(status_exc)
             )
 
-        # 2. Proceed to the connection call
-        # Evolution API router declares this as POST /instance/connect (no path param).
-        # The instance target is passed in the JSON body, not appended to the URL.
-        url = f"{self.base_url}/instance/connect"
-        payload = {"instanceName": instance_name}
-        logger.info("Generating QR code: url=%s, payload=%s", url, payload)
+        # 2. Connect call to get QR code.
+        # Evolution API source (instance.router.ts):
+        #   .get(this.routerPath('connect'), ...)
+        # routerPath('connect') => '/connect/:instanceName'  (param=true by default)
+        # Router mounted at /instance => full path: GET /instance/connect/:instanceName
+        # Method is GET, instance name is a URL path param — no request body.
+        url = f"{self.base_url}/instance/connect/{instance_name}"
+        logger.info("Generating QR code: url=%s method=GET", url)
         
         client = self._get_client()
         try:
-            response = await client.post(url, json=payload, headers=self._get_headers())
+            response = await client.get(url, headers=self._get_headers())
             if response.status_code != 200:
                 logger.error(
-                    "Evolution API QR generation failed. status_code=%d, url=%s, payload=%s, response=%s",
-                    response.status_code, url, payload, response.text
+                    "Evolution API QR generation failed. status_code=%d, url=%s, response=%s",
+                    response.status_code, url, response.text
                 )
                 if any(x in response.text.lower() for x in ["open", "connected", "already"]):
                     logger.info("Connect call response indicates instance is already open/connected: %s", response.text)
@@ -110,8 +110,8 @@ class EvolutionGatewayService:
                 logger.info("HTTP Status error indicates already open: %s", resp_text)
                 return "ALREADY_CONNECTED"
             logger.error(
-                "HTTP error during QR code generation: url=%s, payload=%s, status_code=%d, error=%s, response=%s",
-                url, payload, exc.response.status_code, str(exc), resp_text
+                "HTTP error during QR code generation: url=%s, status_code=%d, error=%s, response=%s",
+                url, exc.response.status_code, str(exc), resp_text
             )
             raise
         except Exception as exc:
@@ -164,6 +164,8 @@ class EvolutionGatewayService:
                 await client.aclose()
 
     async def get_connection_status(self, instance_name: str) -> str:
+        # Evolution API source: .get(this.routerPath('connectionState'), ...)
+        # => GET /instance/connectionState/:instanceName
         url = f"{self.base_url}/instance/connectionState/{instance_name}"
         logger.info("Fetching connection status for instance %s: url=%s", instance_name, url)
         
@@ -179,7 +181,6 @@ class EvolutionGatewayService:
             
             data = response.json()
             instance_data = data.get("instance", {})
-            # Aligned explicitly with the exact 'connectionStatus' layout fields returned by v2 engine schema
             status = data.get("connectionStatus") or instance_data.get("connectionStatus") or instance_data.get("state") or instance_data.get("status") or "close"
             return status
         except httpx.HTTPStatusError as exc:
