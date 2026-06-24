@@ -452,3 +452,14 @@ def test_whatsapp_outgoing_adapter_mocked(db_session, monkeypatch):
     assert called_json["text"]["body"] == "Hello adapter test"
 
 
+def test_whatsapp_webhook_validation_handshake(client):
+    for event in ["connection.update", "webhook.test", "webhook.verify"]:
+        payload = {"event": event}
+        response = client.post("/api/v1/whatsapp/webhook", json=payload)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "SUCCESS"
+        assert "Handshake verified" in data["message"]
+
+
+

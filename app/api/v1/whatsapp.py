@@ -4,7 +4,7 @@ import logging
 import os
 import sys
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, status, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status, Query, BackgroundTasks, Request
 from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy import select, func
@@ -390,12 +390,24 @@ def process_whatsapp_webhook_payload(
 
 
 @router.post("/webhook")
-def handle_whatsapp_webhook(
-    payload: WebhookPayload,
+async def handle_whatsapp_webhook(
+    request: Request,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
     correlation_id = f"corr-{uuid.uuid4().hex[:8]}"
+    try:
+        payload_data = await request.json()
+    except Exception as e:
+        logger.error("[Ingestion - %s] Failed to parse request JSON: %s", correlation_id, str(e))
+        raise HTTPException(status_code=400, detail="Invalid JSON payload")
+        
+    event_type = payload_data.get("event")
+    if event_type in ["connection.update", "webhook.test", "webhook.verify"]:
+        logger.info("Received gateway validation handshake: %s. Returning immediate success.", event_type)
+        return {"status": "SUCCESS", "message": "Handshake verified"}
+        
+    payload = WebhookPayload(**payload_data)
     logger.info("[Ingestion - %s] Webhook payload received: %s", correlation_id, payload.model_dump())
     
     # Check if we are running in a pytest environment
