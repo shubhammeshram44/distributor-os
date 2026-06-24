@@ -109,20 +109,18 @@ class EvolutionGatewayService:
                 raise
 
     async def configure_webhook(self, instance_name: str) -> dict:
-        url = f"{self.base_url}/webhook/set/{instance_name}"
+        url = f"{self.base_url}/webhook/instance/set"
         app_url = os.getenv("APP_URL") or os.getenv("NEXT_PUBLIC_API_URL") or "http://127.0.0.1:8000"
         webhook_url = f"{app_url.rstrip('/')}/api/v1/whatsapp/webhook"
         
         payload = {
-            "webhook": {
-                "enabled": True,
-                "url": webhook_url,
-                "byEvents": False,
-                "events": [
-                    "MESSAGES_UPSERT",
-                    "CONNECTION_UPDATE"
-                ]
-            }
+            "instance": instance_name,
+            "url": webhook_url,
+            "enabled": True,
+            "events": [
+                "MESSAGES_UPSERT",
+                "CONNECTION_UPDATE"
+            ]
         }
         logger.info("Configuring webhook for instance %s: url=%s, payload=%s", instance_name, url, payload)
         
