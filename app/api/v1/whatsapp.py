@@ -1,6 +1,7 @@
 import typing
 import uuid
 import logging
+import asyncio
 import os
 import sys
 from datetime import datetime
@@ -456,6 +457,10 @@ async def provision_whatsapp_instance(payload: ProvisionRequest):
                     logger.info("Successfully purged legacy instance %s.", payload.instance_name)
         except Exception as delete_exc:
             logger.info("No legacy instance found to purge, moving forward. Details: %s", str(delete_exc))
+
+        # Wait 4 seconds to allow the gateway to fully complete its background WebSocket teardown
+        logger.info("Waiting 4 seconds for delete operation to fully stabilize...")
+        await asyncio.sleep(4)
 
         # Step 2: Initialize Clean Instance (Do not swallow errors)
         init_res = await service.initialize_instance(payload.instance_name)
