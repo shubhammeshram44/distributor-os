@@ -12,6 +12,12 @@ class EvolutionGatewayService:
         self.base_url = os.getenv("EVOLUTION_API_URL", "https://evolution-api-latest-vma7.onrender.com").rstrip("/")
         self.api_key = os.getenv("EVOLUTION_API_KEY")
         self._client = client
+        # DEBUG: log exactly what the live container sees
+        logger.info(
+            "GatewayService init: base_url=%s api_key_present=%s api_key=%s len=%s",
+            self.base_url, bool(self.api_key), repr(self.api_key),
+            len(self.api_key) if self.api_key else 0
+        )
 
     def _get_headers(self) -> dict:
         headers = {"Content-Type": "application/json"}
