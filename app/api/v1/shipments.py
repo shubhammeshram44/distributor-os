@@ -1,6 +1,6 @@
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, status, Cookie, Header
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select, and_
 from sqlalchemy.orm import Session, aliased
 from app.database import get_db, tenant_context
@@ -17,7 +17,7 @@ router = APIRouter(prefix="/shipments", tags=["Shipments"])
 
 class ShipmentCreatePayload(BaseModel):
     driver_id: uuid.UUID
-    vehicle_number: str
+    vehicle_number: str = Field(..., min_length=1)
     order_ids: list[uuid.UUID]
 
 

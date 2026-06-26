@@ -25,6 +25,22 @@ router = APIRouter(prefix="/whatsapp", tags=["WhatsApp"])
 
 logger = logging.getLogger("uvicorn.error")
 
+# Bounded in-memory set to deduplicate Evolution API retries within a session.
+# Keys are the Evolution API message IDs (data.key.id from the raw payload).
+_PROCESSED_MSG_IDS: set[str] = set()
+_PROCESSED_MSG_IDS_MAX = 10_000
+
+
+def _check_and_mark_msg_id(msg_id: str) -> bool:
+    """Return True if this message was already processed (duplicate)."""
+    if msg_id in _PROCESSED_MSG_IDS:
+        return True
+    if len(_PROCESSED_MSG_IDS) >= _PROCESSED_MSG_IDS_MAX:
+        _PROCESSED_MSG_IDS.pop()
+    _PROCESSED_MSG_IDS.add(msg_id)
+    return False
+
+
 # Module-level singleton: GeminiService is expensive to initialise (configures API key, loads model).
 _gemini_service_instance: GeminiService | None = None
 
@@ -206,9 +222,17 @@ def process_whatsapp_webhook_payload(
                 raw_tokens.append({"text_token": "Maggi 2-Min Noodles", "qty": 100})
             if "soap" in msg or "tata" in msg:
                 raw_tokens.append({"text_token": "Tata Premium Soap", "qty": 500})
-            
+
             if not raw_tokens:
-                raw_tokens.append({"text_token": "Wholesale SKU Ingestion", "qty": 100})
+                logger.warning("[Ingestion - %s] No parseable items found in message text. Dropping.", correlation_id)
+                return {
+                    "status": "ignored",
+                    "message": "No parseable order items found in message.",
+                    "job_id": None,
+                    "successful_rows": 0,
+                    "failed_rows": 0,
+                    "error_message": None
+                }
 
         logger.info("[Ingestion - %s] Extracted order tokens: %s", correlation_id, raw_tokens)
 
@@ -415,6 +439,12 @@ async def handle_whatsapp_webhook(
     if event_type in ["connection.update", "webhook.test", "webhook.verify"]:
         logger.info("Received gateway validation handshake: %s. Returning immediate success.", event_type)
         return {"status": "SUCCESS", "message": "Handshake verified"}
+
+    # Deduplicate Evolution API retries using the message ID in the raw payload.
+    msg_id = payload_data.get("data", {}).get("key", {}).get("id") if isinstance(payload_data.get("data"), dict) else None
+    if msg_id and _check_and_mark_msg_id(msg_id):
+        logger.info("[Ingestion] Duplicate Evolution API message id=%s — dropping.", msg_id)
+        return {"status": "ignored", "message": "Duplicate message already processed"}
         
     payload = WebhookPayload(**payload_data)
     logger.info("[Ingestion - %s] Webhook payload received: %s", correlation_id, payload.model_dump())

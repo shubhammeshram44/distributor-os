@@ -400,7 +400,7 @@ export default function MessagesPage() {
   }
 
   return (
-    <div className="flex bg-slate-50 min-h-screen text-slate-800 font-figtree overflow-hidden">
+    <div className="flex bg-slate-50 min-h-screen text-slate-800 font-figtree overflow-x-auto">
       {/* Sidebar panel */}
       <Sidebar
         activeTab="Messages"
@@ -419,7 +419,7 @@ export default function MessagesPage() {
         />
 
         {/* Three-pane layout cockpit wrapper */}
-        <div className="flex flex-1 overflow-hidden mt-16">
+        <div className="flex flex-1 overflow-hidden mt-16 min-w-[1024px]">
           
           {/* Panel 1: Left Pane (Retailers List) */}
           <div className="w-80 border-r border-slate-200 bg-white flex flex-col h-full shadow-sm">

@@ -155,11 +155,19 @@ def update_order_status(
     # Set tenant isolation context
     tenant_context.set(order.tenant_id)
 
-    _valid_statuses = {"Draft", "Confirmed", "Dispatched", "Delivered"}
-    if payload.to_status not in _valid_statuses:
+    _VALID_TRANSITIONS: dict[str, set[str]] = {
+        "Draft": {"Confirmed"},
+        "NEEDS_REVIEW": set(),  # Must resolve via triage first
+        "Confirmed": {"Dispatched"},
+        "Dispatched": {"Delivered"},
+        "Delivered": set(),
+    }
+    current_from_status = order.current_status
+    allowed = _VALID_TRANSITIONS.get(current_from_status, set())
+    if payload.to_status not in allowed:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid status '{payload.to_status}'. Allowed: {sorted(_valid_statuses)}"
+            detail=f"Invalid transition '{current_from_status}' → '{payload.to_status}'. Allowed: {sorted(allowed) or 'none (terminal or triage state)'}"
         )
 
     try:
@@ -167,6 +175,16 @@ def update_order_status(
         items = db.query(OrderLineItem).filter(OrderLineItem.order_id == order_id).all()
 
         if payload.to_status == "Confirmed":
+            # Reject if any line item is still unmatched (must go through triage first)
+            _unmatched_skus = {"UNMATCHED_SKU", "UNMATCHED_TRIAGE_SKU"}
+            for item in items:
+                prod_check = db.query(Product).filter(Product.id == item.product_id).first()
+                if prod_check and prod_check.sku_id in _unmatched_skus:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Cannot confirm order with unmatched SKUs. Resolve all items in triage first."
+                    )
+
             # 1. Fetch Customer
             customer = db.get(Customer, order.customer_id)
             if not customer:
@@ -1217,7 +1235,17 @@ def confirm_order_post(order_id: uuid.UUID, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Order not found")
 
     tenant_context.set(order.tenant_id)
-    
+
+    # Block confirmation if any line item is still unmatched
+    _unmatched_skus = {"UNMATCHED_SKU", "UNMATCHED_TRIAGE_SKU"}
+    for item in order.line_items:
+        prod_check = db.get(Product, item.product_id)
+        if prod_check and prod_check.sku_id in _unmatched_skus:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot confirm order with unmatched SKUs. Resolve all items in triage first."
+            )
+
     current_status = order.current_status
     db.add(OrderStateLedger(
         tenant_id=order.tenant_id,
