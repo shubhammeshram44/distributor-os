@@ -11,7 +11,7 @@ from app.models.ingestion import IngestionJob, IngestionStaging
 from app.models.product import Product, ProductAlias
 from app.models.inventory import Inventory
 from app.config import settings
-from app.database import tenant_context
+from app.database import tenant_context, with_db_retry
 import openpyxl
 
 logger = logging.getLogger(__name__)
@@ -121,6 +121,7 @@ class IngestionService:
 
         return mapping
 
+    @with_db_retry
     def ingest_file(
         self,
         db: Session,

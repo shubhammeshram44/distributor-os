@@ -10,7 +10,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy import select, func
 from sqlalchemy.orm import Session
-from app.database import get_db, tenant_context, SessionLocal
+from app.database import get_db, tenant_context, SessionLocal, with_db_retry
 from app.models.user import User
 from app.models.customer import Customer, CustomerAlias
 from app.models.product import Product, ProductAlias
@@ -59,6 +59,7 @@ def verify_whatsapp_webhook(
     )
 
 
+@with_db_retry
 def process_whatsapp_webhook_payload(
     payload: WebhookPayload,
     db: Session,

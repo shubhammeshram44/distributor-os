@@ -1,7 +1,7 @@
 import uuid
 from sqlalchemy import func
 from sqlalchemy.orm import Session
-from app.database import tenant_context
+from app.database import tenant_context, with_db_retry
 from app.models.payment import Payment, PaymentInvoiceLink
 from app.models.customer import Customer
 from app.models.ledger import CustomerLedger
@@ -56,6 +56,7 @@ def allocate_payment_fifo(db: Session, customer_id: uuid.UUID, payment_id: uuid.
         )
         db.add(link)
 
+@with_db_retry
 def reconcile_payments_and_invoices(db: Session, tenant_id: uuid.UUID, customer_id: uuid.UUID | None = None):
     """
     Event-driven centralized payment status reconciler.
@@ -139,6 +140,7 @@ def reconcile_payments_and_invoices(db: Session, tenant_id: uuid.UUID, customer_
 
     db.commit()
 
+@with_db_retry
 def process_payment(
     db: Session,
     tenant_id: uuid.UUID,
