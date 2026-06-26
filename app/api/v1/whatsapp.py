@@ -66,6 +66,9 @@ def process_whatsapp_webhook_payload(
         # 1. Payload Adaptation Layer: transform incoming payload to Canonical internal model
         try:
             canonical_msg = adapt_to_canonical(payload)
+            if not canonical_msg.sender_phone:
+                logger.warning("[Ingestion - %s] Failed to resolve contact or empty sender. Dropping and returning early.", correlation_id)
+                return {"status": "ignored", "reason": "failed_sender_resolution"}
         except ValueError as ve:
             if str(ve) == "distributor_self_message":
                 logger.info("[Ingestion - %s] Silently dropping distributor self-message (fromMe is True)", correlation_id)
@@ -108,6 +111,14 @@ def process_whatsapp_webhook_payload(
         #             bot_phone_id = msg_metadata.get("phone_number_id")
         # LEGACY_META_CODE_END
 
+        # Resolve instance name as bot_phone_id from model_extra for Evolution API
+        if not bot_phone_id:
+            extra_fields = getattr(payload, "model_extra", None) or {}
+            if not extra_fields and isinstance(payload, dict):
+                extra_fields = payload
+            if extra_fields:
+                bot_phone_id = extra_fields.get("instance") or extra_fields.get("instanceId") or extra_fields.get("instanceName")
+
         resolved_tenant_id = None
         if bot_phone_id:
             tenant = db.query(DistributorTenant).filter(DistributorTenant.whatsapp_phone_id == bot_phone_id).first()
@@ -128,13 +139,16 @@ def process_whatsapp_webhook_payload(
                     }
         else:
             # Query the database to find the matching User record and retrieve their multi-tenant tenant_id
-            normalized_phone = normalize_phone_number(phone)
-            phone_variants = get_phone_number_variants(phone)
+            clean_phone = phone
+            if clean_phone and "@" in clean_phone:
+                clean_phone = clean_phone.split("@")[0]
+            normalized_phone = normalize_phone_number(clean_phone)
+            phone_variants = get_phone_number_variants(clean_phone)
             user = db.query(User).filter(
-                (User.phone_number == phone) |
+                (User.phone_number == clean_phone) |
                 (User.phone_number == normalized_phone) |
                 (User.phone_number.in_(phone_variants)) |
-                (User.email_or_phone == phone) |
+                (User.email_or_phone == clean_phone) |
                 (User.email_or_phone == normalized_phone) |
                 (User.email_or_phone.in_(phone_variants))
             ).first()
@@ -188,22 +202,18 @@ async def handle_whatsapp_webhook(
     event_type = payload_data.get("event")
     if event_type == "connection.update":
         data = payload_data.get("data") or {}
-        instance_info = data.get("instance") or {}
-        instance_name = data.get("instanceName") or instance_info.get("instanceName") or payload_data.get("instance")
-        state = data.get("state") or instance_info.get("state")
+        state = data.get("state")
+        instance_name = payload_data.get("instance")
         
         if state == "open" and instance_name:
             logger.info("Auto-syncing distributor phone on connection open for instance %s", instance_name)
             try:
-                from app.services.gateway_service import EvolutionGatewayService
-                service = EvolutionGatewayService()
-                url = f"{service.base_url}/instance/fetchInstances"
-                headers = service._get_headers()
+                url = "http://34.158.60.42:8080/instance/fetchInstances"
+                headers = {"apikey": "distributorbotkey2026"}
                 
-                # Fetch instances
                 import httpx
                 async with httpx.AsyncClient(timeout=10.0) as client:
-                    response = await client.get(url, params={"instanceName": instance_name}, headers=headers)
+                    response = await client.get(url, headers=headers)
                 
                 if response.status_code == 200:
                     instances_data = response.json()
@@ -228,17 +238,26 @@ async def handle_whatsapp_webhook(
                         else:
                             owner_phone = owner_phone.split("@")[0]
                             
-                        # Normalize to E.164 formatting
-                        from app.utils.phone import normalize_phone_number
-                        normalized_phone = normalize_phone_number(owner_phone)
-                        
-                        tenant = db.query(DistributorTenant).filter(DistributorTenant.whatsapp_phone_id == instance_name).first()
-                        if tenant:
-                            tenant.whatsapp_order_phone = normalized_phone
-                            db.commit()
-                            from app.services.ingestion_service import IngestionService
-                            IngestionService.invalidate_tenant_cache(tenant.id)
-                            logger.info("Auto-synced distributor phone %s for tenant %s", normalized_phone, tenant.id)
+                        # Use a new DB session for this — do not reuse the webhook session.
+                        from app.database import SessionLocal
+                        new_db = SessionLocal()
+                        try:
+                            # Normalize to E.164 formatting
+                            from app.utils.phone import normalize_phone_number
+                            normalized_phone = normalize_phone_number(owner_phone)
+                            
+                            tenant = new_db.query(DistributorTenant).filter(DistributorTenant.whatsapp_phone_id == instance_name).first()
+                            if tenant:
+                                tenant.whatsapp_order_phone = normalized_phone
+                                new_db.commit()
+                                from app.services.ingestion_service import IngestionService
+                                IngestionService.invalidate_tenant_cache(tenant.id)
+                                logger.info("Auto-synced distributor phone %s for tenant %s using new DB session", normalized_phone, tenant.id)
+                        except Exception as db_exc:
+                            new_db.rollback()
+                            logger.error("DB error auto-syncing distributor phone: %s", str(db_exc))
+                        finally:
+                            new_db.close()
             except Exception as e:
                 logger.error("Failed to auto-sync distributor phone: %s", str(e), exc_info=True)
                 

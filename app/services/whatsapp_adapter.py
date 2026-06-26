@@ -16,6 +16,14 @@ class CanonicalWhatsAppMessage(BaseModel):
     message_text: str
     correlation_id: typing.Optional[str] = None
 
+def strip_whatsapp_suffix(phone_str: str) -> str:
+    if not phone_str:
+        return ""
+    if "@" in phone_str:
+        return phone_str.split("@")[0]
+    return phone_str
+
+
 def adapt_to_canonical(payload: typing.Any) -> CanonicalWhatsAppMessage:
     """
     Adapts various raw payload formats (e.g. flat Pydantic model, nested Meta webhook dict)
@@ -35,7 +43,40 @@ def adapt_to_canonical(payload: typing.Any) -> CanonicalWhatsAppMessage:
             
         sender = None
         if isinstance(key, dict):
-            sender = key.get("remoteJid")
+            remote_jid = key.get("remoteJid")
+            if remote_jid:
+                if str(remote_jid).endswith("@lid"):
+                    instance_name = extra_dict.get("instance")
+                    if instance_name:
+                        try:
+                            url = f"http://34.158.60.42:8080/chat/findContacts/{instance_name}"
+                            headers = {
+                                "apikey": "distributorbotkey2026",
+                                "Content-Type": "application/json"
+                            }
+                            body = {"where": {"remoteJid": remote_jid}}
+                            logger.info("Resolving @lid contact via GET: url=%s, body=%s", url, body)
+                            res = requests.get(url, json=body, headers=headers, timeout=5.0)
+                            if res.status_code == 200:
+                                res_data = res.json()
+                                contact = None
+                                if isinstance(res_data, list) and len(res_data) > 0:
+                                    contact = res_data[0]
+                                elif isinstance(res_data, dict):
+                                    contact = res_data
+                                
+                                if isinstance(contact, dict):
+                                    resolved_jid = contact.get("id") or contact.get("jid") or contact.get("remoteJid") or contact.get("number")
+                                    if resolved_jid:
+                                        sender = resolved_jid
+                        except Exception as e:
+                            logger.warning("Failed to resolve @lid from Evolution API: %s", str(e))
+                    
+                    if not sender:
+                        logger.warning("Could not resolve @lid contact %s for instance %s", remote_jid, instance_name)
+                        return "", ""
+                else:
+                    sender = remote_jid
             
         msg = data.get("message")
         msg_text = None
@@ -61,6 +102,13 @@ def adapt_to_canonical(payload: typing.Any) -> CanonicalWhatsAppMessage:
             try:
                 # Try extracting Evolution API fields first
                 ev_sender, ev_msg = extract_evolution_data(extra)
+                if ev_sender == "":
+                    return CanonicalWhatsAppMessage(
+                        tenant_id=None,
+                        sender_phone="",
+                        receiver_phone=None,
+                        message_text=""
+                    )
                 if ev_sender:
                     sender_phone = ev_sender
                 if ev_msg:
@@ -85,8 +133,8 @@ def adapt_to_canonical(payload: typing.Any) -> CanonicalWhatsAppMessage:
         
         return CanonicalWhatsAppMessage(
             tenant_id=tenant_id,
-            sender_phone=str(sender_phone),
-            receiver_phone=str(receiver_phone) if receiver_phone else None,
+            sender_phone=strip_whatsapp_suffix(str(sender_phone)),
+            receiver_phone=strip_whatsapp_suffix(str(receiver_phone)) if receiver_phone else None,
             message_text=str(message_text)
         )
 
@@ -95,14 +143,21 @@ def adapt_to_canonical(payload: typing.Any) -> CanonicalWhatsAppMessage:
         # Try extracting Evolution API fields first
         try:
             ev_sender, ev_msg = extract_evolution_data(payload)
+            if ev_sender == "":
+                return CanonicalWhatsAppMessage(
+                    tenant_id=None,
+                    sender_phone="",
+                    receiver_phone=None,
+                    message_text=""
+                )
             if ev_sender or ev_msg:
                 tenant_id_raw = payload.get("tenant_id")
                 tenant_id = uuid.UUID(str(tenant_id_raw)) if tenant_id_raw else None
                 receiver_phone = payload.get("receiver")
                 return CanonicalWhatsAppMessage(
                     tenant_id=tenant_id,
-                    sender_phone=str(ev_sender or ""),
-                    receiver_phone=str(receiver_phone) if receiver_phone else None,
+                    sender_phone=strip_whatsapp_suffix(str(ev_sender or "")),
+                    receiver_phone=strip_whatsapp_suffix(str(receiver_phone)) if receiver_phone else None,
                     message_text=str(ev_msg or "")
                 )
         except ValueError as ve:
@@ -168,8 +223,8 @@ def adapt_to_canonical(payload: typing.Any) -> CanonicalWhatsAppMessage:
         
         return CanonicalWhatsAppMessage(
             tenant_id=tenant_id,
-            sender_phone=str(sender_phone),
-            receiver_phone=str(receiver_phone) if receiver_phone else None,
+            sender_phone=strip_whatsapp_suffix(str(sender_phone)),
+            receiver_phone=strip_whatsapp_suffix(str(receiver_phone)) if receiver_phone else None,
             message_text=str(message_text)
         )
 

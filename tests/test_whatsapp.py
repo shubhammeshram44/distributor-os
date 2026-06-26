@@ -466,4 +466,93 @@ def test_whatsapp_webhook_validation_handshake(client):
         assert "Handshake verified" in data["message"]
 
 
+def test_whatsapp_webhook_lid_sender_and_tenant_resolution(db_session, client, monkeypatch):
+    from app.models.user import User
+    import requests
+
+    # Mock Evolution API findContacts response
+    class MockGetResponse:
+        def __init__(self, status_code, json_data):
+            self.status_code = status_code
+            self._json_data = json_data
+        def json(self):
+            return self._json_data
+
+    def mock_get(url, json=None, headers=None, timeout=None):
+        if "findContacts" in url:
+            if json and json.get("where", {}).get("remoteJid") == "234204700877007@lid":
+                return MockGetResponse(200, [{"id": "919078158448@s.whatsapp.net"}])
+        return MockGetResponse(404, {})
+
+    monkeypatch.setattr(requests, "get", mock_get)
+
+    # 1. Setup Tenant and User with matching phone
+    tenant = DistributorTenant(name="Lid Test Tenant", whatsapp_phone_id="test-instance-123")
+    db_session.add(tenant)
+    db_session.flush()
+    
+    user = User(
+        email_or_phone="+919078158448",
+        phone_number="+919078158448",
+        hashed_password="fakehash",
+        full_name="Kabita Sharma User",
+        role="distributor_admin",
+        tenant_id=tenant.id
+    )
+    db_session.add(user)
+    
+    # 2. Setup Customer with WhatsApp Phone Alias
+    customer = Customer(
+        tenant_id=tenant.id,
+        retailer_name="Kabita Sharma Shop",
+        customer_id="CUST-LID-101",
+        address_text="Rohini, Delhi",
+        gstin="07AAAAA1111A1Z1",
+        tax_group="GST-18",
+        payment_terms="Net 15"
+    )
+    db_session.add(customer)
+    db_session.flush()
+    
+    cust_alias = CustomerAlias(
+        tenant_id=tenant.id,
+        customer_id=customer.id,
+        alias_value="+919078158448"
+    )
+    db_session.add(cust_alias)
+    
+    # Setup Product & Alias
+    p1 = Product(tenant_id=tenant.id, sku_id="PROD-HUL-SOAP-LID", brand="HUL", category="Soap", pack_size="100g", base_price=45.00)
+    db_session.add(p1)
+    db_session.flush()
+    alias_soap = ProductAlias(tenant_id=tenant.id, product_id=p1.id, alias_name="HUL Soap")
+    db_session.add(alias_soap)
+    db_session.commit()
+
+    # 3. Post webhook payload containing @lid remoteJid, participant fallback, and instance name
+    payload = {
+        "event": "messages.upsert",
+        "instance": "test-instance-123",
+        "data": {
+            "key": {
+                "remoteJid": "234204700877007@lid",
+                "fromMe": False,
+                "id": "wamid.123"
+            },
+            "participant": "919078158448@s.whatsapp.net",
+            "message": {
+                "conversation": "Need 50 HUL Soap"
+            }
+        },
+        "sender": "919078158448@s.whatsapp.net"
+    }
+    
+    response = client.post("/api/v1/whatsapp/webhook", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["successful_rows"] == 1
+
+
+
 
