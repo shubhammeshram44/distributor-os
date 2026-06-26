@@ -21,6 +21,33 @@ def adapt_to_canonical(payload: typing.Any) -> CanonicalWhatsAppMessage:
     Adapts various raw payload formats (e.g. flat Pydantic model, nested Meta webhook dict)
     into a single canonical CanonicalWhatsAppMessage internal model.
     """
+    # Helper to extract data from Evolution API structure
+    def extract_evolution_data(extra_dict: dict) -> tuple[typing.Optional[str], typing.Optional[str]]:
+        """Returns (sender_phone, message_text) if found, otherwise (None, None)"""
+        data = extra_dict.get("data")
+        if not isinstance(data, dict):
+            return None, None
+            
+        # Check fromMe for self-messages
+        key = data.get("key")
+        if isinstance(key, dict) and (key.get("fromMe") is True or key.get("fromMe") == "true"):
+            raise ValueError("distributor_self_message")
+            
+        sender = None
+        if isinstance(key, dict):
+            sender = key.get("remoteJid")
+            
+        msg = data.get("message")
+        msg_text = None
+        if isinstance(msg, dict):
+            msg_text = msg.get("conversation")
+            if not msg_text:
+                extended = msg.get("extendedTextMessage")
+                if isinstance(extended, dict):
+                    msg_text = extended.get("text")
+                    
+        return sender, msg_text
+
     # 1. If it's a Pydantic model (with potential extra fields stored in model_extra)
     if hasattr(payload, "message_text") or hasattr(payload, "sender_phone"):
         tenant_id = getattr(payload, "tenant_id", None)
@@ -30,18 +57,29 @@ def adapt_to_canonical(payload: typing.Any) -> CanonicalWhatsAppMessage:
         
         # Check if there are extra attributes in model_extra (e.g. nested Meta format parsed as model with extra fields)
         extra = getattr(payload, "model_extra", None)
-        if extra and "entry" in extra:
+        if extra:
             try:
-                # Delegate to dictionary parsing of model_extra
-                nested_adapted = adapt_to_canonical(extra)
-                if nested_adapted.sender_phone:
-                    sender_phone = nested_adapted.sender_phone
-                if nested_adapted.message_text:
-                    message_text = nested_adapted.message_text
-                if nested_adapted.receiver_phone:
-                    receiver_phone = nested_adapted.receiver_phone
-                if tenant_id is None and "tenant_id" in extra and extra["tenant_id"]:
-                    tenant_id = uuid.UUID(str(extra["tenant_id"]))
+                # Try extracting Evolution API fields first
+                ev_sender, ev_msg = extract_evolution_data(extra)
+                if ev_sender:
+                    sender_phone = ev_sender
+                if ev_msg:
+                    message_text = ev_msg
+                    
+                # Fallback to Meta parsing if no Evolution data was matched
+                if not ev_sender and not ev_msg and "entry" in extra:
+                    nested_adapted = adapt_to_canonical(extra)
+                    if nested_adapted.sender_phone:
+                        sender_phone = nested_adapted.sender_phone
+                    if nested_adapted.message_text:
+                        message_text = nested_adapted.message_text
+                    if nested_adapted.receiver_phone:
+                        receiver_phone = nested_adapted.receiver_phone
+                    if tenant_id is None and "tenant_id" in extra and extra["tenant_id"]:
+                        tenant_id = uuid.UUID(str(extra["tenant_id"]))
+            except ValueError as ve:
+                if str(ve) == "distributor_self_message":
+                    raise
             except Exception as e:
                 logger.error("Failed to adapt model_extra in webhook payload: %s", str(e))
         
@@ -54,6 +92,23 @@ def adapt_to_canonical(payload: typing.Any) -> CanonicalWhatsAppMessage:
 
     # 2. If it's a dictionary
     if isinstance(payload, dict):
+        # Try extracting Evolution API fields first
+        try:
+            ev_sender, ev_msg = extract_evolution_data(payload)
+            if ev_sender or ev_msg:
+                tenant_id_raw = payload.get("tenant_id")
+                tenant_id = uuid.UUID(str(tenant_id_raw)) if tenant_id_raw else None
+                receiver_phone = payload.get("receiver")
+                return CanonicalWhatsAppMessage(
+                    tenant_id=tenant_id,
+                    sender_phone=str(ev_sender or ""),
+                    receiver_phone=str(receiver_phone) if receiver_phone else None,
+                    message_text=str(ev_msg or "")
+                )
+        except ValueError as ve:
+            if str(ve) == "distributor_self_message":
+                raise
+
         # Case A: Nested Meta/Simulator payload format
         # LEGACY_META_CODE_START
         if "entry" in payload:

@@ -64,7 +64,13 @@ def process_whatsapp_webhook_payload(
     logger.info("[Ingestion - %s] Processing webhook payload using Event Discriminator", correlation_id)
     try:
         # 1. Payload Adaptation Layer: transform incoming payload to Canonical internal model
-        canonical_msg = adapt_to_canonical(payload)
+        try:
+            canonical_msg = adapt_to_canonical(payload)
+        except ValueError as ve:
+            if str(ve) == "distributor_self_message":
+                logger.info("[Ingestion - %s] Silently dropping distributor self-message (fromMe is True)", correlation_id)
+                return {"status": "ignored", "reason": "distributor_self_message"}
+            raise
         canonical_msg.correlation_id = correlation_id
         logger.info(
             "[Ingestion - %s] Payload adapted to Canonical Model: sender=%s, receiver=%s, text_length=%d",
@@ -180,7 +186,65 @@ async def handle_whatsapp_webhook(
         raise HTTPException(status_code=400, detail="Invalid JSON payload")
         
     event_type = payload_data.get("event")
-    if event_type in ["connection.update", "webhook.test", "webhook.verify"]:
+    if event_type == "connection.update":
+        data = payload_data.get("data") or {}
+        instance_info = data.get("instance") or {}
+        instance_name = data.get("instanceName") or instance_info.get("instanceName") or payload_data.get("instance")
+        state = data.get("state") or instance_info.get("state")
+        
+        if state == "open" and instance_name:
+            logger.info("Auto-syncing distributor phone on connection open for instance %s", instance_name)
+            try:
+                from app.services.gateway_service import EvolutionGatewayService
+                service = EvolutionGatewayService()
+                url = f"{service.base_url}/instance/fetchInstances"
+                headers = service._get_headers()
+                
+                # Fetch instances
+                import httpx
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    response = await client.get(url, params={"instanceName": instance_name}, headers=headers)
+                
+                if response.status_code == 200:
+                    instances_data = response.json()
+                    instances_list = []
+                    if isinstance(instances_data, list):
+                        instances_list = instances_data
+                    elif isinstance(instances_data, dict):
+                        instances_list = instances_data.get("instances") or [instances_data]
+                    
+                    owner_jid = None
+                    for inst in instances_list:
+                        if isinstance(inst, dict) and inst.get("instanceName") == instance_name:
+                            owner_jid = inst.get("ownerJid")
+                            break
+                    if not owner_jid and instances_list and isinstance(instances_list[0], dict):
+                        owner_jid = instances_list[0].get("ownerJid")
+                        
+                    if owner_jid:
+                        owner_phone = str(owner_jid)
+                        if owner_phone.endswith("@s.whatsapp.net"):
+                            owner_phone = owner_phone[:-15]
+                        else:
+                            owner_phone = owner_phone.split("@")[0]
+                            
+                        # Normalize to E.164 formatting
+                        from app.utils.phone import normalize_phone_number
+                        normalized_phone = normalize_phone_number(owner_phone)
+                        
+                        tenant = db.query(DistributorTenant).filter(DistributorTenant.whatsapp_phone_id == instance_name).first()
+                        if tenant:
+                            tenant.whatsapp_order_phone = normalized_phone
+                            db.commit()
+                            from app.services.ingestion_service import IngestionService
+                            IngestionService.invalidate_tenant_cache(tenant.id)
+                            logger.info("Auto-synced distributor phone %s for tenant %s", normalized_phone, tenant.id)
+            except Exception as e:
+                logger.error("Failed to auto-sync distributor phone: %s", str(e), exc_info=True)
+                
+        return {"status": "SUCCESS", "message": "Handshake verified"}
+        
+    if event_type in ["webhook.test", "webhook.verify"]:
         logger.info("Received gateway validation handshake: %s. Returning immediate success.", event_type)
         return {"status": "SUCCESS", "message": "Handshake verified"}
         
