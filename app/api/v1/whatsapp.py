@@ -239,7 +239,6 @@ async def handle_whatsapp_webhook(
                             owner_phone = owner_phone.split("@")[0]
                             
                         # Use a new DB session for this — do not reuse the webhook session.
-                        from app.database import SessionLocal
                         new_db = SessionLocal()
                         try:
                             # Normalize to E.164 formatting
