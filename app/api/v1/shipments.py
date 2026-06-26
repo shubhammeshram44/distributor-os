@@ -150,7 +150,23 @@ def get_active_shipments(
             )
             db.add(new_shipment)
             db.commit()
-            return get_active_shipments(access_token, authorization, db)
+            # Return the seeded shipment inline — no recursion
+            invoice = db.query(Invoice).filter(Invoice.order_id == order.id).first()
+            invoice_amount = float(invoice.total_amount) if invoice else (
+                db.query(func.sum(OrderLineItem.quantity * OrderLineItem.unit_price))
+                .filter(OrderLineItem.order_id == order.id).scalar() or 0.0
+            )
+            results = [{
+                "shipment_id": str(new_shipment.id),
+                "driver_name": new_shipment.carrier,
+                "vehicle_number": new_shipment.tracking_id,
+                "status": new_shipment.status,
+                "order_id": str(order.id),
+                "internal_order_id": order.internal_order_id,
+                "customer_name": customer.retailer_name if customer else "Unknown Store",
+                "invoice_amount": float(invoice_amount),
+                "is_paid": False
+            }]
 
     return results
 

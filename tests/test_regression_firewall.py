@@ -7,6 +7,7 @@ from app.models.inventory import Inventory
 from app.models.ledger import CustomerLedger
 from app.models.shipment import Shipment
 from app.models.tenant import DistributorTenant
+from app.models.customer import Customer
 
 client = TestClient(app)
 
@@ -172,15 +173,18 @@ def test_payment_voucher_logging(db_session, setup_test_catalog):
     Verifies receiving a direct payment logs a voucher entry under the 
     customer's account ledger.
     """
+    customer = db_session.query(Customer).first()
     payload = {
-        "customer_id": 1,
+        "customer_id": str(customer.id),
         "amount": 2000.00,
         "payment_mode": "Cash"
     }
     response = client.post("/api/v1/payments/voucher", json=payload)
     assert response.status_code == 201
-    
-    ledger_entry = db_session.query(CustomerLedger).filter(CustomerLedger.customer_id == 1).order_by(CustomerLedger.id.desc()).first()
+
+    ledger_entry = db_session.query(CustomerLedger).filter(
+        CustomerLedger.customer_id == customer.id
+    ).order_by(CustomerLedger.id.desc()).first()
     assert ledger_entry is not None
     assert ledger_entry.credit == 2000.00
 

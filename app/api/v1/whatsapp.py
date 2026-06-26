@@ -25,6 +25,15 @@ router = APIRouter(prefix="/whatsapp", tags=["WhatsApp"])
 
 logger = logging.getLogger("uvicorn.error")
 
+# Module-level singleton: GeminiService is expensive to initialise (configures API key, loads model).
+_gemini_service_instance: GeminiService | None = None
+
+def _get_gemini_service() -> GeminiService:
+    global _gemini_service_instance
+    if _gemini_service_instance is None:
+        _gemini_service_instance = GeminiService()
+    return _gemini_service_instance
+
 class WebhookPayload(BaseModel):
     model_config = {"extra": "allow"}
 
@@ -77,12 +86,11 @@ def process_whatsapp_webhook_payload(
         phone = canonical_msg.sender_phone
         receiver_phone = canonical_msg.receiver_phone
 
-        # 1. Print the raw incoming message
-        print("\n================== INCOMING RAW WHATSAPP MESSAGE ==================")
-        print(f"Sender: {phone}")
-        print(f"Message: {msg_text}")
-        print(f"Correlation ID: {correlation_id}")
-        print("=====================================================================\n")
+        # 1. Log the raw incoming message
+        logger.info(
+            "[Ingestion - %s] Incoming message: sender=%s, text_length=%d",
+            correlation_id, phone, len(msg_text)
+        )
 
         # 2. Tenant Resolution Layer
         bot_phone_id = None
@@ -163,8 +171,10 @@ def process_whatsapp_webhook_payload(
                 customer = db.query(Customer).filter(Customer.phone_number.in_(phone_variants)).first()
 
         if not customer:
-            logger.warning("[Ingestion - %s] Clean ignore: Sender %s is not whitelisted for tenant %s", correlation_id, normalized_phone, resolved_tenant_id)
-            print(f"Clean ignore: Sender {normalized_phone} is not whitelisted for tenant {resolved_tenant_id}")
+            logger.warning(
+                "[Ingestion - %s] Clean ignore: sender %s not whitelisted for tenant %s",
+                correlation_id, normalized_phone, resolved_tenant_id
+            )
             return {
                 "status": "ignored",
                 "message": "Sender not whitelisted or not found for this tenant.",
@@ -175,7 +185,7 @@ def process_whatsapp_webhook_payload(
             }
 
         # 5. Core Ingestion Parser Layer (LLM Parsing)
-        gemini_service = GeminiService()
+        gemini_service = _get_gemini_service()
         parsed_order = gemini_service.parse_order_text(msg_text)
         logger.info(f"WHATSAPP_INGEST_DIAGNOSTIC: text='{msg_text}' parsed_result={parsed_order.model_dump_json()}")
 

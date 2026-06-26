@@ -5,8 +5,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.router import api_router
 from app.database import engine, Base
 
-# CRITICAL: Force table lifecycle creation on server startup
-Base.metadata.create_all(bind=engine)
+# Create tables on startup unless SKIP_SCHEMA_INIT is set.
+# In production with Alembic, set SKIP_SCHEMA_INIT=1 and run `alembic upgrade head` instead.
+if not os.getenv("SKIP_SCHEMA_INIT"):
+    Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="Distributor OS API",

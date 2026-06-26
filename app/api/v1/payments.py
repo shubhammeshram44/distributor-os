@@ -55,7 +55,7 @@ def create_collection_voucher(
 # =====================================================================
 # API Wrappers for Regression Firewall Tests
 # =====================================================================
-from typing import Any
+from typing import Optional
 from app.models.tenant import DistributorTenant
 from app.models.ledger import CustomerLedger
 from app.models.payment import Payment
@@ -64,7 +64,7 @@ from app.database import tenant_context
 from datetime import datetime
 
 class VoucherPayload(BaseModel):
-    customer_id: Any
+    customer_id: uuid.UUID
     amount: float
     payment_mode: str
 
@@ -77,7 +77,7 @@ def record_voucher(payload: VoucherPayload, db: Session = Depends(get_db)):
     ledger_entry = CustomerLedger(
         id=uuid.uuid4(),
         tenant_id=tenant_id,
-        customer_id=str(payload.customer_id),
+        customer_id=payload.customer_id,
         type="CREDIT",
         amount=payload.amount,
         reference_id=f"PAY-VOUCH-{uuid.uuid4().hex[:6].upper()}"
@@ -88,7 +88,7 @@ def record_voucher(payload: VoucherPayload, db: Session = Depends(get_db)):
 
 
 class CollectPayload(BaseModel):
-    customer_id: Any
+    customer_id: uuid.UUID
     amount: float
     payment_mode: str
 
@@ -102,7 +102,7 @@ def collect_payment(payload: CollectPayload, db: Session = Depends(get_db)):
     pay_record = Payment(
         id=uuid.uuid4(),
         tenant_id=tenant_id,
-        customer_id=str(payload.customer_id),
+        customer_id=payload.customer_id,
         amount=payload.amount,
         method=payload.payment_mode,
         reference_number=f"UPI-{uuid.uuid4().hex[:6].upper()}",
@@ -114,7 +114,7 @@ def collect_payment(payload: CollectPayload, db: Session = Depends(get_db)):
     ledger_entry = CustomerLedger(
         id=uuid.uuid4(),
         tenant_id=tenant_id,
-        customer_id=str(payload.customer_id),
+        customer_id=payload.customer_id,
         type="CREDIT",
         amount=payload.amount,
         reference_id=f"PAY-COLL-{uuid.uuid4().hex[:6].upper()}"
@@ -123,7 +123,7 @@ def collect_payment(payload: CollectPayload, db: Session = Depends(get_db)):
     db.flush()
 
     # 3. Trigger FIFO reconciliation
-    reconcile_payments_and_invoices(db, tenant_id, str(payload.customer_id))
+    reconcile_payments_and_invoices(db, tenant_id, payload.customer_id)
     
     db.commit()
     return {"status": "success"}

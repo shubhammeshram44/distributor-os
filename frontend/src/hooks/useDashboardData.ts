@@ -107,11 +107,11 @@ export function useDashboardData(
       if (!donutResp.ok) throw new Error("Failed to fetch collections donut");
       const donutResData = await donutResp.json();
       setDonutData(donutResData);
-      
+
       setError(null);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      setError(err.message || "Failed to load dashboard data");
+      setError(err instanceof Error ? err.message : "Failed to load dashboard data");
     } finally {
       setIsLoading(false);
     }
@@ -154,7 +154,7 @@ export function useDashboardData(
       if (!resp.ok) throw new Error("Failed to load order line item details");
       const data = await resp.json();
       setSelectedOrderDetails(data);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
     } finally {
       setLoadingDetails(false);
@@ -182,16 +182,37 @@ export function useDashboardData(
     }
   }, [activeTenantId, startDate, endDate, isAuthenticated, firebaseAuthExpiredFlag, fetchStaticData, fetchPolledData]);
 
-  // Activity feed polling setup (every 5 seconds)
+  // Activity feed polling setup (every 5 seconds) with abort to prevent stale response pile-up
   useEffect(() => {
     if (!activeTenantId || !isAuthenticated || firebaseAuthExpiredFlag) return;
 
-    const interval = setInterval(() => {
-      fetchPolledData();
-    }, 5000);
+    const controller = new AbortController();
 
-    return () => clearInterval(interval);
-  }, [activeTenantId, isAuthenticated, firebaseAuthExpiredFlag, fetchPolledData]);
+    const poll = async () => {
+      if (controller.signal.aborted) return;
+      try {
+        const activityResp = await fetch(
+          `${BASE_URL}/api/v1/dashboard/recent-activity?tenant_id=${activeTenantId}`,
+          { method: "GET", credentials: "include", signal: controller.signal }
+        );
+        if (activityResp.ok) {
+          const activityData = await activityResp.json();
+          setActivities(activityData);
+        }
+      } catch (err: unknown) {
+        if (err instanceof Error && err.name !== "AbortError") {
+          console.error("Activity feed poll failed:", err);
+        }
+      }
+    };
+
+    const interval = setInterval(poll, 5000);
+
+    return () => {
+      clearInterval(interval);
+      controller.abort();
+    };
+  }, [activeTenantId, isAuthenticated, firebaseAuthExpiredFlag]);
 
 
   return {

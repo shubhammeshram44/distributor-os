@@ -3,10 +3,11 @@ import io
 import logging
 import typing
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Cookie, Header
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
+from sqlalchemy import func, and_, select as sa_select, update as sa_update
+from sqlalchemy.orm import Session, aliased, joinedload
 from app.database import get_db, tenant_context
 from app.models.order import Order, OrderLineItem, OrderStateLedger
 from app.models.product import Product
@@ -15,6 +16,9 @@ from app.models.customer import Customer
 from app.models.ledger import CustomerLedger
 from app.models.invoice import Invoice
 from app.models.inventory import Inventory
+from app.services.tenant_service import resolve_tenant_id
+from app.services.demo_service import ensure_demo_data
+from app.services.payment_service import reconcile_payments_and_invoices
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +61,6 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
-from fastapi import Cookie, Header
 
 @router.get("", status_code=status.HTTP_200_OK, response_model=list[OrderResponse])
 def list_orders(
@@ -69,16 +72,12 @@ def list_orders(
     """
     Returns all orders for a tenant.
     """
-    from app.services.tenant_service import resolve_tenant_id
-    from app.services.demo_service import ensure_demo_data
     resolved_tenant_id = resolve_tenant_id(tenant_id, access_token, authorization)
     ensure_demo_data(db, resolved_tenant_id)
     tenant_context.set(resolved_tenant_id)
-    from sqlalchemy.orm import joinedload
-    from sqlalchemy import select
 
     query = (
-        select(Order, Invoice)
+        sa_select(Order, Invoice)
         .outerjoin(Invoice, Invoice.order_id == Order.id)
         .options(
             joinedload(Order.line_items).joinedload(OrderLineItem.product)
@@ -87,10 +86,17 @@ def list_orders(
         .order_by(Order.created_at.desc())
     )
     orders_invoices = db.execute(query).unique().all()
+    # Pre-fetch all customers in one query to avoid N+1
+    _cust_ids = list({o.customer_id for o, inv in orders_invoices})
+    _custs_map = (
+        {c.id: c for c in db.query(Customer).filter(Customer.id.in_(_cust_ids)).all()}
+        if _cust_ids else {}
+    )
+
     results = []
-    
+
     for o, inv in orders_invoices:
-        customer = db.get(Customer, o.customer_id)
+        customer = _custs_map.get(o.customer_id)
         cust_name = customer.retailer_name if customer else "Unknown Retailer"
 
         # Calculate total amount
@@ -149,6 +155,13 @@ def update_order_status(
     # Set tenant isolation context
     tenant_context.set(order.tenant_id)
 
+    _valid_statuses = {"Draft", "Confirmed", "Dispatched", "Delivered"}
+    if payload.to_status not in _valid_statuses:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid status '{payload.to_status}'. Allowed: {sorted(_valid_statuses)}"
+        )
+
     try:
         # Fetch Child Line Items
         items = db.query(OrderLineItem).filter(OrderLineItem.order_id == order_id).all()
@@ -165,13 +178,29 @@ def update_order_status(
             # 2. Calculate current order total
             current_order_total = sum(float(item.quantity * item.unit_price) for item in items)
 
-            # 3. Aggregate Confirmed orders' outstanding balances
-            total_confirmed_outstanding = 0.0
-            confirmed_orders = db.query(Order).filter(Order.customer_id == order.customer_id).all()
-            for co in confirmed_orders:
-                if co.id != order.id and co.current_status == "Confirmed":
-                    order_total = sum(float(line.quantity * line.unit_price) for line in co.line_items)
-                    total_confirmed_outstanding += order_total
+            # 3. Aggregate Confirmed orders' outstanding balances — single SQL query (no N+1)
+            _la = aliased(OrderStateLedger)
+            _confirmed_ids = sa_select(OrderStateLedger.order_id).where(
+                and_(
+                    OrderStateLedger.to_status == "Confirmed",
+                    OrderStateLedger.timestamp == (
+                        sa_select(func.max(_la.timestamp))
+                        .where(_la.order_id == OrderStateLedger.order_id)
+                        .scalar_subquery()
+                    )
+                )
+            )
+            total_confirmed_outstanding = float(db.execute(
+                sa_select(func.sum(OrderLineItem.quantity * OrderLineItem.unit_price))
+                .join(Order, OrderLineItem.order_id == Order.id)
+                .where(
+                    and_(
+                        Order.customer_id == order.customer_id,
+                        Order.id != order_id,
+                        Order.id.in_(_confirmed_ids)
+                    )
+                )
+            ).scalar() or 0.0)
 
             # 4. Check Credit Limit
             combined_balance = total_confirmed_outstanding + current_order_total
@@ -198,30 +227,41 @@ def update_order_status(
                     Inventory.tenant_id == order.tenant_id,
                     Inventory.sku_id == item.product_id  # Matches parent model ID mapping link
                 ).first()
-                
+
                 if not inv_record:
                     raise HTTPException(
                         status_code=400,
                         detail=f"Warehouse stock record not initialized for product code {item.sku_code}"
                     )
-                    
+
                 if inv_record.quantity_on_hand < item.quantity:
                     raise HTTPException(
                         status_code=400,
                         detail=f"Insufficient physical stock for item. Requested: {item.quantity}, Available: {inv_record.quantity_on_hand}"
                     )
 
-            # Rewrite Stock Decrement Execution: Perform atomic subtraction on the real stock inventory rows
+            # Atomic stock deduction: UPDATE with quantity guard prevents race conditions
             for item in items:
-                inv_record = db.query(Inventory).filter(
-                    Inventory.tenant_id == order.tenant_id,
-                    Inventory.sku_id == item.product_id
-                ).first()
-                if inv_record:
-                    inv_record.quantity_on_hand -= item.quantity
+                result = db.execute(
+                    sa_update(Inventory)
+                    .where(
+                        and_(
+                            Inventory.tenant_id == order.tenant_id,
+                            Inventory.sku_id == item.product_id,
+                            Inventory.quantity_on_hand >= item.quantity
+                        )
+                    )
+                    .values(quantity_on_hand=Inventory.quantity_on_hand - item.quantity)
+                )
+                if result.rowcount == 0:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Stock conflict for {item.sku_code} — another order took the last units concurrently. Refresh and retry."
+                    )
 
-            # Update Customer outstanding balance
-            customer.outstanding_balance = float(customer.outstanding_balance) + current_order_total
+            # Update Customer outstanding balance (guard: only increment on first confirmation)
+            if order.current_status not in ("Confirmed", "Dispatched", "Delivered"):
+                customer.outstanding_balance = float(customer.outstanding_balance) + current_order_total
 
             # Record a DEBIT transaction in the customer ledger
             db.add(CustomerLedger(
@@ -233,12 +273,11 @@ def update_order_status(
                 reference_id=order.internal_order_id
             ))
 
-            # Create Invoice directly
-            from datetime import datetime
+            # Create Invoice
             invoice = Invoice(
                 tenant_id=order.tenant_id,
                 order_id=order.id,
-                gstin=customer.gstin if customer.gstin else "29AAAAA1111A1Z1",
+                gstin=customer.gstin if (customer.gstin and customer.gstin not in ("PENDING", "")) else "UNREGISTERED",
                 total_amount=current_order_total,
                 irn_status="Cleared",
                 qr_code_status="Generated",
@@ -251,7 +290,6 @@ def update_order_status(
             db.flush()
 
             # Reconcile customer payments immediately to consume any credits
-            from app.services.payment_service import reconcile_payments_and_invoices
             reconcile_payments_and_invoices(db, order.tenant_id, order.customer_id)
 
         # Record state transition to OrderStateLedger
@@ -988,7 +1026,7 @@ def create_order(
             invoice = Invoice(
                 tenant_id=payload.tenant_id,
                 order_id=new_order.id,
-                gstin=customer.gstin if customer.gstin else "29AAAAA1111A1Z1",
+                gstin=customer.gstin if (customer.gstin and customer.gstin not in ("PENDING", "")) else "UNREGISTERED",
                 total_amount=amount_sum,
                 irn_status="Cleared",
                 qr_code_status="Generated",
@@ -1111,7 +1149,7 @@ def create_order_generic(payload: IngestionOrderPayload, db: Session = Depends(g
             customer_id="CUST-101",
             retailer_name="Kaveri Provision Store",
             address_text="Bengaluru",
-            gstin="29AAAAA1111A1Z1",
+            gstin="UNREGISTERED",
             tax_group="GST-18",
             payment_terms="0-15 Days"
         )
@@ -1208,7 +1246,7 @@ def confirm_order_post(order_id: uuid.UUID, db: Session = Depends(get_db)):
         invoice = Invoice(
             tenant_id=order.tenant_id,
             order_id=order.id,
-            gstin=customer.gstin if customer.gstin else "29AAAAA1111A1Z1",
+            gstin=customer.gstin if (customer.gstin and customer.gstin not in ("PENDING", "")) else "UNREGISTERED",
             total_amount=current_order_total,
             irn_status="Cleared",
             qr_code_status="Generated",

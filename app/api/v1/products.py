@@ -138,7 +138,10 @@ def get_products(
     """
     ensure_demo_data(db, tenant_id)
     tenant_context.set(tenant_id)
-    products = db.query(Product).filter(Product.sku_id != "UNMATCHED_TRIAGE_SKU").all()
+    products = db.query(Product).filter(
+        Product.tenant_id == tenant_id,
+        Product.sku_id != "UNMATCHED_TRIAGE_SKU"
+    ).all()
     return [
         {
             "id": str(p.id),

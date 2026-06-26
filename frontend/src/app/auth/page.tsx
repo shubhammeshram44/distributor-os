@@ -7,14 +7,17 @@ import { RecaptchaVerifier, signInWithPhoneNumber, ConfirmationResult } from "fi
 import { auth } from "@/lib/firebase";
 
 function cleanAndNormalizePhone(input: string): string | null {
-  // Strip all non-digit components (spaces, dashes, parentheses, etc.)
-  const digits = input.replace(/\D/g, "");
-  if (digits.length === 10) {
-    return `+91${digits}`;
+  const trimmed = input.trim();
+  const digits = trimmed.replace(/\D/g, "");
+
+  // Already in E.164 format (starts with +): strip non-digits and return
+  if (trimmed.startsWith("+") && digits.length >= 10 && digits.length <= 15) {
+    return `+${digits}`;
   }
-  if (digits.length === 12 && digits.startsWith("91")) {
-    return `+91${digits.slice(2)}`;
-  }
+  // Bare 10-digit Indian number → prepend +91
+  if (digits.length === 10) return `+91${digits}`;
+  // 12-digit with 91 country code but no leading + (e.g. 919876543210)
+  if (digits.length === 12 && digits.startsWith("91")) return `+${digits}`;
   return null;
 }
 
@@ -53,7 +56,7 @@ export default function AuthPage() {
 
     const e164 = cleanAndNormalizePhone(mobileNumber);
     if (!e164) {
-      setError("Please enter a valid 10-digit Indian mobile number (e.g. 98765 43210).");
+      setError("Please enter a valid mobile number (e.g. 98765 43210 or +91 98765 43210).");
       return;
     }
 

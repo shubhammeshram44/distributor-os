@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
 from app.database import tenant_context
 from app.models.tenant import DistributorTenant
@@ -24,7 +25,13 @@ def ensure_demo_data(db: Session, tenant_id: uuid.UUID | None = None):
     if str(tenant_id) != "d3b07384-d113-4956-a5d2-64be7357c11d":
         return  # Abort immediately. NEVER seed default rows into custom distributor profiles.
 
-    # 1. Check if the default tenant exists
+    try:
+        _seed_demo_data(db)
+    except IntegrityError:
+        db.rollback()  # Concurrent request already seeded — safe to ignore
+
+
+def _seed_demo_data(db: Session):
     tenant = db.get(DistributorTenant, DEMO_TENANT_ID)
     if not tenant:
         tenant = DistributorTenant(id=DEMO_TENANT_ID, name="S.V. Distributors")
