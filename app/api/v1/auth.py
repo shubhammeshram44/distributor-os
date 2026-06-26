@@ -138,8 +138,8 @@ def firebase_login(
     except ValueError as ve:
         logger.error(f"Firebase Initialization/Value Error: {ve}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Server Error: Firebase Admin SDK configuration error."
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Firebase token is invalid or has expired. Please request a new OTP."
         )
     except Exception as e:
         logger.error(f"Unexpected Auth Error: {traceback.format_exc()}")
@@ -162,8 +162,8 @@ def firebase_login(
 
     user = db.query(User).filter(
         (User.firebase_uid == uid) | 
-        (User.phone_number == clean_10_digits) | 
-        (User.email_or_phone == clean_10_digits)
+        (User.phone_number.like(f"%{clean_10_digits}")) | 
+        (User.email_or_phone.like(f"%{clean_10_digits}"))
     ).first()
 
     # Step 3: New user path — Return signup token to advance to company registration

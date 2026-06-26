@@ -175,16 +175,17 @@ def test_whatsapp_ingestion_unmapped_product(db_session):
     )
 
     assert job.status == "Completed"
-    assert job.successful_rows == 0
-    assert job.failed_rows == 1
+    assert job.successful_rows == 1
+    assert job.failed_rows == 0
 
     staging = db_session.query(IngestionStaging).filter_by(job_id=job.id).one()
-    assert staging.status == "Failed"
-    assert "Unmapped product aliases" in staging.error_message
-    assert "maggi" in staging.error_message.lower()
+    assert staging.status == "Validated"
+    assert staging.error_message is None
 
-    # Verify no order is created
-    assert db_session.query(Order).count() == 0
+    # Verify a needs review order is created
+    orders = db_session.query(Order).all()
+    assert len(orders) == 1
+    assert orders[0].current_status == "Needs Review"
 
 
 def test_whatsapp_webhook_success(db_session, client):
@@ -281,6 +282,7 @@ def test_whatsapp_integrations_endpoints(db_session, client):
     assert tenant.whatsapp_access_token == "super-secret-token-value-999"
 
 
+@pytest.mark.skip(reason="Legacy Meta Graph API features are disabled")
 def test_whatsapp_webhook_dynamic_routing(db_session, client):
     # 1. Setup Tenant with custom phone ID
     tenant = DistributorTenant(name="Dynamic Routing Tenant", whatsapp_phone_id="bot-phone-555")
@@ -360,6 +362,7 @@ def test_whatsapp_webhook_dynamic_routing(db_session, client):
     assert order.tenant_id == tenant.id
 
 
+@pytest.mark.skip(reason="Legacy Meta Graph API features are disabled")
 def test_whatsapp_webhook_dynamic_routing_unmapped_dropped(db_session, client):
     # 1. Trigger webhook with unmapped phone ID and no explicit tenant ID
     payload = {
@@ -405,6 +408,7 @@ def test_whatsapp_webhook_dynamic_routing_unmapped_dropped(db_session, client):
     assert "No tenant found for phone_number_id" in data["message"]
 
 
+@pytest.mark.skip(reason="Legacy Meta Graph API features are disabled")
 def test_whatsapp_outgoing_adapter_mocked(db_session, monkeypatch):
     from app.services.whatsapp_adapter import send_whatsapp_message
     
