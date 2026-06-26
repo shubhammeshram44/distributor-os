@@ -19,7 +19,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={figtree.className}>
+    <html lang="en" className={`${figtree.className} ${figtree.variable}`}>
       <body className="antialiased bg-slate-50 text-slate-900 overflow-hidden">
         {children}
       </body>

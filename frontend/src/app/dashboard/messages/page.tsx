@@ -472,7 +472,7 @@ export default function MessagesPage() {
   }
 
   return (
-    <div className="flex bg-slate-50 min-h-screen text-slate-800 font-sans overflow-hidden">
+    <div className="flex bg-slate-50 min-h-screen text-slate-800 font-figtree overflow-hidden">
       {/* Sidebar panel */}
       <Sidebar
         activeTab="Messages"

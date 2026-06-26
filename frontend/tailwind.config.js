@@ -7,6 +7,10 @@ module.exports = {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        figtree: ["var(--font-figtree)", "sans-serif"],
+        sans: ["var(--font-figtree)", "sans-serif"],
+      },
       colors: {
         brand: {
           dark: "#061329",      // Sidebar background
