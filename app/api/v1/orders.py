@@ -99,7 +99,7 @@ def list_orders(
         # Status badge conversion: Draft = "Pending", Confirmed = "Confirmed", Needs Review = "Needs Review"
         status_raw = o.current_status
         has_triage_sku = any(
-            item.product_id is None or item.unmatched_raw_text is not None or (item.product is not None and item.product.sku_id == "UNMATCHED_TRIAGE_SKU")
+            item.product_id is None or (item.product is not None and item.product.sku_id in ("UNMATCHED_SKU", "UNMATCHED_TRIAGE_SKU"))
             for item in o.line_items
         )
         if has_triage_sku or status_raw == "pending_review":
@@ -125,6 +125,41 @@ def list_orders(
         })
 
     return results
+
+
+def process_order_self_learning(db: Session, order_id: uuid.UUID, tenant_id: uuid.UUID):
+    """
+    Isolated database sub-transaction to process self-learning safely, registering
+    unique permanent product aliases, then clearing unmatched_raw_text on line items.
+    """
+    from app.models.order import OrderLineItem
+    from app.models.product import ProductAlias
+    import logging
+    logger = logging.getLogger("uvicorn.error")
+
+    try:
+        with db.begin_nested():
+            items = db.query(OrderLineItem).filter(OrderLineItem.order_id == order_id).all()
+            for item in items:
+                if item.unmatched_raw_text and item.product_id is not None:
+                    clean_alias = item.unmatched_raw_text.lower().strip()
+                    existing = db.query(ProductAlias).filter(
+                        ProductAlias.tenant_id == tenant_id,
+                        ProductAlias.alias_name.ilike(clean_alias)
+                    ).first()
+                    if not existing:
+                        new_alias = ProductAlias(
+                            id=uuid.uuid4(),
+                            tenant_id=tenant_id,
+                            product_id=item.product_id,
+                            alias_name=item.unmatched_raw_text.strip()
+                        )
+                        db.add(new_alias)
+                    item.unmatched_raw_text = None
+            db.flush()
+    except Exception as e:
+        logger.error("Self-learning sub-transaction failed: %s", str(e))
+
 
 class StatusUpdatePayload(BaseModel):
     to_status: str
@@ -254,6 +289,9 @@ def update_order_status(
             from app.services.payment_service import reconcile_payments_and_invoices
             reconcile_payments_and_invoices(db, order.tenant_id, order.customer_id)
 
+            # Process bulk self-learning
+            process_order_self_learning(db, order.id, order.tenant_id)
+
         # Record state transition to OrderStateLedger
 
         current_status = order.current_status
@@ -324,29 +362,10 @@ def resolve_order_item(
             detail=f"Product with SKU '{payload.sku_code}' not found."
         )
 
-    # 2.5 permanent alias registry
-    if item.unmatched_raw_text:
-        from app.models.product import ProductAlias
-        norm_text = item.unmatched_raw_text.lower().strip()
-        existing = db.query(ProductAlias).filter(
-            ProductAlias.tenant_id == order.tenant_id,
-            ProductAlias.alias_name.ilike(norm_text)
-        ).first()
-        if not existing:
-            new_alias = ProductAlias(
-                id=uuid.uuid4(),
-                tenant_id=order.tenant_id,
-                product_id=product.id,
-                alias_name=item.unmatched_raw_text.strip()
-            )
-            db.add(new_alias)
-            db.flush()
-
-    # 3. Overwrite the order item's fields
+    # 3. Overwrite the order item's fields (preserving unmatched_raw_text for global order confirmation)
     item.product_id = product.id
     item.quantity = payload.quantity
     item.unit_price = product.base_price
-    item.unmatched_raw_text = None
 
     # Force database write to see current items in query
     db.flush()
@@ -356,7 +375,7 @@ def resolve_order_item(
     has_remaining_unmatched = False
     for i in all_items:
         prod = db.get(Product, i.product_id)
-        if i.product_id is None or (prod and prod.sku_id in ("UNMATCHED_SKU", "UNMATCHED_TRIAGE_SKU")) or i.unmatched_raw_text is not None:
+        if i.product_id is None or (prod and prod.sku_id in ("UNMATCHED_SKU", "UNMATCHED_TRIAGE_SKU")):
             has_remaining_unmatched = True
             break
 
@@ -1239,6 +1258,9 @@ def confirm_order_post(order_id: uuid.UUID, db: Session = Depends(get_db)):
         )
         db.add(invoice)
         db.flush()
+        
+        # Process bulk self-learning
+        process_order_self_learning(db, order.id, order.tenant_id)
         
     db.commit()
     return {"status": "success", "order_id": str(order.id), "new_status": "Confirmed"}

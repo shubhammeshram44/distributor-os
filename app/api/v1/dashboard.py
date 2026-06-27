@@ -268,7 +268,7 @@ def get_recent_orders(
         # Status badge conversion: Draft = "Pending", Confirmed = "Confirmed"
         status_raw = o.current_status
         has_triage_sku = any(
-            item.product_id is None or item.unmatched_raw_text is not None or (db.get(Product, item.product_id) is not None and db.get(Product, item.product_id).sku_id == "UNMATCHED_TRIAGE_SKU")
+            item.product_id is None or (db.get(Product, item.product_id) is not None and db.get(Product, item.product_id).sku_id in ("UNMATCHED_SKU", "UNMATCHED_TRIAGE_SKU"))
             for item in o.line_items
         )
         if has_triage_sku or status_raw == "pending_review":
