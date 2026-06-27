@@ -159,6 +159,11 @@ export default function NotificationsSettingsPage() {
     return "My Workspace";
   };
 
+  const handleTenantChange = (id: string) => {
+    setActiveTenantId(id);
+    localStorage.setItem("tenant_id", id);
+  };
+
   return (
     <div className="flex bg-slate-900 min-h-screen text-slate-100 font-sans">
       {/* Toast Notification */}
@@ -182,7 +187,11 @@ export default function NotificationsSettingsPage() {
 
       {/* Main Content */}
       <main className="flex-1 pl-64 transition-all duration-300">
-        <DashboardHeader title="Notification Settings" />
+        <DashboardHeader
+          activeTenantId={activeTenantId}
+          setActiveTenantId={handleTenantChange}
+          tenantName={getTenantName()}
+        />
 
         <div className="p-8 max-w-4xl mx-auto space-y-6">
           {/* Header Card */}
