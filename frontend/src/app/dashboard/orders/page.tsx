@@ -73,14 +73,6 @@ export default function OrdersPage() {
   const [productsList, setProductsList] = useState<any[]>([]);
   const [resolvingItemId, setResolvingItemId] = useState<string | null>(null);
   const [editedLineItems, setEditedLineItems] = useState<any[]>([]);
-
-  useEffect(() => {
-    if (selectedOrder && selectedOrder.line_items) {
-      setEditedLineItems(selectedOrder.line_items);
-    } else {
-      setEditedLineItems([]);
-    }
-  }, [selectedOrder]);
   const [selectedOrderPayments, setSelectedOrderPayments] = useState<{
     payment_status: string;
     payments_allocated: {
@@ -98,6 +90,22 @@ export default function OrdersPage() {
     message: "",
     type: "success"
   });
+
+  const foundOrder = orders.find(o => o.id === selectedOrderId);
+  const selectedOrder = foundOrder
+    ? {
+        ...foundOrder,
+        line_items: selectedOrderDetails || undefined
+      }
+    : null;
+
+  useEffect(() => {
+    if (selectedOrder && selectedOrder.line_items) {
+      setEditedLineItems(selectedOrder.line_items);
+    } else {
+      setEditedLineItems([]);
+    }
+  }, [selectedOrder]);
 
   const showToast = (message: string, type: "success" | "error") => {
     setToast({ show: true, message, type });
@@ -408,13 +416,6 @@ export default function OrdersPage() {
     }
   };
 
-  const foundOrder = orders.find(o => o.id === selectedOrderId);
-  const selectedOrder = foundOrder
-    ? {
-        ...foundOrder,
-        line_items: selectedOrderDetails || undefined
-      }
-    : null;
 
   // Status Filter Counts
   const countAll = orders.length;
