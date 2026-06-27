@@ -307,7 +307,7 @@ def get_order_details(
     items = db.query(OrderLineItem).filter_by(order_id=order_id).all()
     details = []
     for item in items:
-        prod = db.get(Product, item.product_id)
+        prod = db.get(Product, item.product_id) if item.product_id is not None else None
         details.append({
             "id": str(item.id),
             "sku_id": prod.sku_id if prod else "UNMATCHED_SKU",

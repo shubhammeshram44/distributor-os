@@ -71,13 +71,13 @@ export default function OrdersPage() {
   const [isConfirming, setIsConfirming] = useState(false);
   const [productsList, setProductsList] = useState<any[]>([]);
   const [resolvingItemId, setResolvingItemId] = useState<string | null>(null);
-  const [editedLineItems, setEditedLineItems] = useState<any[]>([]);
+  const [stagedItems, setStagedItems] = useState<any[]>([]);
 
   useEffect(() => {
     if (selectedOrderDetails) {
-      setEditedLineItems(selectedOrderDetails);
+      setStagedItems(selectedOrderDetails);
     } else {
-      setEditedLineItems([]);
+      setStagedItems([]);
     }
   }, [selectedOrderDetails]);
   const [selectedOrderPayments, setSelectedOrderPayments] = useState<{
@@ -223,35 +223,25 @@ export default function OrdersPage() {
     try {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
-      // 1. Bulk resolve items locally staged
-      const changedItems = editedLineItems.filter(item => item.isResolvedLocally);
-      if (changedItems.length > 0) {
-        await Promise.all(
-          changedItems.map(async (item) => {
-            const res = await fetch(`${apiBase}/api/v1/orders/items/${item.id}/resolve`, {
-              method: "PATCH",
-              credentials: "include",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ sku_code: item.resolvedSkuCode, quantity: item.quantity })
-            });
-            if (!res.ok) {
-              const data = await res.json();
-              throw new Error(data.detail || `Failed to resolve item SKU ${item.resolvedSkuCode}`);
-            }
-          })
-        );
-      }
+      // Collect all locally-staged resolutions into the batch payload
+      const changes = stagedItems
+        .filter(item => item.isResolvedLocally)
+        .map(item => ({
+          item_id: item.id,
+          sku_code: item.resolvedSkuCode,
+          quantity: item.quantity,
+        }));
 
-      // 2. Fire the confirm order request
-      const response = await fetch(`${apiBase}/api/v1/orders/${selectedOrderId}/status`, {
-        method: "PUT",
+      // Single atomic request: resolve staged items + confirm + self-learning in one shot
+      const response = await fetch(`${apiBase}/api/v1/orders/${selectedOrderId}/batch-confirm`, {
+        method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ to_status: "Confirmed" })
+        body: JSON.stringify({ changes }),
       });
       const data = await response.json();
       if (response.ok) {
-        showToast("Order status updated to Confirmed successfully!", "success");
+        showToast("Order confirmed successfully!", "success");
         handleCloseDetails();
         fetchOrders(activeTenantId);
       } else {
@@ -269,7 +259,8 @@ export default function OrdersPage() {
     const targetProduct = productsList.find(p => p.sku_id === skuCode);
     if (!targetProduct) return;
 
-    setEditedLineItems(prevItems =>
+    // Write mutation directly to local staged memory — no network call made here
+    setStagedItems(prevItems =>
       prevItems.map(item => {
         if (item.id === itemId) {
           return {
@@ -281,7 +272,7 @@ export default function OrdersPage() {
             unit_price: targetProduct.base_price,
             total_price: item.quantity * targetProduct.base_price,
             isResolvedLocally: true,
-            resolvedSkuCode: skuCode
+            resolvedSkuCode: skuCode,
           };
         }
         return item;
@@ -790,7 +781,7 @@ export default function OrdersPage() {
                   )}
 
                   <h4 className="font-bold text-slate-800 text-sm border-b pb-2 mb-3">Line Items</h4>
-                  {editedLineItems.map((item, idx) => {
+                  {stagedItems.map((item, idx) => {
                     const isUnmatched = item.sku_id === "UNMATCHED_SKU" || item.sku_id === "UNMATCHED_TRIAGE_SKU";
                     return (
                       <div key={idx} className="p-4 rounded-xl border border-dashboard-border bg-slate-50/50 flex flex-col justify-between gap-2">
@@ -846,15 +837,15 @@ export default function OrdersPage() {
                   <div className="border-t border-slate-200 pt-4 mt-6 space-y-2 text-sm">
                     <div className="flex justify-between text-slate-500 font-medium">
                       <span>Subtotal</span>
-                      <span>{formatCurrency(editedLineItems.reduce((a, b) => a + b.total_price, 0) / 1.18)}</span>
+                      <span>{formatCurrency(stagedItems.reduce((a, b) => a + b.total_price, 0) / 1.18)}</span>
                     </div>
                     <div className="flex justify-between text-slate-500 font-medium">
                       <span>GST (18%)</span>
-                      <span>{formatCurrency(editedLineItems.reduce((a, b) => a + b.total_price, 0) * 0.18 / 1.18)}</span>
+                      <span>{formatCurrency(stagedItems.reduce((a, b) => a + b.total_price, 0) * 0.18 / 1.18)}</span>
                     </div>
                     <div className="flex justify-between text-base font-extrabold text-slate-800 pt-2 border-t border-dashed">
                       <span>Total Amount</span>
-                      <span>{formatCurrency(editedLineItems.reduce((a, b) => a + b.total_price, 0))}</span>
+                      <span>{formatCurrency(stagedItems.reduce((a, b) => a + b.total_price, 0))}</span>
                     </div>
                   </div>
 

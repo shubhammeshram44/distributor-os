@@ -1270,6 +1270,172 @@ def confirm_order_post(order_id: uuid.UUID, db: Session = Depends(get_db)):
     return {"status": "success", "order_id": str(order.id), "new_status": "Confirmed"}
 
 
+# ---------------------------------------------------------------------------
+# Batch-Confirm: atomic resolve + self-learning + order confirmation in one shot
+# ---------------------------------------------------------------------------
+
+class BatchLineItemChange(BaseModel):
+    """Represents a single staged line-item resolution from the frontend."""
+    item_id: str
+    sku_code: str
+    quantity: int
+
+
+class BatchConfirmOrderPayload(BaseModel):
+    """
+    Payload for the atomic batch-confirm route.
+    `changes` contains every staged SKU resolution accumulated in the frontend
+    drawer before the user clicked "Confirm Order".  The list may be empty if
+    all items were already matched.
+    """
+    changes: list[BatchLineItemChange] = []
+
+
+@router.post("/{order_id}/batch-confirm", status_code=200)
+def batch_confirm_order(
+    order_id: uuid.UUID,
+    payload: BatchConfirmOrderPayload,
+    db: Session = Depends(get_db),
+):
+    """
+    Atomic batch-confirm endpoint.
+
+    1. Validates the order exists and is in a confirmable state.
+    2. Applies every staged line-item resolution (sku_code + quantity) from
+       the frontend in a single savepoint block.
+    3. Runs the self-learning alias engine to register new ProductAliases and
+       clear unmatched_raw_text fields.
+    4. Transitions the order to "Confirmed", debits the customer ledger, and
+       generates the invoice — all within a single atomic session commit.
+    """
+    from app.models.product import ProductAlias
+
+    order = db.get(Order, order_id)
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    tenant_context.set(order.tenant_id)
+
+    current_status = order.current_status
+    if current_status == "Confirmed":
+        raise HTTPException(
+            status_code=409,
+            detail="Order is already confirmed.",
+        )
+
+    try:
+        # ── PHASE 1: Apply staged line-item resolutions ─────────────────────
+        if payload.changes:
+            with db.begin_nested():
+                for change in payload.changes:
+                    try:
+                        item_uuid = uuid.UUID(change.item_id)
+                    except ValueError:
+                        raise HTTPException(
+                            status_code=422,
+                            detail=f"Invalid item_id format: {change.item_id}",
+                        )
+
+                    item = db.get(OrderLineItem, item_uuid)
+                    if not item or item.order_id != order_id:
+                        raise HTTPException(
+                            status_code=404,
+                            detail=f"Line item {change.item_id} not found on this order.",
+                        )
+
+                    # Resolve product by SKU code
+                    product = (
+                        db.query(Product)
+                        .filter(Product.sku_id == change.sku_code)
+                        .first()
+                    )
+                    if not product:
+                        raise HTTPException(
+                            status_code=404,
+                            detail=f"Product with SKU '{change.sku_code}' not found.",
+                        )
+
+                    item.product_id = product.id
+                    item.quantity = change.quantity
+                    item.unit_price = product.base_price
+
+                db.flush()
+
+        # ── PHASE 2: Self-learning alias engine ─────────────────────────────
+        process_order_self_learning(db, order.id, order.tenant_id)
+
+        # ── PHASE 3: Ledger debit + Invoice creation ─────────────────────────
+        customer = db.get(Customer, order.customer_id)
+        if customer:
+            db.refresh(order)  # ensure line_items reflect Phase 1 changes
+            current_order_total = sum(
+                float(i.quantity * i.unit_price) for i in order.line_items
+            )
+            customer.outstanding_balance = (
+                float(customer.outstanding_balance) + current_order_total
+            )
+            db.add(
+                CustomerLedger(
+                    id=uuid.uuid4(),
+                    tenant_id=order.tenant_id,
+                    customer_id=order.customer_id,
+                    type="DEBIT",
+                    amount=current_order_total,
+                    reference_id=order.internal_order_id,
+                )
+            )
+            from app.models.invoice import Invoice
+            db.add(
+                Invoice(
+                    tenant_id=order.tenant_id,
+                    order_id=order.id,
+                    gstin=customer.gstin if customer.gstin else "29AAAAA1111A1Z1",
+                    total_amount=current_order_total,
+                    irn_status="Cleared",
+                    qr_code_status="Generated",
+                    customer_id=order.customer_id,
+                    payment_status="UNPAID",
+                    amount_paid=0.0,
+                    created_at=datetime.utcnow(),
+                )
+            )
+
+        # ── PHASE 4: Advance order state to Confirmed ────────────────────────
+        db.add(
+            OrderStateLedger(
+                tenant_id=order.tenant_id,
+                order_id=order.id,
+                from_status=current_status,
+                to_status="Confirmed",
+                updated_by="API",
+            )
+        )
+
+        db.commit()
+        logger.info(
+            "batch_confirm_order: Order %s confirmed with %d staged change(s).",
+            order_id,
+            len(payload.changes),
+        )
+        return {
+            "status": "success",
+            "order_id": str(order.id),
+            "new_status": "Confirmed",
+            "changes_applied": len(payload.changes),
+        }
+
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as exc:
+        db.rollback()
+        logger.error("batch_confirm_order crash for order %s: %s", order_id, str(exc))
+        raise HTTPException(
+            status_code=500,
+            detail=f"Batch-confirm transaction failed: {str(exc)}",
+        )
+
+
 class DispatchPayload(BaseModel):
     delivery_partner: str
     vehicle_number: str
