@@ -325,7 +325,7 @@ def resolve_order_item(
         )
 
     # 2.5 permanent alias registry
-    if payload.save_as_permanent_alias and item.unmatched_raw_text:
+    if item.unmatched_raw_text:
         from app.models.product import ProductAlias
         norm_text = item.unmatched_raw_text.lower().strip()
         existing = db.query(ProductAlias).filter(

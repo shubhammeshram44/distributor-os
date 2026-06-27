@@ -120,13 +120,12 @@ def test_whatsapp_triage_resolution_self_learning_loop(db_session, client):
     db_session.add(item)
     db_session.commit()
 
-    # 4. Resolve the item manually with save_as_permanent_alias = True
+    # 4. Resolve the item manually without any save_as_permanent_alias flag in payload
     response = client.patch(
         f"/api/v1/orders/items/{item.id}/resolve",
         json={
             "sku_code": "PAT-101",
-            "quantity": 10,
-            "save_as_permanent_alias": True
+            "quantity": 10
         }
     )
     assert response.status_code == 200
