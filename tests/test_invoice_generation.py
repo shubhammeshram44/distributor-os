@@ -95,13 +95,13 @@ def test_retail_cash_invoice_pdf_content(db_session, client):
     db_session.add(cust)
     db_session.flush()
 
-    # Setup Order (Confirmed status, RETAIL_CASH_INVOICE)
+    # Setup Order (Confirmed status, RETAIL_INVOICE)
     order = Order(
         tenant_id=tenant.id,
         internal_order_id="ORD-RET-INV-1",
         source="WhatsApp",
         customer_id=cust.id,
-        invoice_type="RETAIL_CASH_INVOICE"
+        invoice_type="RETAIL_INVOICE"
     )
     db_session.add(order)
     db_session.flush()

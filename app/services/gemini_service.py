@@ -23,12 +23,12 @@ class ParsedOrderItem(BaseModel):
 
 class AntigravityParsedOrder(BaseModel):
     items: List[ParsedOrderItem]
-    extracted_invoice_preference: typing.Literal["GST_TAX_INVOICE", "RETAIL_CASH_INVOICE", "UNSPECIFIED"]
+    extracted_invoice_preference: typing.Literal["GST_TAX_INVOICE", "RETAIL_INVOICE", "UNSPECIFIED"]
 
 # Preserved for backward compatibility with your other imports
 class ParsedOrder(BaseModel):
     items: List[ParsedOrderItem]
-    extracted_invoice_preference: typing.Literal["GST_TAX_INVOICE", "RETAIL_CASH_INVOICE", "UNSPECIFIED"]
+    extracted_invoice_preference: typing.Literal["GST_TAX_INVOICE", "RETAIL_INVOICE", "UNSPECIFIED"]
 
 # ---------------------------------------------------------------------------
 # Core Service
@@ -66,7 +66,7 @@ class GeminiService:
                 "Extract each product name (including brand if mentioned) and its precise quantity. "
                 "Also, scan colloquial business language phrases to classify the invoice preference:\n"
                 "- If the message contains expressions like 'GST lagana', 'tax invoice', 'GST bill', 'with tax', 'Company ka bill', 'GST number', set extracted_invoice_preference to 'GST_TAX_INVOICE'.\n"
-                "- If the message contains expressions like 'normal bill', 'cash bill', 'bina tax', 'kachha bill', 'bina GST', 'kachha', set extracted_invoice_preference to 'RETAIL_CASH_INVOICE'.\n"
+                "- If the message contains expressions like 'normal bill', 'cash bill', 'bina tax', 'kachha bill', 'bina GST', 'kachha', set extracted_invoice_preference to 'RETAIL_INVOICE'.\n"
                 "- If no specific invoice preference is requested, set extracted_invoice_preference to 'UNSPECIFIED'.\n"
                 "Return the data strictly as JSON matching the schema."
             )
@@ -127,7 +127,7 @@ class GeminiService:
         # Extract invoice preference from colloquial phrases
         extracted_pref = "UNSPECIFIED"
         if any(phrase in normalized for phrase in ["normal bill", "cash bill", "bina tax", "kachha", "bina gst"]):
-            extracted_pref = "RETAIL_CASH_INVOICE"
+            extracted_pref = "RETAIL_INVOICE"
         elif any(phrase in normalized for phrase in ["gst lagana", "tax invoice", "gst bill", "tax bill", "company ka bill", "gst number", "gst invoice"]):
             extracted_pref = "GST_TAX_INVOICE"
 

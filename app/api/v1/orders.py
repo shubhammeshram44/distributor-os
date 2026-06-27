@@ -483,7 +483,7 @@ def generate_invoice_pdf_bytes(order: Order, db: Session) -> bytes:
     )
 
     # Check if this should be formatted as a GST tax invoice
-    is_gst = order.invoice_type != "RETAIL_CASH_INVOICE"
+    is_gst = order.invoice_type != "RETAIL_INVOICE"
 
     # Header section (Tenant & Invoice ID/Date)
     invoice_id = f"INV-{order.internal_order_id}"
@@ -1052,7 +1052,7 @@ def create_order(
 
 
 class OrderPatchPayload(BaseModel):
-    invoice_type: typing.Literal["GST_TAX_INVOICE", "RETAIL_CASH_INVOICE", "UNSPECIFIED"]
+    invoice_type: typing.Literal["GST_TAX_INVOICE", "RETAIL_INVOICE", "UNSPECIFIED"]
 
 
 @router.patch("/{order_id}", status_code=status.HTTP_200_OK)

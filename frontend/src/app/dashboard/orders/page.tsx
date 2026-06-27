@@ -324,10 +324,10 @@ export default function OrdersPage() {
             GST Bill
           </span>
         );
-      case InvoiceTypes.NORMAL:
+      case InvoiceTypes.RETAIL:
         return (
           <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-full text-xs font-bold leading-none bg-blue-50 text-blue-700 border border-blue-200 shadow-sm">
-            Normal Bill
+            Retail Bill
           </span>
         );
       default:

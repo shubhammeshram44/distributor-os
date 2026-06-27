@@ -1,6 +1,6 @@
 export const InvoiceTypes = {
   GST: "GST_TAX_INVOICE",
-  NORMAL: "RETAIL_CASH_INVOICE",
+  RETAIL: "RETAIL_INVOICE",
   UNSPECIFIED: "UNSPECIFIED"
 } as const;
 
