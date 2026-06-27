@@ -102,13 +102,18 @@ export default function OrdersPage() {
       }
     : null;
 
-  useEffect(() => {
-    if (selectedOrder && selectedOrder.line_items) {
-      setEditedLineItems(selectedOrder.line_items);
-    } else {
-      setEditedLineItems([]);
-    }
-  }, [selectedOrder]);
+ useEffect(() => {
+  if (selectedOrder && selectedOrder.line_items && selectedOrder.line_items.length > 0) {
+    setEditedLineItems(prev => {
+      const firstPrevId = prev[0]?.order_id;
+      const firstNewId = selectedOrder.line_items![0]?.order_id;
+      if (firstPrevId !== firstNewId) {
+        return selectedOrder.line_items!;
+      }
+      return prev;
+    });
+  }
+}, [selectedOrder]);
 
   const showToast = (message: string, type: "success" | "error") => {
     setToast({ show: true, message, type });
