@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import String, DateTime, Integer
+from sqlalchemy import String, DateTime, Integer, JSON
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
 
@@ -16,5 +17,11 @@ class DistributorTenant(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     plan_type: Mapped[str] = mapped_column(String(50), nullable=False, default="FREE")
     monthly_order_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    
+    notification_prefs: Mapped[dict] = mapped_column(
+        JSONB().with_variant(JSON(), "sqlite"),
+        nullable=False,
+        server_default='{"order_received": true, "order_confirmed": true, "order_dispatched": true, "payment_reminder": true, "new_order_alert_to_distributor": true}'
+    )
 
 

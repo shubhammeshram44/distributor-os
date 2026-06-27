@@ -627,6 +627,55 @@ class IngestionService:
         db.commit()
         db.refresh(new_order)
 
+        # Fire order_received notification (non-blocking)
+        try:
+            # Eagerly load relationships so they are in-memory before background task starts
+            for item in new_order.line_items:
+                if item.product:
+                    _ = item.product.name
+
+            import asyncio
+            from app.services.notification_service import NotificationService
+            
+            tenant_obj = db.query(DistributorTenant).filter_by(id=tenant_id).first()
+
+            async def fire_notifications(tenant_val, customer_val, order_val):
+                try:
+                    notification_service = NotificationService(
+                        evolution_base_url=os.getenv("EVOLUTION_API_URL", "http://34.158.60.42:8080"),
+                        api_key=os.getenv("EVOLUTION_API_KEY", "distributorbotkey2026")
+                    )
+                    await notification_service.notify(
+                        event="order_received",
+                        tenant=tenant_val,
+                        customer=customer_val,
+                        order=order_val,
+                        db=db
+                    )
+                    # Also fire distributor alert
+                    await notification_service.notify(
+                        event="new_order_alert_to_distributor",
+                        tenant=tenant_val,
+                        customer=customer_val,  
+                        order=order_val,
+                        db=db,
+                        override_to_phone=tenant_val.whatsapp_order_phone  # send to distributor's own number
+                    )
+                except Exception as inner_ex:
+                    logger.warning("Notification fire failed silently: %s", str(inner_ex))
+
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = None
+
+            if loop and loop.is_running():
+                loop.create_task(fire_notifications(tenant_obj, customer, new_order))
+            else:
+                asyncio.run(fire_notifications(tenant_obj, customer, new_order))
+        except Exception as e:
+            logger.warning("Notification fire setup failed silently: %s", str(e))
+
         logger.info(
             "IngestionService: Success! Order %s created totaling %s",
             generated_order_id,

@@ -18,7 +18,8 @@ import {
   ChevronRight,
   MessageSquare,
   Settings,
-  Link2
+  Link2,
+  Bell
 } from "lucide-react";
 
 
@@ -73,6 +74,7 @@ export default function Sidebar({ activeTab, setActiveTab, tenantName }: Sidebar
     { type: "category", name: "Settings" },
     { name: "Team Settings", icon: Settings, href: "/dashboard/settings/team" },
     { name: "Integrations", icon: Link2, href: "/dashboard/settings/integrations" },
+    { name: "Notifications", icon: Bell, href: "/dashboard/settings/notifications" },
     { name: "Automations", icon: Zap }
   ];
 

@@ -158,3 +158,45 @@ def update_whatsapp_integration(
         "message": "WhatsApp integration details updated successfully"
     }
 
+
+from fastapi import Query
+
+@router.get("/notification-prefs", status_code=status.HTTP_200_OK)
+def get_notification_prefs(
+    tenant_id: uuid.UUID = Query(...),
+    db: Session = Depends(get_db)
+):
+    tenant = db.get(DistributorTenant, tenant_id)
+    if not tenant:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Tenant not found."
+        )
+    return tenant.notification_prefs
+
+
+@router.patch("/notification-prefs", status_code=status.HTTP_200_OK)
+def update_notification_prefs(
+    payload: dict,
+    tenant_id: uuid.UUID = Query(...),
+    db: Session = Depends(get_db)
+):
+    tenant = db.get(DistributorTenant, tenant_id)
+    if not tenant:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Tenant not found."
+        )
+        
+    current_prefs = dict(tenant.notification_prefs or {})
+    for key, value in payload.items():
+        current_prefs[key] = value
+        
+    tenant.notification_prefs = current_prefs
+    db.commit()
+    
+    from app.services.ingestion_service import IngestionService
+    IngestionService.invalidate_tenant_cache(tenant_id)
+    
+    return tenant.notification_prefs
+

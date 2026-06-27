@@ -1267,6 +1267,49 @@ def confirm_order_post(order_id: uuid.UUID, db: Session = Depends(get_db)):
         process_order_self_learning(db, order.id, order.tenant_id)
         
     db.commit()
+
+    # Fire order_confirmed notification (non-blocking)
+    try:
+        if customer:
+            # Eagerly load relationships so they are in-memory before background task starts
+            for item in order.line_items:
+                if item.product:
+                    _ = item.product.name
+
+            import asyncio
+            from app.services.notification_service import NotificationService
+            import os
+
+            tenant_obj = db.get(DistributorTenant, order.tenant_id)
+
+            async def fire_notifications(tenant_val, customer_val, order_val):
+                try:
+                    notification_service = NotificationService(
+                        evolution_base_url=os.getenv("EVOLUTION_API_URL", "http://34.158.60.42:8080"),
+                        api_key=os.getenv("EVOLUTION_API_KEY", "distributorbotkey2026")
+                    )
+                    await notification_service.notify(
+                        event="order_confirmed",
+                        tenant=tenant_val,
+                        customer=customer_val,
+                        order=order_val,
+                        db=db
+                    )
+                except Exception as inner_ex:
+                    logger.warning("Notification fire failed silently: %s", str(inner_ex))
+
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = None
+
+            if loop and loop.is_running():
+                loop.create_task(fire_notifications(tenant_obj, customer, order))
+            else:
+                asyncio.run(fire_notifications(tenant_obj, customer, order))
+    except Exception as e:
+        logger.warning("Notification fire setup failed silently: %s", str(e))
+
     return {"status": "success", "order_id": str(order.id), "new_status": "Confirmed"}
 
 
@@ -1417,6 +1460,49 @@ def batch_confirm_order(
         )
 
         db.commit()
+
+        # Fire order_confirmed notification (non-blocking)
+        try:
+            if customer:
+                # Eagerly load relationships so they are in-memory before background task starts
+                for item in order.line_items:
+                    if item.product:
+                        _ = item.product.name
+
+                import asyncio
+                from app.services.notification_service import NotificationService
+                import os
+
+                tenant_obj = db.get(DistributorTenant, order.tenant_id)
+
+                async def fire_notifications(tenant_val, customer_val, order_val):
+                    try:
+                        notification_service = NotificationService(
+                            evolution_base_url=os.getenv("EVOLUTION_API_URL", "http://34.158.60.42:8080"),
+                            api_key=os.getenv("EVOLUTION_API_KEY", "distributorbotkey2026")
+                        )
+                        await notification_service.notify(
+                            event="order_confirmed",
+                            tenant=tenant_val,
+                            customer=customer_val,
+                            order=order_val,
+                            db=db
+                        )
+                    except Exception as inner_ex:
+                        logger.warning("Notification fire failed silently: %s", str(inner_ex))
+
+                try:
+                    loop = asyncio.get_running_loop()
+                except RuntimeError:
+                    loop = None
+
+                if loop and loop.is_running():
+                    loop.create_task(fire_notifications(tenant_obj, customer, order))
+                else:
+                    asyncio.run(fire_notifications(tenant_obj, customer, order))
+        except Exception as e:
+            logger.warning("Notification fire setup failed silently: %s", str(e))
+
         logger.info(
             "batch_confirm_order: Order %s confirmed with %d staged change(s).",
             order_id,

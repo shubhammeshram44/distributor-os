@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import String, ForeignKey, Float, Numeric
+from sqlalchemy import String, ForeignKey, Float, Numeric, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 from app.database import Base, TenantMixin
 from app.utils.phone import normalize_phone_number
@@ -20,6 +20,7 @@ class Customer(Base, TenantMixin):
     outstanding_balance: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False, default=0.0)
 
     phone_number: Mapped[str | None] = mapped_column(String(50), nullable=True, default=None)
+    whatsapp_notifications_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     aliases: Mapped[list["CustomerAlias"]] = relationship(back_populates="customer", cascade="all, delete-orphan")
 

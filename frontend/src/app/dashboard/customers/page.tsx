@@ -48,6 +48,7 @@ function CustomersContent() {
   const [updatedLimit, setUpdatedLimit] = useState("");
   const [updatedTerms, setUpdatedTerms] = useState("");
   const [savingConfig, setSavingConfig] = useState(false);
+  const [whatsappNotificationsEnabled, setWhatsappNotificationsEnabled] = useState(true);
 
   // Onboard Retailer Modal States
   const [isOnboardModalOpen, setIsOnboardModalOpen] = useState(false);
@@ -160,11 +161,48 @@ function CustomersContent() {
   };
 
 
+  const toggleCustomerWhatsappPrefs = async () => {
+    if (!selectedCustomer) return;
+    const targetId = selectedCustomer.id;
+    const nextVal = !whatsappNotificationsEnabled;
+    
+    // Optimistic UI updates
+    setWhatsappNotificationsEnabled(nextVal);
+    setCustomers(prev => prev.map(c => c.id === targetId ? { ...c, whatsapp_notifications_enabled: nextVal } as any : c));
+    
+    try {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const resp = await fetch(`${apiBase}/api/v1/customers/${targetId}/notification-prefs`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          whatsapp_notifications_enabled: nextVal
+        })
+      });
+      if (resp.ok) {
+        showToast("Customer notification preference updated!", "success");
+      } else {
+        // Rollback
+        setWhatsappNotificationsEnabled(!nextVal);
+        setCustomers(prev => prev.map(c => c.id === targetId ? { ...c, whatsapp_notifications_enabled: !nextVal } as any : c));
+        showToast("Failed to update notification preferences.", "error");
+      }
+    } catch (err) {
+      console.error(err);
+      // Rollback
+      setWhatsappNotificationsEnabled(!nextVal);
+      setCustomers(prev => prev.map(c => c.id === targetId ? { ...c, whatsapp_notifications_enabled: !nextVal } as any : c));
+      showToast("Error connecting to server.", "error");
+    }
+  };
+
   // Open Edit Modal
   const handleOpenEditModal = (customer: CustomerRow) => {
     setSelectedCustomer(customer);
     setUpdatedLimit(String(customer.credit_limit));
     setUpdatedTerms(customer.payment_terms || "Net 30");
+    setWhatsappNotificationsEnabled((customer as any).whatsapp_notifications_enabled !== false);
     setIsEditModalOpen(true);
   };
 
@@ -572,6 +610,26 @@ function CustomersContent() {
                   <option value="Net 30">Net 30</option>
                   <option value="COD">COD</option>
                 </select>
+              </div>
+
+              <div className="flex items-center justify-between py-2 border-t border-slate-100 pt-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase">WhatsApp Notifications</label>
+                  <p className="text-[10px] text-slate-400">Receive automated order updates via WhatsApp.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={toggleCustomerWhatsappPrefs}
+                  className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                    whatsappNotificationsEnabled ? "bg-emerald-500" : "bg-slate-300"
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                      whatsappNotificationsEnabled ? "translate-x-5" : "translate-x-0"
+                    }`}
+                  />
+                </button>
               </div>
 
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 mt-6">

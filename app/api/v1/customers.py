@@ -133,7 +133,8 @@ def list_customers(
             "payment_terms": customer.payment_terms if customer.payment_terms else "Net 30",
             "credit_limit": float(customer.credit_limit) if customer.credit_limit else 0.0,
             "outstanding_balance": float(customer.outstanding_balance) if customer.outstanding_balance else 0.0,
-            "phone": customer.phone_number if customer.phone_number else (customer.aliases[0].alias_value if customer.aliases else "N/A")
+            "phone": customer.phone_number if customer.phone_number else (customer.aliases[0].alias_value if customer.aliases else "N/A"),
+            "whatsapp_notifications_enabled": customer.whatsapp_notifications_enabled
         })
         
     return response_payload
@@ -183,4 +184,31 @@ def get_customer_statement(
         "retailer_name": customer.retailer_name,
         "running_balance": running_balance,
         "statement": statement
+    }
+
+
+class CustomerNotificationPrefPayload(BaseModel):
+    whatsapp_notifications_enabled: bool
+
+@router.patch("/{customer_id}/notification-prefs", status_code=status.HTTP_200_OK)
+def update_customer_notification_prefs(
+    customer_id: uuid.UUID,
+    payload: CustomerNotificationPrefPayload,
+    db: Session = Depends(get_db)
+):
+    customer = db.get(Customer, customer_id)
+    if not customer:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Customer not found"
+        )
+    
+    tenant_context.set(customer.tenant_id)
+    customer.whatsapp_notifications_enabled = payload.whatsapp_notifications_enabled
+    db.commit()
+    
+    return {
+        "status": "success",
+        "customer_id": str(customer.id),
+        "whatsapp_notifications_enabled": customer.whatsapp_notifications_enabled
     }

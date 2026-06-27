@@ -515,6 +515,7 @@ def get_customers(
             "payment_terms": c.payment_terms,
             "phone": phone,
             "credit_limit": float(c.credit_limit),
-            "outstanding_balance": float(c.outstanding_balance)
+            "outstanding_balance": float(c.outstanding_balance),
+            "whatsapp_notifications_enabled": c.whatsapp_notifications_enabled
         })
     return results
