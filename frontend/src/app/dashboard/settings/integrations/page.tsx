@@ -33,14 +33,7 @@ export default function IntegrationsPage() {
   const [qrCodeBase64, setQrCodeBase64] = useState("");
   const [evolutionError, setEvolutionError] = useState("");
 
-  // Pre-fill instanceName with slugified tenant ID
-  useEffect(() => {
-    if (activeTenantId) {
-      setInstanceName(`inst-${activeTenantId.substring(0, 8)}`);
-    } else {
-      setInstanceName("default-bot");
-    }
-  }, [activeTenantId]);
+
 
   // Connection status polling
   useEffect(() => {
@@ -69,10 +62,6 @@ export default function IntegrationsPage() {
 
   const handleProvisionEvolution = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!instanceName.trim()) {
-      showToast("Instance Name is required.", "error");
-      return;
-    }
 
     setProvisioningStatus("provisioning");
     setEvolutionError("");
@@ -83,12 +72,15 @@ export default function IntegrationsPage() {
       const resp = await fetch(`${apiBase}/api/v1/evolution/provision`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ instance_name: instanceName.trim() })
+        body: JSON.stringify({})
       });
 
       const data = await resp.json();
 
       if (resp.ok && data.status === "success") {
+        if (data.instance_name) {
+          setInstanceName(data.instance_name);
+        }
         if (data.connection_status === "open") {
           setProvisioningStatus("connected");
           showToast("WhatsApp Instance is already open and connected!", "success");
@@ -151,6 +143,10 @@ export default function IntegrationsPage() {
           const data = await resp.json();
           setWhatsappPhoneId(data.whatsapp_phone_id || "");
           setWhatsappAccessToken(data.whatsapp_access_token || "");
+          if (data.whatsapp_phone_id) {
+            setInstanceName(data.whatsapp_phone_id);
+            setProvisioningStatus("connected");
+          }
         } else {
           showToast("Failed to fetch WhatsApp integration details.", "error");
         }
@@ -411,36 +407,17 @@ export default function IntegrationsPage() {
                   <div className="bg-slate-50 border border-slate-200/60 rounded-xl p-4 flex gap-3 text-slate-600 text-xs leading-relaxed font-semibold">
                     <AlertCircle className="w-5 h-5 text-brand-blue flex-shrink-0 mt-0.5" />
                     <div>
-                      <span className="text-slate-800 font-bold">Evolution API Provisioning Instructions:</span>
+                      <span className="text-slate-800 font-bold">Evolution API Connection Instructions:</span>
                       <ul className="list-disc pl-4 mt-1.5 space-y-1 text-slate-500 font-medium">
-                        <li>Enter a unique identifier name for your WhatsApp instance (default is prefilled based on your workspace).</li>
-                        <li>Click "Provision WhatsApp Instance" to initialize the connection.</li>
-                        <li>If required, scan the generated QR code using Link a Device option in your WhatsApp application.</li>
+                        <li>Click "Connect WhatsApp" to initialize the connection.</li>
+                        <li>The system will auto-generate a unique instance ID for your workspace.</li>
+                        <li>Scan the generated QR code using the "Link a Device" option in your WhatsApp app.</li>
                         <li>The system will automatically detect the connection and activate the ingestion pipeline.</li>
                       </ul>
                     </div>
                   </div>
 
                   <form onSubmit={handleProvisionEvolution} className="space-y-5">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">
-                        WhatsApp Instance Name *
-                      </label>
-                      <div className="relative rounded-lg shadow-sm">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                          <Smartphone className="h-4 w-4 text-slate-400" />
-                        </div>
-                        <input
-                          type="text"
-                          value={instanceName}
-                          onChange={(e) => setInstanceName(e.target.value)}
-                          required
-                          disabled={provisioningStatus === "provisioning" || provisioningStatus === "connecting"}
-                          placeholder="e.g. inst-workspace"
-                          className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-1 focus:ring-brand-blue bg-white font-semibold"
-                        />
-                      </div>
-                    </div>
 
                     {qrCodeBase64 && (provisioningStatus === "connecting" || provisioningStatus === "provisioning") && (
                       <div className="flex flex-col items-center justify-center p-6 bg-slate-50 border border-dashed border-slate-200 rounded-xl space-y-4">
@@ -471,10 +448,10 @@ export default function IntegrationsPage() {
                         {provisioningStatus === "provisioning" ? (
                           <>
                             <Loader2 className="w-4 h-4 animate-spin" />
-                            <span>Initializing Instance...</span>
+                            <span>Connecting...</span>
                           </>
                         ) : (
-                          <span>Provision WhatsApp Instance</span>
+                          <span>Connect WhatsApp</span>
                         )}
                       </button>
                     </div>

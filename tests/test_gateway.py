@@ -91,3 +91,35 @@ def test_provision_endpoint_success():
         assert data["status"] == "success"
         assert data["qr_code"] == "data:image/png;base64,mockqr"
         assert data["connection_status"] == "open"
+
+
+def test_evolution_provision_endpoint_optional_instance_name(monkeypatch):
+    with patch("app.services.gateway_service.EvolutionGatewayService.initialize_instance", new_callable=AsyncMock) as mock_init, \
+         patch("app.services.gateway_service.EvolutionGatewayService.configure_webhook", new_callable=AsyncMock) as mock_webhook, \
+         patch("app.services.gateway_service.EvolutionGatewayService.generate_qr_code", new_callable=AsyncMock) as mock_qr, \
+         patch("app.services.gateway_service.EvolutionGatewayService.get_connection_status", new_callable=AsyncMock) as mock_status, \
+         patch("httpx.AsyncClient.delete", new_callable=AsyncMock) as mock_delete:
+         
+        mock_delete.return_value = MagicMock(status_code=404)
+        mock_init.return_value = {"status": "created"}
+        mock_webhook.return_value = {"status": "webhook_set"}
+        mock_qr.return_value = "data:image/png;base64,mockqr"
+        mock_status.return_value = "open"
+        
+        # Mock resolve_tenant_id to return a fixed UUID
+        fake_uuid = "7e8bed10-8339-446f-b851-de96ab5f0cad"
+        from app.services import tenant_service
+        monkeypatch.setattr(tenant_service, "resolve_tenant_id", lambda *args, **kwargs: fake_uuid)
+
+        # Call without sending instance_name
+        response = client.post(
+            "/api/v1/evolution/provision",
+            json={}
+        )
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "success"
+        assert data["instance_name"] == "dist-7e8bed10"
+        assert data["qr_code"] == "data:image/png;base64,mockqr"
+
