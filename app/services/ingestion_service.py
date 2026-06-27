@@ -646,22 +646,33 @@ class IngestionService:
                         evolution_base_url=os.getenv("EVOLUTION_API_URL", "http://34.158.60.42:8080"),
                         api_key=os.getenv("EVOLUTION_API_KEY", "distributorbotkey2026")
                     )
-                    await notification_service.notify(
-                        event="order_received",
-                        tenant=tenant_val,
-                        customer=customer_val,
-                        order=order_val,
-                        db=db
+                    # Check if all items are unmatched
+                    all_unmatched = all(
+                        item.sku_id in ("UNMATCHED_SKU", "UNMATCHED_TRIAGE_SKU") or item.unit_price == 0.0
+                        for item in order_val.line_items
                     )
+                    if all_unmatched:
+                        logger.info(f"Notification skipped: all items unmatched for order {order_val.id}")
+                    else:
+                        await notification_service.notify(
+                            event="order_received",
+                            tenant=tenant_val,
+                            customer=customer_val,
+                            order=order_val,
+                            db=db
+                        )
                     # Also fire distributor alert
-                    await notification_service.notify(
-                        event="new_order_alert_to_distributor",
-                        tenant=tenant_val,
-                        customer=customer_val,  
-                        order=order_val,
-                        db=db,
-                        override_to_phone=tenant_val.whatsapp_order_phone  # send to distributor's own number
-                    )
+                    if tenant_val.whatsapp_order_phone:
+                        await notification_service.notify(
+                            event="new_order_alert_to_distributor",
+                            tenant=tenant_val,
+                            customer=customer_val,  
+                            order=order_val,
+                            db=db,
+                            override_to_phone=tenant_val.whatsapp_order_phone  # send to distributor's own number
+                        )
+                    else:
+                        logger.warning("Distributor alert skipped: whatsapp_order_phone not configured for tenant %s", str(tenant_val.id))
                 except Exception as inner_ex:
                     logger.warning("Notification fire failed silently: %s", str(inner_ex))
 
