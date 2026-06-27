@@ -294,16 +294,42 @@ class IngestionService:
         db: Session,
         tenant_id: uuid.UUID,
         sender_phone: str,
-        message_text: str
+        message_text: str,
+        sender_jid: Optional[str] = None,
+        from_me: bool = False,
     ) -> dict:
         """
-        Event Discriminator Ingestion Pattern for incoming messaging orders.
-        Filters self-messages from the distributor, then routes customer messages
-        to the order parsing and creation pipeline.
+        5-Layer Ingestion Triage Pipeline for incoming WhatsApp orders.
+
+        Layer 1 – JID Validation      : Drop non-customer JIDs (groups, broadcasts).
+        Layer 2 – Sender Isolation    : Drop messages sent from the distributor's own number.
+        Layer 3 – Length Filter       : Drop trivially short texts (< 5 chars).
+        Layer 4 – Gemini Flash Intent : Drop non-order messages via lightweight LLM classification.
+        Layer 5 – Customer Whitelist  : Drop senders not registered as customers for this tenant.
         """
         tenant_context.set(tenant_id)
-        
-        # 1. Resolve registered business phone number (with caching)
+
+        # ── LAYER 1: JID Validation ─────────────────────────────────────────────
+        # When a raw JID is available, ensure it belongs to an individual chat
+        # (@s.whatsapp.net). Group chats (@g.us) and broadcast lists (@lid / @broadcast)
+        # are dropped here before any further processing.
+        if sender_jid:
+            if not sender_jid.endswith("@s.whatsapp.net"):
+                logger.info(
+                    "IngestionService: Layer 1 – Dropping non-individual JID: %s", sender_jid
+                )
+                return {"status": "ignored", "reason": "invalid_jid_type"}
+
+        # ── LAYER 2: Sender Isolation ────────────────────────────────────────────
+        # Resolve cached distributor business number and drop messages that originated
+        # from the distributor's own active WhatsApp link (fromMe == True or matching
+        # normalized phone).
+        if from_me:
+            logger.info(
+                "IngestionService: Layer 2 – Dropping distributor self-message (fromMe=True)"
+            )
+            return {"status": "ignored", "reason": "distributor_self_message"}
+
         distributor_phone = self._distributor_phone_cache.get(tenant_id)
         if not distributor_phone:
             tenant = db.query(DistributorTenant).filter(DistributorTenant.id == tenant_id).first()
@@ -311,15 +337,84 @@ class IngestionService:
                 distributor_phone = tenant.whatsapp_order_phone
                 self._distributor_phone_cache[tenant_id] = distributor_phone
 
-        # 2. Number Normalization & Event Discriminator logic gate
         norm_sender = normalize_phone_number(sender_phone)
         norm_distributor = normalize_phone_number(distributor_phone) if distributor_phone else ""
 
         if norm_distributor and norm_sender == norm_distributor:
-            logger.info("IngestionService: Received message from distributor business number %s. Ignoring system/self-message.", norm_sender)
+            logger.info(
+                "IngestionService: Layer 2 – Dropping distributor business number %s.",
+                norm_sender,
+            )
             return {"status": "ignored", "reason": "distributor_self_message"}
 
-        # 3. Customer Identification Layer (Layer 1 Whitelist)
+        # ── LAYER 3: Length Filter ───────────────────────────────────────────────
+        # Drop trivially short messages that can never represent a real order
+        # (e.g. "Ok", "👍", "Haan", bare emoji replies).
+        clean_text = message_text.strip()
+        if len(clean_text) < 5:
+            logger.info(
+                "IngestionService: Layer 3 – Dropping short message (len=%d): '%s'",
+                len(clean_text),
+                clean_text,
+            )
+            return {"status": "ignored", "reason": "message_too_short"}
+
+        # ── LAYER 4: Gemini Flash Intent Gatekeeper ──────────────────────────────
+        # A lightweight call to gemini-2.5-flash classifies whether the message
+        # expresses business purchase intent. Non-order messages are dropped here
+        # before opening a database write session.
+        #
+        # Safety: when GEMINI_API_KEY is absent (e.g. CI / test environments)
+        # the gate is bypassed and the message is passed through automatically.
+        class IntentCheck(BaseModel):
+            is_order: bool
+
+        if self.enabled:
+            try:
+                intent_model = genai.GenerativeModel(
+                    model_name="gemini-2.5-flash",
+                    system_instruction=(
+                        "Classify if the inbound text expresses any business intent to buy, "
+                        "restock, or inquire about purchasing stock items (even shorthand "
+                        "entries like 'Liril 50'). "
+                        "Return false strictly for simple greetings, casual confirmations "
+                        "like 'thanks' or 'received', emojis, or statements completely "
+                        "unrelated to ordering product inventory."
+                    ),
+                )
+                intent_response = intent_model.generate_content(
+                    contents=[clean_text],
+                    generation_config={
+                        "response_mime_type": "application/json",
+                        "response_schema": IntentCheck,
+                    },
+                )
+                import json as _json
+                intent_data = _json.loads(intent_response.text)
+                is_order: bool = intent_data.get("is_order", True)
+            except Exception as intent_exc:
+                # Fail open: if the gatekeeper call errors, allow the message through
+                # so we never silently drop a real order due to an API outage.
+                logger.warning(
+                    "IngestionService: Layer 4 – Intent check failed (%s); passing through.",
+                    str(intent_exc),
+                )
+                is_order = True
+
+            if not is_order:
+                logger.info(
+                    "IngestionService: Layer 4 – Non-order message classified by Gemini Flash. "
+                    "Skipping DB write. text='%s'",
+                    clean_text,
+                )
+                return {"status": "ignored", "reason": "non_order_intent"}
+        else:
+            logger.debug(
+                "IngestionService: Layer 4 – Gemini API key absent; bypassing intent gate."
+            )
+
+        # ── LAYER 5: Customer Whitelist ──────────────────────────────────────────
+        # Only registered customers for this tenant may create orders.
         customer = None
         if sender_phone:
             phone_variants = get_phone_number_variants(sender_phone)
@@ -329,7 +424,7 @@ class IngestionService:
                 customer = db.query(Customer).filter(Customer.phone_number.in_(phone_variants)).first()
 
         if not customer:
-            logger.warning("IngestionService: Clean ignore: Sender %s is not whitelisted for tenant %s", norm_sender, tenant_id)
+            logger.warning("IngestionService: Layer 5 – Sender %s is not whitelisted for tenant %s", norm_sender, tenant_id)
             return {
                 "status": "ignored",
                 "message": f"Unknown customer phone number (not whitelisted): {norm_sender}",
@@ -339,7 +434,7 @@ class IngestionService:
                 "error_message": None
             }
 
-        # 4. Core Ingestion Parser Layer (LLM Parsing)
+        # ── CORE INGESTION: Order Parsing & SKU Matching ─────────────────────────
         gemini_service = GeminiService()
         parsed_order = gemini_service.parse_order_text(message_text)
         logger.info("IngestionService: text='%s' parsed_result=%s", message_text, parsed_order.model_dump_json())
@@ -489,7 +584,7 @@ class IngestionService:
                     "unmatched_raw_text": token
                 })
 
-        # 5. Database Commit Layer / Order Creation
+        # ── DATABASE COMMIT: Order & Line Item Creation ───────────────────────────
         generated_order_id = f"ORD-2506-{uuid.uuid4().hex[:4].upper()}"
         new_order = Order(
             id=uuid.uuid4(),
