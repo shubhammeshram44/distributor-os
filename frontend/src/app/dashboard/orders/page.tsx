@@ -69,6 +69,15 @@ export default function OrdersPage() {
   const [isConfirming, setIsConfirming] = useState(false);
   const [productsList, setProductsList] = useState<any[]>([]);
   const [resolvingItemId, setResolvingItemId] = useState<string | null>(null);
+  const [editedLineItems, setEditedLineItems] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (selectedOrderDetails) {
+      setEditedLineItems(selectedOrderDetails);
+    } else {
+      setEditedLineItems([]);
+    }
+  }, [selectedOrderDetails]);
   const [selectedOrderPayments, setSelectedOrderPayments] = useState<{
     payment_status: string;
     payments_allocated: {
@@ -211,6 +220,27 @@ export default function OrdersPage() {
     setIsConfirming(true);
     try {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+
+      // 1. Bulk resolve items locally staged
+      const changedItems = editedLineItems.filter(item => item.isResolvedLocally);
+      if (changedItems.length > 0) {
+        await Promise.all(
+          changedItems.map(async (item) => {
+            const res = await fetch(`${apiBase}/api/v1/orders/items/${item.id}/resolve`, {
+              method: "PATCH",
+              credentials: "include",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ sku_code: item.resolvedSkuCode, quantity: item.quantity })
+            });
+            if (!res.ok) {
+              const data = await res.json();
+              throw new Error(data.detail || `Failed to resolve item SKU ${item.resolvedSkuCode}`);
+            }
+          })
+        );
+      }
+
+      // 2. Fire the confirm order request
       const response = await fetch(`${apiBase}/api/v1/orders/${selectedOrderId}/status`, {
         method: "PUT",
         credentials: "include",
@@ -222,43 +252,39 @@ export default function OrdersPage() {
         showToast("Order status updated to Confirmed successfully!", "success");
         handleCloseDetails();
         fetchOrders(activeTenantId);
-
       } else {
         const errorDetail = data.detail || "Failed to confirm order.";
         showToast(errorDetail, "error");
       }
-    } catch (err) {
-      showToast("Network connection breakdown during order confirmation.", "error");
+    } catch (err: any) {
+      showToast(err.message || "Network connection breakdown during order confirmation.", "error");
     } finally {
       setIsConfirming(false);
     }
   };
 
-  const handleResolveItem = async (itemId: string, skuCode: string, quantity: number) => {
-    setResolvingItemId(itemId);
-    try {
-      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-      const response = await fetch(`${apiBase}/api/v1/orders/items/${itemId}/resolve`, {
-        method: "PATCH",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sku_code: skuCode, quantity })
-      });
-      const data = await response.json();
-      if (response.ok) {
-        showToast("Order line item manually resolved successfully!", "success");
-        handleCloseDetails();
-        fetchOrders(activeTenantId);
+  const handleLocalResolveItem = (itemId: string, skuCode: string) => {
+    const targetProduct = productsList.find(p => p.sku_id === skuCode);
+    if (!targetProduct) return;
 
-      } else {
-        const errorDetail = data.detail || "Failed to resolve order item.";
-        showToast(errorDetail, "error");
-      }
-    } catch (err) {
-      showToast("Network connection breakdown during order item resolution.", "error");
-    } finally {
-      setResolvingItemId(null);
-    }
+    setEditedLineItems(prevItems =>
+      prevItems.map(item => {
+        if (item.id === itemId) {
+          return {
+            ...item,
+            sku_id: targetProduct.sku_id,
+            brand: targetProduct.brand,
+            category: targetProduct.category,
+            pack_size: targetProduct.pack_size,
+            unit_price: targetProduct.base_price,
+            total_price: item.quantity * targetProduct.base_price,
+            isResolvedLocally: true,
+            resolvedSkuCode: skuCode
+          };
+        }
+        return item;
+      })
+    );
   };
 
   const handleUpdateInvoiceType = async (orderId: string, newType: InvoiceType) => {
@@ -707,7 +733,7 @@ export default function OrdersPage() {
                   <Loader2 className="w-8 h-8 text-brand-blue animate-spin" />
                   <span className="text-sm font-semibold text-slate-500">Loading line items...</span>
                 </div>
-              ) : selectedOrderDetails ? (
+              ) : editedLineItems && editedLineItems.length > 0 ? (
                 <>
                   {/* Order Overview / Settings */}
                   <div className="bg-slate-50/50 border border-dashboard-border rounded-xl p-4 mb-4 space-y-3 relative z-30">
@@ -733,15 +759,15 @@ export default function OrdersPage() {
                             className="p-1 border border-slate-200 rounded-lg text-xs bg-white text-slate-700 font-bold focus:outline-none focus:ring-2 focus:ring-brand-blue cursor-pointer z-40 relative shadow-sm"
                           >
                             <option value={InvoiceTypes.GST}>GST Tax Invoice</option>
-                            <option value={InvoiceTypes.NORMAL}>Normal Cash Bill</option>
+                            <option value={InvoiceTypes.RETAIL}>Retail Tax Invoice</option>
                             <option value={InvoiceTypes.UNSPECIFIED}>Unspecified</option>
                           </select>
                         ) : (
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1">
                             {renderInvoiceTypeBadge(selectedOrder?.invoice_type || InvoiceTypes.UNSPECIFIED)}
                             <button
                               onClick={() => setIsEditingInvoiceType(true)}
-                              className="text-xs font-bold text-brand-blue hover:text-brand-blueHover hover:underline focus:outline-none cursor-pointer"
+                              className="text-[10px] font-bold text-brand-blue hover:text-brand-blueHover cursor-pointer underline decoration-dotted"
                             >
                               Edit
                             </button>
@@ -752,7 +778,7 @@ export default function OrdersPage() {
                   </div>
 
                   <h4 className="font-bold text-slate-800 text-sm border-b pb-2 mb-3">Line Items</h4>
-                  {selectedOrderDetails.map((item, idx) => {
+                  {editedLineItems.map((item, idx) => {
                     const isUnmatched = item.sku_id === "UNMATCHED_SKU" || item.sku_id === "UNMATCHED_TRIAGE_SKU";
                     return (
                       <div key={idx} className="p-4 rounded-xl border border-dashboard-border bg-slate-50/50 flex flex-col justify-between gap-2">
@@ -769,10 +795,9 @@ export default function OrdersPage() {
                                 </p>
                                 <label className="block text-[10px] font-bold text-slate-400 uppercase">Map to Catalog SKU</label>
                                 <select
-                                  disabled={resolvingItemId === item.id}
                                   onChange={(e) => {
                                     if (e.target.value) {
-                                      handleResolveItem(item.id, e.target.value, item.quantity);
+                                      handleLocalResolveItem(item.id, e.target.value);
                                     }
                                   }}
                                   className="w-full mt-1 p-2 border border-rose-200 rounded-lg text-xs bg-white text-slate-700 font-semibold focus:outline-none focus:ring-1 focus:ring-rose-500 cursor-pointer animate-pulse"
@@ -809,15 +834,15 @@ export default function OrdersPage() {
                   <div className="border-t border-slate-200 pt-4 mt-6 space-y-2 text-sm">
                     <div className="flex justify-between text-slate-500 font-medium">
                       <span>Subtotal</span>
-                      <span>{formatCurrency(selectedOrderDetails.reduce((a, b) => a + b.total_price, 0) / 1.18)}</span>
+                      <span>{formatCurrency(editedLineItems.reduce((a, b) => a + b.total_price, 0) / 1.18)}</span>
                     </div>
                     <div className="flex justify-between text-slate-500 font-medium">
                       <span>GST (18%)</span>
-                      <span>{formatCurrency(selectedOrderDetails.reduce((a, b) => a + b.total_price, 0) * 0.18 / 1.18)}</span>
+                      <span>{formatCurrency(editedLineItems.reduce((a, b) => a + b.total_price, 0) * 0.18 / 1.18)}</span>
                     </div>
                     <div className="flex justify-between text-base font-extrabold text-slate-800 pt-2 border-t border-dashed">
                       <span>Total Amount</span>
-                      <span>{formatCurrency(selectedOrderDetails.reduce((a, b) => a + b.total_price, 0))}</span>
+                      <span>{formatCurrency(editedLineItems.reduce((a, b) => a + b.total_price, 0))}</span>
                     </div>
                   </div>
 
@@ -872,7 +897,7 @@ export default function OrdersPage() {
 
             {/* Footer Buttons */}
             <div className="p-6 border-t border-dashboard-border bg-slate-50 flex items-center justify-between gap-3">
-              {selectedOrder && selectedOrder.status === "Pending" ? (
+              {selectedOrder && (selectedOrder.status === "Pending" || selectedOrder.status === "Needs Review") ? (
                 <button
                   onClick={handleConfirmOrder}
                   disabled={isConfirming}
