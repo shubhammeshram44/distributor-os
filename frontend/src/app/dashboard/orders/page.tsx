@@ -105,8 +105,8 @@ export default function OrdersPage() {
  useEffect(() => {
   if (selectedOrder && selectedOrder.line_items && selectedOrder.line_items.length > 0) {
     setEditedLineItems(prev => {
-      const firstPrevId = prev[0]?.order_id;
-      const firstNewId = selectedOrder.line_items![0]?.order_id;
+      const firstPrevId = prev[0]?.id;
+      const firstNewId = selectedOrder.line_items![0]?.id;
       if (firstPrevId !== firstNewId) {
         return selectedOrder.line_items!;
       }
