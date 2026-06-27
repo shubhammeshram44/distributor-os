@@ -174,7 +174,11 @@ export default function NotificationsSettingsPage() {
       )}
 
       {/* Sidebar */}
-      <Sidebar />
+      <Sidebar
+        activeTab="Notifications"
+        setActiveTab={() => {}}
+        tenantName={getTenantName()}
+      />
 
       {/* Main Content */}
       <main className="flex-1 pl-64 transition-all duration-300">

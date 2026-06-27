@@ -38,7 +38,7 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint('id')
     )
     with op.batch_alter_table('customers', schema=None) as batch_op:
-        batch_op.add_column(sa.Column('whatsapp_notifications_enabled', sa.Boolean(), nullable=False, server_default=sa.text('1')))
+        batch_op.add_column(sa.Column('whatsapp_notifications_enabled', sa.Boolean(), nullable=False, server_default='true'))
 
     with op.batch_alter_table('distributor_tenants', schema=None) as batch_op:
         batch_op.add_column(sa.Column('notification_prefs', postgresql.JSONB(astext_type=sa.Text()).with_variant(sa.JSON(), 'sqlite'), server_default='{"order_received": true, "order_confirmed": true, "order_dispatched": true, "payment_reminder": true, "new_order_alert_to_distributor": true}', nullable=False))
