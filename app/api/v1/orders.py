@@ -1274,7 +1274,7 @@ def confirm_order_post(order_id: uuid.UUID, db: Session = Depends(get_db)):
             # Eagerly load relationships so they are in-memory before background task starts
             for item in order.line_items:
                 if item.product:
-                    _ = item.product.name
+                    _ = item.product.brand
 
             import asyncio
             from app.services.notification_service import NotificationService
@@ -1467,7 +1467,7 @@ def batch_confirm_order(
                 # Eagerly load relationships so they are in-memory before background task starts
                 for item in order.line_items:
                     if item.product:
-                        _ = item.product.name
+                        _ = item.product.brand
 
                 import asyncio
                 from app.services.notification_service import NotificationService

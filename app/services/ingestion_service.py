@@ -1,4 +1,5 @@
 import csv
+import os
 import uuid
 import logging
 import io
@@ -632,7 +633,7 @@ class IngestionService:
             # Eagerly load relationships so they are in-memory before background task starts
             for item in new_order.line_items:
                 if item.product:
-                    _ = item.product.name
+                    _ = item.product.brand
 
             import asyncio
             from app.services.notification_service import NotificationService

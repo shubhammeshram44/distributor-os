@@ -95,7 +95,7 @@ class NotificationService:
             items_list = []
             for item in order.line_items:
                 if item.product:
-                    items_list.append(f"{item.product.name} x {item.quantity}")
+                    items_list.append(f"{item.product.brand} x {item.quantity}")
                 elif item.unmatched_raw_text:
                     items_list.append(f"{item.unmatched_raw_text} (Unmatched) x {item.quantity}")
                 else:
