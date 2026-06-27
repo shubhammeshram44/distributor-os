@@ -251,12 +251,13 @@ async def handle_whatsapp_webhook(
                             if not tenant and hasattr(DistributorTenant, "whatsapp_instance_name"):
                                 tenant = new_db.query(DistributorTenant).filter(getattr(DistributorTenant, "whatsapp_instance_name") == instance_name).first()
                             if not tenant:
-                                import re
-                                hex_match = re.search(r'[a-f0-9]{8}', instance_name.lower())
-                                if hex_match:
-                                    short_id = hex_match.group(0)
-                                    from sqlalchemy import cast, String
-                                    tenant = new_db.query(DistributorTenant).filter(cast(DistributorTenant.id, String).like(f"{short_id}%")).first()
+                                # Query all tenants and find the match by ID prefix in the instance_name
+                                all_tenants = new_db.query(DistributorTenant).all()
+                                for t in all_tenants:
+                                    short_id = str(t.id)[:8]
+                                    if f"dist-{short_id}" in instance_name or short_id in instance_name:
+                                        tenant = t
+                                        break
                             if not tenant:
                                 if new_db.query(DistributorTenant).count() == 1:
                                     tenant = new_db.query(DistributorTenant).first()
