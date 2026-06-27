@@ -317,7 +317,8 @@ def get_order_details(
             "quantity": item.quantity,
             "unit_price": float(item.unit_price),
             "total_price": float(item.quantity * item.unit_price),
-            "raw_source_text": order.raw_source_text
+            "raw_source_text": order.raw_source_text,
+            "product_id": str(item.product_id) if item.product_id is not None else None
         })
     return details
 

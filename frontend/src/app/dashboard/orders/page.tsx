@@ -29,6 +29,9 @@ interface OrderItem {
   unit_price: number;
   total_price: number;
   raw_source_text?: string;
+  product_id?: string | null;
+  isResolvedLocally?: boolean;
+  resolvedSkuCode?: string;
 }
 
 interface OrderRow {
@@ -232,13 +235,12 @@ export default function OrdersPage() {
     try {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
-      // Collect all locally-staged resolutions into the batch payload
-      const changes = editedLineItems
-        .filter(item => item.isResolvedLocally)
+      // Collect all locally-staged resolutions into the batch payload matching backend schema
+      const resolved_items = editedLineItems
+        .filter(item => item.product_id !== null && item.product_id !== undefined)
         .map(item => ({
           item_id: item.id,
-          sku_code: item.resolvedSkuCode,
-          quantity: item.quantity,
+          product_id: item.product_id,
         }));
 
       // Single atomic request: resolve staged items + confirm + self-learning in one shot
@@ -246,7 +248,10 @@ export default function OrdersPage() {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ changes }),
+        body: JSON.stringify({
+          invoice_type: selectedOrder?.invoice_type || "UNSPECIFIED",
+          resolved_items,
+        }),
       });
       const data = await response.json();
       if (response.ok) {
@@ -264,8 +269,8 @@ export default function OrdersPage() {
     }
   };
 
-  const handleLocalResolveItem = (itemId: string, skuCode: string) => {
-    const targetProduct = productsList.find(p => p.sku_id === skuCode);
+  const handleLocalResolveItem = (itemId: string, productId: string) => {
+    const targetProduct = productsList.find(p => p.id === productId);
     if (!targetProduct) return;
 
     // Write mutation directly to local staged memory — no network call made here
@@ -274,6 +279,7 @@ export default function OrdersPage() {
         if (item.id === itemId) {
           return {
             ...item,
+            product_id: targetProduct.id,
             sku_id: targetProduct.sku_id,
             brand: targetProduct.brand,
             category: targetProduct.category,
@@ -281,7 +287,7 @@ export default function OrdersPage() {
             unit_price: targetProduct.base_price,
             total_price: item.quantity * targetProduct.base_price,
             isResolvedLocally: true,
-            resolvedSkuCode: skuCode,
+            resolvedSkuCode: targetProduct.sku_id,
           };
         }
         return item;
@@ -806,6 +812,7 @@ export default function OrdersPage() {
                                 </p>
                                 <label className="block text-[10px] font-bold text-slate-400 uppercase">Map to Catalog SKU</label>
                                 <select
+                                  value={item.product_id || ""}
                                   onChange={(e) => {
                                     if (e.target.value) {
                                       handleLocalResolveItem(item.id, e.target.value);
@@ -815,7 +822,7 @@ export default function OrdersPage() {
                                 >
                                   <option value="">-- Select SKU --</option>
                                   {productsList.map((p) => (
-                                    <option key={p.id} value={p.sku_id}>
+                                    <option key={p.id} value={p.id}>
                                       {p.sku_id} - {p.brand} {p.category} ({p.pack_size})
                                     </option>
                                   ))}

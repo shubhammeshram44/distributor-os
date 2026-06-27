@@ -1277,18 +1277,16 @@ def confirm_order_post(order_id: uuid.UUID, db: Session = Depends(get_db)):
 class BatchLineItemChange(BaseModel):
     """Represents a single staged line-item resolution from the frontend."""
     item_id: str
-    sku_code: str
-    quantity: int
+    product_id: str
 
 
 class BatchConfirmOrderPayload(BaseModel):
     """
     Payload for the atomic batch-confirm route.
-    `changes` contains every staged SKU resolution accumulated in the frontend
-    drawer before the user clicked "Confirm Order".  The list may be empty if
-    all items were already matched.
+    `resolved_items` contains staged resolutions mapped directly by product_id.
     """
-    changes: list[BatchLineItemChange] = []
+    invoice_type: str | None = None
+    resolved_items: list[BatchLineItemChange] = []
 
 
 @router.post("/{order_id}/batch-confirm", status_code=200)
@@ -1301,11 +1299,11 @@ def batch_confirm_order(
     Atomic batch-confirm endpoint.
 
     1. Validates the order exists and is in a confirmable state.
-    2. Applies every staged line-item resolution (sku_code + quantity) from
-       the frontend in a single savepoint block.
-    3. Runs the self-learning alias engine to register new ProductAliases and
+    2. Applies invoice type update if provided.
+    3. Applies every staged line-item resolution (product_id) in a single savepoint block.
+    4. Runs the self-learning alias engine to register new ProductAliases and
        clear unmatched_raw_text fields.
-    4. Transitions the order to "Confirmed", debits the customer ledger, and
+    5. Transitions the order to "Confirmed", debits the customer ledger, and
        generates the invoice — all within a single atomic session commit.
     """
     from app.models.product import ProductAlias
@@ -1324,10 +1322,14 @@ def batch_confirm_order(
         )
 
     try:
+        # Save invoice preference if supplied
+        if payload.invoice_type:
+            order.invoice_type = payload.invoice_type
+
         # ── PHASE 1: Apply staged line-item resolutions ─────────────────────
-        if payload.changes:
+        if payload.resolved_items:
             with db.begin_nested():
-                for change in payload.changes:
+                for change in payload.resolved_items:
                     try:
                         item_uuid = uuid.UUID(change.item_id)
                     except ValueError:
@@ -1343,20 +1345,23 @@ def batch_confirm_order(
                             detail=f"Line item {change.item_id} not found on this order.",
                         )
 
-                    # Resolve product by SKU code
-                    product = (
-                        db.query(Product)
-                        .filter(Product.sku_id == change.sku_code)
-                        .first()
-                    )
+                    try:
+                        prod_uuid = uuid.UUID(change.product_id)
+                    except ValueError:
+                        raise HTTPException(
+                            status_code=422,
+                            detail=f"Invalid product_id format: {change.product_id}",
+                        )
+
+                    # Resolve product by ID
+                    product = db.get(Product, prod_uuid)
                     if not product:
                         raise HTTPException(
                             status_code=404,
-                            detail=f"Product with SKU '{change.sku_code}' not found.",
+                            detail=f"Product with ID '{change.product_id}' not found.",
                         )
 
                     item.product_id = product.id
-                    item.quantity = change.quantity
                     item.unit_price = product.base_price
 
                 db.flush()
@@ -1415,13 +1420,13 @@ def batch_confirm_order(
         logger.info(
             "batch_confirm_order: Order %s confirmed with %d staged change(s).",
             order_id,
-            len(payload.changes),
+            len(payload.resolved_items),
         )
         return {
             "status": "success",
             "order_id": str(order.id),
             "new_status": "Confirmed",
-            "changes_applied": len(payload.changes),
+            "changes_applied": len(payload.resolved_items),
         }
 
     except HTTPException:

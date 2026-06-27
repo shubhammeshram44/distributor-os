@@ -757,3 +757,85 @@ def test_patch_order_invoice_type(db_session, client):
     response_fail = client.patch(f"/api/v1/orders/{order.id}", json={"invoice_type": "INVALID_TYPE"})
     assert response_fail.status_code == 422
 
+
+def test_batch_confirm_order_success(db_session, client):
+    # Setup Tenant
+    tenant = DistributorTenant(name="Batch Confirm Tenant")
+    db_session.add(tenant)
+    db_session.flush()
+    tenant_context.set(tenant.id)
+
+    # Setup Product
+    p = Product(
+        sku_id="PROD-BATCH-1",
+        brand="Brand X",
+        category="Category Y",
+        pack_size="1 Liter",
+        base_price=150.0,
+        stock_quantity=100
+    )
+    db_session.add(p)
+    db_session.flush()
+
+    # Setup Customer
+    cust = Customer(
+        retailer_name="Batch Confirm Retailer",
+        customer_id="C-BATCH-1",
+        address_text="Test Address",
+        gstin="29AAAAA1111A1Z1",
+        tax_group="GST-18",
+        payment_terms="0-15 Days"
+    )
+    db_session.add(cust)
+    db_session.flush()
+
+    # Setup Order
+    order = Order(
+        tenant_id=tenant.id,
+        internal_order_id="ORD-BATCH-CONFIRM-1",
+        source="WhatsApp",
+        customer_id=cust.id,
+        invoice_type="UNSPECIFIED"
+    )
+    db_session.add(order)
+    db_session.flush()
+
+    # Setup Unmatched Line Item
+    item = OrderLineItem(
+        order_id=order.id,
+        product_id=None,
+        quantity=5,
+        unit_price=0.0,
+        unmatched_raw_text="Brand X 1L"
+    )
+    db_session.add(item)
+    db_session.commit()
+
+    # Call atomic batch-confirm
+    response = client.post(
+        f"/api/v1/orders/{order.id}/batch-confirm",
+        json={
+            "invoice_type": "RETAIL_INVOICE",
+            "resolved_items": [
+                {
+                    "item_id": str(item.id),
+                    "product_id": str(p.id)
+                }
+            ]
+        }
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["new_status"] == "Confirmed"
+    assert data["changes_applied"] == 1
+
+    # Verify db updates
+    db_session.refresh(order)
+    db_session.refresh(item)
+    assert order.current_status == "Confirmed"
+    assert order.invoice_type == "RETAIL_INVOICE"
+    assert item.product_id == p.id
+    assert float(item.unit_price) == 150.0
+    assert item.unmatched_raw_text is None  # self-learning cleared it
+
