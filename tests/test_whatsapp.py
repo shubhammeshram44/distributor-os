@@ -621,6 +621,48 @@ def test_whatsapp_webhook_connection_open_auto_sync_phone_id(db_session, client,
     assert updated_tenant.whatsapp_phone_id == instance_name
 
 
+def test_whatsapp_webhook_connection_open_auto_sync_only_tenant_fallback(db_session, client, monkeypatch):
+    # Setup ONLY one tenant in DB
+    db_session.query(DistributorTenant).delete()
+    db_session.commit()
+    
+    tenant = DistributorTenant(name="Only Tenant In System")
+    db_session.add(tenant)
+    db_session.commit()
+    
+    # Mock fetchInstances response
+    class MockGetResponse:
+        def __init__(self, status_code, json_data):
+            self.status_code = status_code
+            self._json_data = json_data
+        def json(self):
+            return self._json_data
+
+    import httpx
+    async def mock_get(self_client, url, headers=None, timeout=None):
+        return MockGetResponse(200, [{"instanceName": "some-arbitrary-bot", "ownerJid": "919078158448@s.whatsapp.net"}])
+        
+    monkeypatch.setattr(httpx.AsyncClient, "get", mock_get)
+    monkeypatch.setattr("app.api.v1.whatsapp.SessionLocal", lambda: db_session)
+
+    payload = {
+        "event": "connection.update",
+        "instance": "some-arbitrary-bot",
+        "data": {
+            "state": "open"
+        }
+    }
+    response = client.post("/api/v1/whatsapp/webhook", json=payload)
+    assert response.status_code == 200
+    
+    # Verify DB update
+    db_session.expire_all()
+    updated_tenant = db_session.query(DistributorTenant).one()
+    assert updated_tenant.whatsapp_order_phone == "+919078158448"
+    assert updated_tenant.whatsapp_phone_id == "some-arbitrary-bot"
+
+
+
 
 
 

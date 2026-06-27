@@ -248,10 +248,18 @@ async def handle_whatsapp_webhook(
                             normalized_phone = normalize_phone_number(owner_phone)
                             
                             tenant = new_db.query(DistributorTenant).filter(DistributorTenant.whatsapp_phone_id == instance_name).first()
-                            if not tenant and instance_name.startswith("inst-") and len(instance_name) == 13:
-                                short_id = instance_name[5:]
-                                from sqlalchemy import cast, String
-                                tenant = new_db.query(DistributorTenant).filter(cast(DistributorTenant.id, String).like(f"{short_id}%")).first()
+                            if not tenant and hasattr(DistributorTenant, "whatsapp_instance_name"):
+                                tenant = new_db.query(DistributorTenant).filter(getattr(DistributorTenant, "whatsapp_instance_name") == instance_name).first()
+                            if not tenant:
+                                import re
+                                hex_match = re.search(r'[a-f0-9]{8}', instance_name.lower())
+                                if hex_match:
+                                    short_id = hex_match.group(0)
+                                    from sqlalchemy import cast, String
+                                    tenant = new_db.query(DistributorTenant).filter(cast(DistributorTenant.id, String).like(f"{short_id}%")).first()
+                            if not tenant:
+                                if new_db.query(DistributorTenant).count() == 1:
+                                    tenant = new_db.query(DistributorTenant).first()
                             if tenant:
                                 tenant.whatsapp_order_phone = normalized_phone
                                 tenant.whatsapp_phone_id = instance_name
