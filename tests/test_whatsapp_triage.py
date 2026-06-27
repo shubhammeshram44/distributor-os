@@ -1,5 +1,6 @@
 import uuid
 import pytest
+from datetime import datetime
 from fastapi.testclient import TestClient
 from app.main import app
 from app.models.tenant import DistributorTenant
@@ -61,7 +62,109 @@ def test_whatsapp_webhook_triage_flow(db_session, client):
     assert len(line_items) == 1
     
     unmatched_item = line_items[0]
-    prod = db_session.get(Product, unmatched_item.product_id)
-    assert prod is not None
-    assert prod.sku_id == "UNMATCHED_TRIAGE_SKU"
-    assert prod.brand == "System Triage"
+    assert unmatched_item.product_id is None
+    assert unmatched_item.unmatched_raw_text == "PatanjaliDantKanti"
+
+
+def test_whatsapp_triage_resolution_self_learning_loop(db_session, client):
+    # 1. Setup Tenant
+    tenant = DistributorTenant(name="Resolution Test Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+    tenant_context.set(tenant.id)
+
+    # 2. Setup Product
+    product = Product(
+        id=uuid.uuid4(),
+        tenant_id=tenant.id,
+        sku_id="PAT-101",
+        brand="Patanjali",
+        category="Personal Care",
+        pack_size="100g",
+        base_price=50.0
+    )
+    db_session.add(product)
+    db_session.commit()
+
+    # 3. Setup Order with unmatched item needing review
+    order = Order(
+        id=uuid.uuid4(),
+        tenant_id=tenant.id,
+        internal_order_id="ORD-T-999",
+        source="WhatsApp",
+        customer_id=uuid.uuid4(),  # Mock UUID
+        created_at=datetime.utcnow()
+    )
+    db_session.add(order)
+    db_session.flush()
+
+    from app.models.order import OrderStateLedger
+    db_session.add(OrderStateLedger(
+        tenant_id=tenant.id,
+        order_id=order.id,
+        from_status=None,
+        to_status="pending_review",
+        updated_by="system_whatsapp_agent"
+    ))
+    
+    from app.models.order import OrderLineItem
+    item = OrderLineItem(
+        id=uuid.uuid4(),
+        tenant_id=tenant.id,
+        order_id=order.id,
+        product_id=None,
+        quantity=5,
+        unit_price=0.0,
+        unmatched_raw_text="patanjalidhantkanti"
+    )
+    db_session.add(item)
+    db_session.commit()
+
+    # 4. Resolve the item manually with save_as_permanent_alias = True
+    response = client.patch(
+        f"/api/v1/orders/items/{item.id}/resolve",
+        json={
+            "sku_code": "PAT-101",
+            "quantity": 10,
+            "save_as_permanent_alias": True
+        }
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["order_status"] == "Pending"  # Draft maps to Pending on frontend
+
+    # 5. Verify the alias has been registered in the database
+    from app.models.product import ProductAlias
+    alias = db_session.query(ProductAlias).filter_by(tenant_id=tenant.id, product_id=product.id).first()
+    assert alias is not None
+    assert alias.alias_name == "patanjalidhantkanti"
+
+    # 6. Verify duplicate check silently ignores duplicates if called again with a new item with the same alias name
+    item2 = OrderLineItem(
+        id=uuid.uuid4(),
+        tenant_id=tenant.id,
+        order_id=order.id,
+        product_id=None,
+        quantity=2,
+        unit_price=0.0,
+        unmatched_raw_text="   PATANJALIDHANTKANTI   "  # Spaced + capitalized raw typo
+    )
+    db_session.add(item2)
+    db_session.commit()
+
+    response2 = client.patch(
+        f"/api/v1/orders/items/{item2.id}/resolve",
+        json={
+            "sku_code": "PAT-101",
+            "quantity": 2,
+            "save_as_permanent_alias": True
+        }
+    )
+    assert response2.status_code == 200
+    assert response2.json()["status"] == "success"
+
+    # Verify no additional duplicate alias was inserted
+    aliases = db_session.query(ProductAlias).filter_by(tenant_id=tenant.id, product_id=product.id).all()
+    assert len(aliases) == 1
+

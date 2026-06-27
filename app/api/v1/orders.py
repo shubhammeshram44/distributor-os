@@ -99,12 +99,12 @@ def list_orders(
         # Status badge conversion: Draft = "Pending", Confirmed = "Confirmed", Needs Review = "Needs Review"
         status_raw = o.current_status
         has_triage_sku = any(
-            item.product is not None and item.product.sku_id == "UNMATCHED_TRIAGE_SKU"
+            item.product_id is None or item.unmatched_raw_text is not None or (item.product is not None and item.product.sku_id == "UNMATCHED_TRIAGE_SKU")
             for item in o.line_items
         )
-        if has_triage_sku:
-            status_raw = "NEEDS_REVIEW"
-        status_resolved = "Pending" if status_raw == "Draft" else ("Needs Review" if status_raw == "NEEDS_REVIEW" else status_raw)
+        if has_triage_sku or status_raw == "pending_review":
+            status_raw = "pending_review"
+        status_resolved = "Pending" if status_raw == "Draft" else ("Needs Review" if status_raw in ["NEEDS_REVIEW", "pending_review"] else status_raw)
 
         # Payment status attributes
         payment_status = o.payment_status if o.payment_status != "UNPAID" else (inv.payment_status if inv else "UNPAID")
@@ -286,6 +286,7 @@ def update_order_status(
 class ItemResolvePayload(BaseModel):
     sku_code: str
     quantity: int
+    save_as_permanent_alias: bool | None = False
 
 @router.patch("/items/{item_id}/resolve", status_code=status.HTTP_200_OK)
 def resolve_order_item(
@@ -323,10 +324,29 @@ def resolve_order_item(
             detail=f"Product with SKU '{payload.sku_code}' not found."
         )
 
+    # 2.5 permanent alias registry
+    if payload.save_as_permanent_alias and item.unmatched_raw_text:
+        from app.models.product import ProductAlias
+        norm_text = item.unmatched_raw_text.lower().strip()
+        existing = db.query(ProductAlias).filter(
+            ProductAlias.tenant_id == order.tenant_id,
+            ProductAlias.alias_name.ilike(norm_text)
+        ).first()
+        if not existing:
+            new_alias = ProductAlias(
+                id=uuid.uuid4(),
+                tenant_id=order.tenant_id,
+                product_id=product.id,
+                alias_name=item.unmatched_raw_text.strip()
+            )
+            db.add(new_alias)
+            db.flush()
+
     # 3. Overwrite the order item's fields
     item.product_id = product.id
     item.quantity = payload.quantity
     item.unit_price = product.base_price
+    item.unmatched_raw_text = None
 
     # Force database write to see current items in query
     db.flush()
@@ -336,7 +356,7 @@ def resolve_order_item(
     has_remaining_unmatched = False
     for i in all_items:
         prod = db.get(Product, i.product_id)
-        if prod and prod.sku_id in ("UNMATCHED_SKU", "UNMATCHED_TRIAGE_SKU"):
+        if i.product_id is None or (prod and prod.sku_id in ("UNMATCHED_SKU", "UNMATCHED_TRIAGE_SKU")) or i.unmatched_raw_text is not None:
             has_remaining_unmatched = True
             break
 

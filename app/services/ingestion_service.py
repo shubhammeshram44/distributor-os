@@ -352,18 +352,12 @@ class IngestionService:
                     "qty": item.quantity
                 })
 
-        # Fallback keyword logic if LLM parsing yields no tokens
+        # Fallback logic if LLM parsing yields no tokens
         if not raw_tokens:
-            msg = message_text.lower()
-            if "stayfree" in msg or "pad" in msg:
-                raw_tokens.append({"text_token": "Stayfree Sanitary Napkins (XL)", "qty": 10})
-            if "maggi" in msg:
-                raw_tokens.append({"text_token": "Maggi 2-Min Noodles", "qty": 100})
-            if "soap" in msg or "tata" in msg:
-                raw_tokens.append({"text_token": "Tata Premium Soap", "qty": 500})
-            
-            if not raw_tokens:
-                raw_tokens.append({"text_token": "Wholesale SKU Ingestion", "qty": 100})
+            raw_tokens.append({
+                "text_token": message_text,
+                "qty": 1
+            })
 
         # Match tokens against database catalog
         parsed_items = []
@@ -393,33 +387,75 @@ class IngestionService:
         for token_entry in raw_tokens:
             token = token_entry["text_token"]
             qty = token_entry["qty"]
+            product = None
 
-            # Match product case-insensitively
+            # Phase 1: Exact Match (Case-insensitive) against active tenant's aliases and product SKUs
             product = get_best_product_for_alias_query(
-                db.query(ProductAlias).filter(ProductAlias.alias_name.ilike(token))
+                db.query(ProductAlias).filter(
+                    ProductAlias.tenant_id == tenant_id,
+                    ProductAlias.alias_name.ilike(token)
+                )
             )
             if not product:
                 product = get_best_product_for_prod_query(
-                    db.query(Product).filter(Product.sku_id.ilike(token))
-                )
-            if not product:
-                product = get_best_product_for_alias_query(
-                    db.query(ProductAlias).filter(ProductAlias.alias_name.ilike(f"%{token}%"))
-                )
-            if not product:
-                product = get_best_product_for_prod_query(
-                    db.query(Product).filter(Product.sku_id.ilike(f"%{token}%"))
-                )
-            if not product:
-                words = [w.strip() for w in token.split() if len(w.strip()) > 2]
-                for w in words:
-                    if w.lower() in ["and", "the", "for", "please", "send", "need", "urgent", "with", "immediately", "box", "pack", "packet"]:
-                        continue
-                    product = get_best_product_for_alias_query(
-                        db.query(ProductAlias).filter(ProductAlias.alias_name.ilike(f"%{w}%"))
+                    db.query(Product).filter(
+                        Product.tenant_id == tenant_id,
+                        Product.sku_id.ilike(token)
                     )
-                    if product:
-                        break
+                )
+
+            # Phase 2: Token Partial Match
+            if not product:
+                import re
+                token_lower = token.lower()
+                
+                # Check aliases for substring matches within tokens
+                tenant_aliases = db.query(ProductAlias).filter(ProductAlias.tenant_id == tenant_id).all()
+                for alias in tenant_aliases:
+                    sub_tokens = re.split(r'[\s\-_\.]+', alias.alias_name.lower())
+                    if any(token_lower in tok for tok in sub_tokens if tok):
+                        p = db.query(Product).filter_by(id=alias.product_id).first()
+                        if p and "MOCK" not in p.sku_id:
+                            product = p
+                            break
+                            
+                # Check product SKUs for substring matches within tokens
+                if not product:
+                    tenant_products = db.query(Product).filter(Product.tenant_id == tenant_id).all()
+                    for p in tenant_products:
+                        sub_tokens = re.split(r'[\s\-_\.]+', p.sku_id.lower())
+                        if any(token_lower in tok for tok in sub_tokens if tok):
+                            if "MOCK" not in p.sku_id:
+                                product = p
+                                break
+
+            # Phase 3: Fuzzy Match Fallback
+            if not product:
+                try:
+                    import rapidfuzz
+                    candidates = {}
+                    
+                    tenant_aliases = db.query(ProductAlias).filter(ProductAlias.tenant_id == tenant_id).all()
+                    for alias in tenant_aliases:
+                        p = db.query(Product).filter_by(id=alias.product_id).first()
+                        if p and "MOCK" not in p.sku_id:
+                            candidates[alias.alias_name] = p
+                            
+                    tenant_products = db.query(Product).filter(Product.tenant_id == tenant_id).all()
+                    for p in tenant_products:
+                        if "MOCK" not in p.sku_id:
+                            candidates[p.sku_id] = p
+                            
+                    if candidates:
+                        choices = list(candidates.keys())
+                        result = rapidfuzz.process.extractOne(token, choices)
+                        if result:
+                            matched_text, score, index = result
+                            if score >= 82.0:
+                                product = candidates[matched_text]
+                                logger.info("IngestionService: Fuzzy match success '%s' -> '%s' (score %.2f) (SKU: %s)", token, matched_text, score, product.sku_id)
+                except Exception as fuzzy_exc:
+                    logger.error("IngestionService: Fuzzy matching error: %s", str(fuzzy_exc))
 
             if product:
                 logger.info("IngestionService: Product matched: %s -> SKU %s", token, product.sku_id)
@@ -432,7 +468,9 @@ class IngestionService:
                     "pack_size": product.pack_size,
                     "qty": qty,
                     "wholesale_rate": float(product.base_price),
-                    "rate": float(product.base_price)
+                    "rate": float(product.base_price),
+                    "product_id": product.id,
+                    "unmatched_raw_text": None
                 })
             else:
                 has_unmatched = True
@@ -446,7 +484,9 @@ class IngestionService:
                     "pack_size": "1 unit",
                     "qty": qty,
                     "wholesale_rate": 0.0,
-                    "rate": 0.0
+                    "rate": 0.0,
+                    "product_id": None,
+                    "unmatched_raw_text": token
                 })
 
         # 5. Database Commit Layer / Order Creation
@@ -460,60 +500,23 @@ class IngestionService:
             invoice_type=parsed_order.extracted_invoice_preference,
             created_at=datetime.utcnow()
         )
-        new_order.status = "NEEDS_REVIEW" if has_unmatched else "Draft"
+        new_order.status = "pending_review" if has_unmatched else "Draft"
         db.add(new_order)
         db.flush()
 
         # Write line item child records to DB
         for item in parsed_items:
-            if item["sku_code"] == "UNMATCHED_SKU":
-                product = db.query(Product).filter_by(sku_id="UNMATCHED_TRIAGE_SKU", tenant_id=tenant_id).first()
-                if not product:
-                    product = Product(
-                        id=uuid.uuid4(),
-                        tenant_id=tenant_id,
-                        sku_id="UNMATCHED_TRIAGE_SKU",
-                        brand="System Triage",
-                        category="Triage",
-                        pack_size="1 Unit",
-                        base_price=0.0
-                    )
-                    db.add(product)
-                    db.flush()
-            else:
-                product = db.query(Product).filter_by(sku_id=item["sku_code"], brand=item["brand"]).first()
-                if not product:
-                    product = Product(
-                        id=uuid.uuid4(),
-                        tenant_id=tenant_id,
-                        sku_id=item["sku_code"],
-                        brand=item["brand"],
-                        category=item["category"],
-                        pack_size=item["pack_size"],
-                        base_price=item["rate"]
-                    )
-                    db.add(product)
-                    db.flush()
-                    
-                    alias = ProductAlias(
-                        id=uuid.uuid4(),
-                        tenant_id=tenant_id,
-                        product_id=product.id,
-                        alias_name=item["product_name"]
-                    )
-                    db.add(alias)
-                    db.flush()
-
             db.add(OrderLineItem(
                 id=uuid.uuid4(),
                 tenant_id=tenant_id,
                 order_id=new_order.id,
-                product_id=product.id,
+                product_id=item["product_id"],
                 quantity=item["qty"],
-                unit_price=item["rate"]
+                unit_price=item["rate"],
+                unmatched_raw_text=item["unmatched_raw_text"]
             ))
 
-        order_status = "NEEDS_REVIEW" if has_unmatched else "Draft"
+        order_status = "pending_review" if has_unmatched else "Draft"
         new_order.status = order_status
 
         # Record state transition in ledger

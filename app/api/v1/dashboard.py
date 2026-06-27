@@ -268,12 +268,12 @@ def get_recent_orders(
         # Status badge conversion: Draft = "Pending", Confirmed = "Confirmed"
         status_raw = o.current_status
         has_triage_sku = any(
-            db.get(Product, item.product_id) is not None and db.get(Product, item.product_id).sku_id == "UNMATCHED_TRIAGE_SKU"
+            item.product_id is None or item.unmatched_raw_text is not None or (db.get(Product, item.product_id) is not None and db.get(Product, item.product_id).sku_id == "UNMATCHED_TRIAGE_SKU")
             for item in o.line_items
         )
-        if has_triage_sku:
-            status_raw = "NEEDS_REVIEW"
-        status_resolved = "Pending" if status_raw == "Draft" else ("Needs Review" if status_raw == "NEEDS_REVIEW" else status_raw)
+        if has_triage_sku or status_raw == "pending_review":
+            status_raw = "pending_review"
+        status_resolved = "Pending" if status_raw == "Draft" else ("Needs Review" if status_raw in ["NEEDS_REVIEW", "pending_review"] else status_raw)
 
         results.append({
             "id": str(o.id),
@@ -308,10 +308,10 @@ def get_order_details(
         prod = db.get(Product, item.product_id)
         details.append({
             "id": str(item.id),
-            "sku_id": prod.sku_id if prod else "UNKNOWN",
-            "brand": prod.brand if prod else "",
-            "category": prod.category if prod else "",
-            "pack_size": prod.pack_size if prod else "",
+            "sku_id": prod.sku_id if prod else "UNMATCHED_SKU",
+            "brand": prod.brand if prod else (item.unmatched_raw_text or ""),
+            "category": prod.category if prod else "Triage",
+            "pack_size": prod.pack_size if prod else "1 Unit",
             "quantity": item.quantity,
             "unit_price": float(item.unit_price),
             "total_price": float(item.quantity * item.unit_price)

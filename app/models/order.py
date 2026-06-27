@@ -73,7 +73,7 @@ class Order(Base, TenantMixin):
             )
             res = session.execute(stmt).scalar()
             if res:
-                if res == "NEEDS_REVIEW":
+                if res in ("NEEDS_REVIEW", "pending_review"):
                     return "Needs Review"
                 return res
 
@@ -81,7 +81,7 @@ class Order(Base, TenantMixin):
         if self.ledger_entries:
             sorted_entries = sorted(self.ledger_entries, key=lambda e: e.timestamp, reverse=True)
             val = sorted_entries[0].to_status
-            if val == "NEEDS_REVIEW":
+            if val in ("NEEDS_REVIEW", "pending_review"):
                 return "Needs Review"
             return val
         return "Draft"
@@ -91,9 +91,10 @@ class OrderLineItem(Base, TenantMixin):
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     order_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orders.id", ondelete="CASCADE"), nullable=False)
-    product_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
+    product_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("products.id", ondelete="CASCADE"), nullable=True, default=None)
     quantity: Mapped[int] = mapped_column(Integer, nullable=False)
     unit_price: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
+    unmatched_raw_text: Mapped[str | None] = mapped_column(String(255), nullable=True, default=None)
 
     order: Mapped[Order] = relationship(back_populates="line_items")
     product: Mapped["Product"] = relationship()
