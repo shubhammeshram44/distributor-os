@@ -116,6 +116,7 @@ async def get_instance_status(
         )
         
         # Sync owner number only when connection flips to open
+        owner_jid = None
         if conn_status == "open":
             owner_jid = instance_data.get("owner") or data.get("owner")
             if owner_jid:
@@ -148,10 +149,59 @@ async def get_instance_status(
                             # Flush ingestion cache to keep runtime discriminator state fresh
                             IngestionService.invalidate_tenant_cache(resolved_tenant_id)
                             
-        return {"status": conn_status}
+        return {"status": conn_status, "ownerJid": owner_jid}
     except Exception as e:
         logger.error("Failed to fetch connection status: %s", str(e), exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=f"Failed to fetch connection status: {str(e)}"
+        )
+
+
+@router.delete("/disconnect", status_code=status.HTTP_200_OK)
+async def disconnect_instance(
+    instance_name: str = Query(..., alias="instance_name"),
+    tenant_id: uuid.UUID | None = None,
+    access_token: str | None = Cookie(None),
+    authorization: str | None = Header(None),
+    db: Session = Depends(get_db)
+):
+    service = EvolutionGatewayService()
+    try:
+        # Step 1: Call delete instance on Evolution API
+        url = f"{service.base_url}/instance/delete/{instance_name}"
+        headers = service._get_headers()
+        logger.info("Disconnecting and deleting instance: DELETE %s", url)
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.delete(url, headers=headers)
+            
+        if response.status_code not in (200, 201, 404):
+            logger.warning("Evolution API returned status %d when deleting instance.", response.status_code)
+            
+        # Step 2: Clear tenant configuration in DB
+        from app.services.tenant_service import resolve_tenant_id
+        from app.models.tenant import DistributorTenant
+        from app.services.ingestion_service import IngestionService
+        
+        try:
+            resolved_tenant_id = resolve_tenant_id(tenant_id, access_token, authorization)
+        except Exception:
+            resolved_tenant_id = None
+            
+        if resolved_tenant_id:
+            tenant = db.get(DistributorTenant, resolved_tenant_id)
+            if tenant:
+                tenant.whatsapp_phone_id = None
+                tenant.whatsapp_order_phone = None
+                db.commit()
+                # Invalidate cache
+                IngestionService.invalidate_tenant_cache(resolved_tenant_id)
+                logger.info("Cleared WhatsApp integration config for tenant %s", resolved_tenant_id)
+                
+        return {"status": "success", "message": "Instance disconnected successfully"}
+    except Exception as e:
+        logger.error("Failed to disconnect instance: %s", str(e), exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to disconnect instance: {str(e)}"
         )

@@ -123,3 +123,49 @@ def test_evolution_provision_endpoint_optional_instance_name(monkeypatch):
         assert data["instance_name"] == "dist-7e8bed10"
         assert data["qr_code"] == "data:image/png;base64,mockqr"
 
+
+def test_evolution_disconnect_endpoint_success(monkeypatch, db_session):
+    import uuid
+    from app.models.tenant import DistributorTenant
+    
+    tenant = DistributorTenant(
+        id=uuid.UUID("7e8bed10-8339-446f-b851-de96ab5f0cad"),
+        name="Disconnect Test Tenant",
+        whatsapp_phone_id="test-instance",
+        whatsapp_order_phone="+919078158448"
+    )
+    db_session.add(tenant)
+    db_session.commit()
+    
+    with patch("httpx.AsyncClient.delete", new_callable=AsyncMock) as mock_delete:
+        mock_delete.return_value = MagicMock(status_code=200)
+        mock_delete.return_value.json = lambda: {"status": "deleted"}
+        
+        # Mock resolve_tenant_id to return our tenant ID
+        from app.services import tenant_service
+        monkeypatch.setattr(tenant_service, "resolve_tenant_id", lambda *args, **kwargs: tenant.id)
+        
+        # Override get_db in endpoint to use our db_session
+        from app.main import app
+        from app.database import get_db
+        app.dependency_overrides[get_db] = lambda: db_session
+
+        response = client.delete(
+            "/api/v1/evolution/disconnect?instance_name=test-instance"
+        )
+        
+        # Clean overrides
+        app.dependency_overrides.clear()
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "success"
+        assert data["message"] == "Instance disconnected successfully"
+        
+        # Verify db fields cleared
+        db_session.expire_all()
+        updated_tenant = db_session.query(DistributorTenant).filter_by(id=tenant.id).one()
+        assert updated_tenant.whatsapp_phone_id is None
+        assert updated_tenant.whatsapp_order_phone is None
+
+
