@@ -1505,9 +1505,54 @@ def batch_confirm_order(
         customer = db.get(Customer, order.customer_id)
         if customer:
             db.refresh(order)  # ensure line_items reflect Phase 1 changes
+
+            # ── INVENTORY ALLOCATION (partial fill if stock insufficient) ──
+            from app.models.inventory import Inventory
+            from app.models.demand_gap import DemandGap
+
+            for item in order.line_items:
+                inv_record = db.query(Inventory).filter(
+                    Inventory.tenant_id == order.tenant_id,
+                    Inventory.sku_id == item.product_id,
+                ).first()
+
+                available = inv_record.quantity_on_hand if inv_record else 0
+                allocated = min(item.quantity, available)
+                item.allocated_quantity = allocated
+                gap_qty = item.quantity - allocated
+
+                if gap_qty > 0:
+                    db.add(DemandGap(
+                        id=uuid.uuid4(),
+                        tenant_id=order.tenant_id,
+                        order_id=order.id,
+                        customer_id=order.customer_id,
+                        product_id=item.product_id,
+                        reason_code="STOCK_SHORTAGE",
+                        status="OPEN",
+                        resolved_at=None,
+                        requested_qty=item.quantity,
+                        allocated_qty=allocated,
+                        gap_qty=gap_qty,
+                        unit_price=float(item.unit_price),
+                        revenue_at_risk=float(gap_qty * item.unit_price),
+                        created_at=datetime.utcnow(),
+                    ))
+
+                if inv_record and allocated > 0:
+                    inv_record.quantity_on_hand -= allocated
+                    inv_record.quantity_committed = (inv_record.quantity_committed or 0) + allocated
+
+            # ── BILLING TOTAL using allocated quantities ──
             current_order_total = sum(
-                float(i.quantity * i.unit_price) for i in order.line_items
+                float(
+                    (item.allocated_quantity if item.allocated_quantity is not None else item.quantity)
+                    * item.unit_price
+                )
+                for item in order.line_items
             )
+            order.total_amount = current_order_total
+
             customer.outstanding_balance = (
                 float(customer.outstanding_balance) + current_order_total
             )
