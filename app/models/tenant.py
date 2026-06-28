@@ -21,7 +21,7 @@ class DistributorTenant(Base):
     notification_prefs: Mapped[dict] = mapped_column(
         JSONB().with_variant(JSON(), "sqlite"),
         nullable=False,
-        server_default='{"order_received": true, "order_confirmed": true, "order_dispatched": true, "payment_reminder": true, "new_order_alert_to_distributor": true}'
+        server_default='{"order_received": true, "order_confirmed": true, "order_dispatched": true, "payment_reminder": true, "new_order_alert_to_distributor": true, "order_delivered": true}'
     )
 
 

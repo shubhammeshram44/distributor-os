@@ -839,3 +839,55 @@ def test_batch_confirm_order_success(db_session, client):
     assert float(item.unit_price) == 150.0
     assert item.unmatched_raw_text is None  # self-learning cleared it
 
+
+def test_record_delivery_event(db_session, client):
+    # Setup Tenant
+    tenant = DistributorTenant(name="Delivery Test Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+
+    tenant_context.set(tenant.id)
+
+    # Setup Customer
+    cust = Customer(
+        retailer_name="Delivery Retailer", customer_id="C-DEL", address_text="Address",
+        gstin="07AAAAA1111A1Z1", tax_group="GST", payment_terms="COD"
+    )
+    db_session.add(cust)
+    db_session.flush()
+
+    # Setup Order
+    order = Order(
+        tenant_id=tenant.id,
+        internal_order_id="ORD-DELIVERY-TEST-1",
+        source="Portal",
+        customer_id=cust.id
+    )
+    db_session.add(order)
+    db_session.flush()
+
+    db_session.add(OrderStateLedger(order_id=order.id, from_status=None, to_status="Draft", updated_by="admin"))
+    db_session.commit()
+
+    # Call delivery event endpoint
+    response = client.post(
+        f"/api/v1/orders/{order.id}/delivery-event",
+        json={
+            "status": "delivered",
+            "source": "manual",
+            "tenant_id": str(tenant.id)
+        }
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "Delivered"
+    assert data["delivery_source"] == "manual"
+    assert data["delivered_at"] is not None
+
+    db_session.expire_all()
+    db_session.refresh(order)
+    assert order.current_status == "Delivered"
+    assert order.delivery_source == "manual"
+    assert order.delivered_at is not None
+

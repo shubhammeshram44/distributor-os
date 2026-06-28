@@ -646,12 +646,12 @@ class IngestionService:
                         evolution_base_url=os.getenv("EVOLUTION_API_URL", "http://34.158.60.42:8080"),
                         api_key=os.getenv("EVOLUTION_API_KEY", "distributorbotkey2026")
                     )
-                    # Check if all items are unmatched
-                    all_unmatched = all(
-                        item.sku_id in ("UNMATCHED_SKU", "UNMATCHED_TRIAGE_SKU") or item.unit_price == 0.0
+                    # Check if at least one line item is matched
+                    has_matched = any(
+                        item.sku_id != "UNMATCHED_SKU" and item.unit_price > 0
                         for item in order_val.line_items
                     )
-                    if all_unmatched:
+                    if not has_matched:
                         logger.info(f"Notification skipped: all items unmatched for order {order_val.id}")
                     else:
                         await notification_service.notify(

@@ -73,6 +73,7 @@ export default function OrdersPage() {
   const [selectedOrderDetails, setSelectedOrderDetails] = useState<OrderItem[] | null>(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
+  const [isMarkingDelivered, setIsMarkingDelivered] = useState(false);
   const [productsList, setProductsList] = useState<any[]>([]);
   const [resolvingItemId, setResolvingItemId] = useState<string | null>(null);
   const [editedLineItems, setEditedLineItems] = useState<any[]>([]);
@@ -271,6 +272,37 @@ export default function OrdersPage() {
       showToast(err.message || "Network connection breakdown during order confirmation.", "error");
     } finally {
       setIsConfirming(false);
+    }
+  };
+
+  const handleMarkDelivered = async () => {
+    if (!selectedOrderId) return;
+    setIsMarkingDelivered(true);
+    try {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const response = await fetch(`${apiBase}/api/v1/orders/${selectedOrderId}/delivery-event`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: "delivered",
+          source: "manual",
+          tenant_id: activeTenantId
+        })
+      });
+      const data = await response.json();
+      if (response.ok) {
+        showToast("Order marked as delivered. Customer notified.", "success");
+        handleCloseDetails();
+        fetchOrders(activeTenantId);
+      } else {
+        const errorDetail = data.detail || "Failed to mark order as delivered.";
+        showToast(errorDetail, "error");
+      }
+    } catch (err: any) {
+      showToast(err.message || "Network connection error while marking order as delivered.", "error");
+    } finally {
+      setIsMarkingDelivered(false);
     }
   };
 
@@ -938,6 +970,21 @@ export default function OrdersPage() {
                 >
                   <FileSpreadsheet className="w-4 h-4" />
                   <span>Download B2B Invoice</span>
+                </button>
+              ) : selectedOrder && selectedOrder.status === "Dispatched" ? (
+                <button
+                  onClick={handleMarkDelivered}
+                  disabled={isMarkingDelivered}
+                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white text-sm font-bold rounded-lg transition-all flex items-center gap-2 cursor-pointer"
+                >
+                  {isMarkingDelivered ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Marking Delivered...</span>
+                    </>
+                  ) : (
+                    <span>Mark as Delivered</span>
+                  )}
                 </button>
               ) : (
                 <div></div>

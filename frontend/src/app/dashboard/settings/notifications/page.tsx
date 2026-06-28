@@ -16,6 +16,7 @@ interface NotificationPrefs {
   order_received: boolean;
   order_confirmed: boolean;
   order_dispatched: boolean;
+  order_delivered: boolean;
   payment_reminder: boolean;
   new_order_alert_to_distributor: boolean;
 }
@@ -32,6 +33,10 @@ const PREF_LABELS = {
   order_dispatched: {
     title: "Order Dispatched Alert",
     desc: "Notify customers when their order has been dispatched from the warehouse."
+  },
+  order_delivered: {
+    title: "Order Delivered Alert",
+    desc: "Notify customers when their order has been successfully delivered."
   },
   payment_reminder: {
     title: "Payment Reminder",
@@ -51,6 +56,7 @@ export default function NotificationsSettingsPage() {
     order_received: true,
     order_confirmed: true,
     order_dispatched: true,
+    order_delivered: true,
     payment_reminder: true,
     new_order_alert_to_distributor: true
   });
@@ -93,6 +99,7 @@ export default function NotificationsSettingsPage() {
             order_received: data.order_received !== false,
             order_confirmed: data.order_confirmed !== false,
             order_dispatched: data.order_dispatched !== false,
+            order_delivered: data.order_delivered !== false,
             payment_reminder: data.payment_reminder !== false,
             new_order_alert_to_distributor: data.new_order_alert_to_distributor !== false
           });

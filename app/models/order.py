@@ -16,6 +16,8 @@ class Order(Base, TenantMixin):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     raw_source_text: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+    delivery_source: Mapped[str | None] = mapped_column(String(100), nullable=True, default=None)
 
     @hybrid_property
     def customer_mobile(self) -> str:

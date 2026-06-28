@@ -1540,9 +1540,10 @@ def dispatch_order_post(order_id: uuid.UUID, payload: DispatchPayload, db: Sessi
     tenant_context.set(order.tenant_id)
     
     shipment = db.query(Shipment).filter(Shipment.order_id == order_id).first()
+    customer = db.get(Customer, order.customer_id)
+    dest = customer.address_text if customer else "Unknown Address"
+
     if not shipment:
-        customer = db.get(Customer, order.customer_id)
-        dest = customer.address_text if customer else "Unknown Address"
         shipment = Shipment(
             id=uuid.uuid4(),
             tenant_id=order.tenant_id,
@@ -1557,8 +1558,175 @@ def dispatch_order_post(order_id: uuid.UUID, payload: DispatchPayload, db: Sessi
         shipment.status = "DISPATCHED"
         shipment.carrier = payload.delivery_partner
         shipment.tracking_id = payload.vehicle_number
+
+    # Check if OrderStateLedger model exists
+    has_ledger = False
+    try:
+        from app.models.order import OrderStateLedger
+        has_ledger = True
+    except ImportError:
+        pass
+
+    if has_ledger:
+        db.add(OrderStateLedger(
+            tenant_id=order.tenant_id,
+            order_id=order.id,
+            from_status=order.current_status,
+            to_status="Dispatched",
+            updated_by="operator"
+        ))
+    else:
+        if hasattr(order, "status"):
+            setattr(order, "status", "Dispatched")
         
     db.commit()
+
+    # Fire order_dispatched notification (non-blocking)
+    try:
+        if customer:
+            # Eagerly load relationships so they are in-memory before background task starts
+            for item in order.line_items:
+                if item.product:
+                    _ = item.product.brand
+
+            import asyncio
+            from app.services.notification_service import NotificationService
+            import os
+
+            tenant_obj = db.get(DistributorTenant, order.tenant_id)
+
+            async def fire_notifications(tenant_val, customer_val, order_val):
+                try:
+                    notification_service = NotificationService(
+                        evolution_base_url=os.getenv("EVOLUTION_API_URL", "http://34.158.60.42:8080"),
+                        api_key=os.getenv("EVOLUTION_API_KEY", "distributorbotkey2026")
+                    )
+                    await notification_service.notify(
+                        event="order_dispatched",
+                        tenant=tenant_val,
+                        customer=customer_val,
+                        order=order_val,
+                        db=db
+                    )
+                except Exception as inner_ex:
+                    logger.warning("Notification fire failed silently: %s", str(inner_ex))
+
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = None
+
+            if loop and loop.is_running():
+                loop.create_task(fire_notifications(tenant_obj, customer, order))
+            else:
+                asyncio.run(fire_notifications(tenant_obj, customer, order))
+    except Exception as e:
+        logger.warning("Notification fire setup failed silently: %s", str(e))
+
     return {"status": "success", "order_id": str(order_id)}
+
+
+class DeliveryEventRequest(BaseModel):
+    status: str = "delivered"
+    source: str = "manual"  # manual | shiprocket | dunzo | porter | custom
+    delivery_timestamp: typing.Optional[datetime] = None
+    proof: typing.Optional[str] = None
+    tenant_id: str
+
+@router.post("/{order_id}/delivery-event", status_code=200)
+def record_delivery_event(
+    order_id: uuid.UUID,
+    payload: DeliveryEventRequest,
+    db: Session = Depends(get_db)
+):
+    # 1. Fetch order by order_id and tenant_id
+    order = db.query(Order).filter(Order.id == order_id, Order.tenant_id == payload.tenant_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    tenant_context.set(order.tenant_id)
+
+    # Check if OrderStateLedger model exists
+    has_ledger = False
+    try:
+        from app.models.order import OrderStateLedger
+        has_ledger = True
+    except ImportError:
+        pass
+
+    # 2. Update order status to Delivered
+    if has_ledger:
+        current_status = order.current_status
+        db.add(OrderStateLedger(
+            tenant_id=order.tenant_id,
+            order_id=order.id,
+            from_status=current_status,
+            to_status="Delivered",
+            updated_by=payload.source
+        ))
+    else:
+        if hasattr(order, "status"):
+            setattr(order, "status", "Delivered")
+
+    # 3. Update order.delivered_at = delivery_timestamp or datetime.utcnow()
+    order.delivered_at = payload.delivery_timestamp or datetime.utcnow()
+
+    # 4. Store source in order.delivery_source
+    order.delivery_source = payload.source
+
+    # 5. Commit
+    db.commit()
+    db.refresh(order)
+
+    # 6. Fire order_delivered notification via NotificationService (non-blocking)
+    try:
+        customer = db.get(Customer, order.customer_id)
+        if customer:
+            for item in order.line_items:
+                if item.product:
+                    _ = item.product.brand
+
+            import asyncio
+            from app.services.notification_service import NotificationService
+            import os
+
+            tenant_obj = db.get(DistributorTenant, order.tenant_id)
+
+            async def fire_notifications(tenant_val, customer_val, order_val):
+                try:
+                    notification_service = NotificationService(
+                        evolution_base_url=os.getenv("EVOLUTION_API_URL", "http://34.158.60.42:8080"),
+                        api_key=os.getenv("EVOLUTION_API_KEY", "distributorbotkey2026")
+                    )
+                    await notification_service.notify(
+                        event="order_delivered",
+                        tenant=tenant_val,
+                        customer=customer_val,
+                        order=order_val,
+                        db=db
+                    )
+                except Exception as inner_ex:
+                    logger.warning("Notification fire failed silently: %s", str(inner_ex))
+
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = None
+
+            if loop and loop.is_running():
+                loop.create_task(fire_notifications(tenant_obj, customer, order))
+            else:
+                asyncio.run(fire_notifications(tenant_obj, customer, order))
+    except Exception as e:
+        logger.warning("Notification fire setup failed silently: %s", str(e))
+
+    # 7. Return updated order details
+    return {
+        "id": str(order.id),
+        "order_id": order.internal_order_id,
+        "status": "Delivered",
+        "delivered_at": order.delivered_at.isoformat() if order.delivered_at else None,
+        "delivery_source": order.delivery_source
+    }
 
 

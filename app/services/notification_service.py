@@ -18,7 +18,7 @@ Order ID: {order_id}
 Items: {item_summary}
 Total: ₹{total}
 
-We'll confirm and dispatch soon.
+We'll update you once your order is confirmed and share dispatch details shortly.
 — {distributor_name}""",
 
     "order_confirmed": """Hi {customer_name},
@@ -27,6 +27,24 @@ Your order {order_id} has been confirmed ✓
 Items: {item_summary}
 Total: ₹{total}
 
+— {distributor_name}""",
+
+    "order_dispatched": """Hi {customer_name},
+
+🚚 Your order {order_id} has been dispatched!
+Items: {item_summary}
+Total: ₹{total}
+
+Your order is on its way.
+— {distributor_name}""",
+
+    "order_delivered": """Hi {customer_name},
+
+✅ Your order {order_id} has been delivered!
+Items: {item_summary}
+Total: ₹{total}
+
+Thank you for your order. We look forward to serving you again!
 — {distributor_name}""",
 
     "new_order_alert_to_distributor": """🛒 New Order Alert!
