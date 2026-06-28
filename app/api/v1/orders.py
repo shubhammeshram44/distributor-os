@@ -6,7 +6,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from app.database import get_db, tenant_context
 from app.models.order import Order, OrderLineItem, OrderStateLedger
 from app.models.product import Product
@@ -76,24 +76,24 @@ def list_orders(
     resolved_tenant_id = resolve_tenant_id(tenant_id, access_token, authorization)
     ensure_demo_data(db, resolved_tenant_id)
     tenant_context.set(resolved_tenant_id)
-    from sqlalchemy.orm import joinedload
     from sqlalchemy import select
 
     query = (
         select(Order, Invoice)
         .outerjoin(Invoice, Invoice.order_id == Order.id)
         .options(
+            joinedload(Order.customer),
             joinedload(Order.line_items).joinedload(OrderLineItem.product)
         )
         .filter(Order.tenant_id == resolved_tenant_id)
         .order_by(Order.created_at.desc())
+        .limit(100)
     )
     orders_invoices = db.execute(query).unique().all()
     results = []
     
     for o, inv in orders_invoices:
-        customer = db.get(Customer, o.customer_id)
-        cust_name = customer.retailer_name if customer else "Unknown Retailer"
+        cust_name = o.customer.retailer_name if o.customer else "Unknown Retailer"
 
         # Calculate total amount
         amount_sum = sum(float(item.quantity * item.unit_price) for item in o.line_items)
