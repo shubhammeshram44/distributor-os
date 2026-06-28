@@ -58,6 +58,8 @@ export default function OrdersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isEditingInvoiceType, setIsEditingInvoiceType] = useState(false);
+  const [riskAssessment, setRiskAssessment] = useState<any>(null);
+  const [riskLoading, setRiskLoading] = useState(false);
 
   // Bulk Job States
   const [bulkJobId, setBulkJobId] = useState<string | null>(null);
@@ -191,6 +193,45 @@ export default function OrdersPage() {
     setOrders([]);
     fetchOrders(activeTenantId);
   }, [activeTenantId, fetchOrders]);
+
+
+  useEffect(() => {
+    if (!selectedOrderId) {
+      setRiskAssessment(null);
+      return;
+    }
+    const orderToAssess = orders.find(o => o.id === selectedOrderId);
+    if (!orderToAssess) return;
+    
+    const status = orderToAssess.status;
+    const isPendingOrDraft = status === "Pending" || status === "Draft";
+    
+    if (isPendingOrDraft) {
+      const fetchRiskAssessment = async () => {
+        setRiskLoading(true);
+        try {
+          const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+          const resp = await fetch(`${apiBase}/api/v1/orders/${selectedOrderId}/risk-assessment`, {
+            credentials: "include"
+          });
+          if (resp.ok) {
+            const data = await resp.json();
+            setRiskAssessment(data);
+          } else {
+            setRiskAssessment(null);
+          }
+        } catch (err) {
+          console.error(err);
+          setRiskAssessment(null);
+        } finally {
+          setRiskLoading(false);
+        }
+      };
+      fetchRiskAssessment();
+    } else {
+      setRiskAssessment(null);
+    }
+  }, [selectedOrderId, orders]);
 
 
   const fetchOrderDetails = async (orderId: string) => {
@@ -944,57 +985,114 @@ export default function OrdersPage() {
             </div>
 
             {/* Footer Buttons */}
-            <div className="p-6 border-t border-dashboard-border bg-slate-50 flex items-center justify-between gap-3">
-              {selectedOrder && (selectedOrder.status === "Pending" || selectedOrder.status === "Needs Review") ? (
-                <button
-                  onClick={handleConfirmOrder}
-                  disabled={isConfirming}
-                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white text-sm font-bold rounded-lg transition-all flex items-center gap-2 cursor-pointer"
-                >
-                  {isConfirming ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      <span>Confirming...</span>
-                    </>
-                  ) : (
-                    <span>Confirm Order</span>
+            <div className="p-6 border-t border-dashboard-border bg-slate-50 flex flex-col gap-3">
+              {riskAssessment && selectedOrder?.status !== "Confirmed" && (
+                <div className={`rounded-lg p-4 mb-4 border ${
+                  riskAssessment.level === "high_risk" 
+                    ? "bg-red-50 border-red-200" 
+                    : riskAssessment.level === "caution"
+                    ? "bg-yellow-50 border-yellow-200"
+                    : "bg-green-50 border-green-200"
+                }`}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-lg">
+                      {riskAssessment.level === "high_risk" ? "🔴" : riskAssessment.level === "caution" ? "🟡" : "🟢"}
+                    </span>
+                    <span className="font-semibold text-sm uppercase tracking-wide text-slate-800">
+                      {riskAssessment.level === "high_risk" ? "High Risk" : riskAssessment.level === "caution" ? "Caution" : "Clear"}
+                    </span>
+                    <span className="ml-auto text-xs text-gray-400">Credit Intelligence</span>
+                  </div>
+
+                  {/* Key metrics row */}
+                  <div className="flex gap-4 mb-3 text-sm">
+                    <div>
+                      <span className="text-gray-500">Outstanding</span>
+                      <div className="font-medium text-slate-800">₹{riskAssessment.outstanding_balance.toLocaleString("en-IN")}</div>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Credit Used</span>
+                      <div className="font-medium text-slate-800">{riskAssessment.credit_utilisation_pct}%</div>
+                    </div>
+                    {riskAssessment.overdue_days > 0 && (
+                      <div>
+                        <span className="text-gray-500">Overdue</span>
+                        <div className="font-medium text-red-600">{riskAssessment.overdue_days} days</div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Signals */}
+                  {riskAssessment.signals.length > 0 && (
+                    <ul className="text-xs text-gray-600 mb-3 space-y-1">
+                      {riskAssessment.signals.map((s: string, i: number) => (
+                        <li key={i} className="flex items-center gap-1">
+                          <span>⚠️</span> {s}
+                        </li>
+                      ))}
+                    </ul>
                   )}
-                </button>
-              ) : selectedOrder && selectedOrder.status === "Confirmed" ? (
-                <button
-                  onClick={() => {
-                    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-                    window.open(`${apiBase}/api/v1/orders/${selectedOrderId}/invoice`, "_blank");
-                  }}
-                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-lg transition-all flex items-center gap-2 cursor-pointer"
-                >
-                  <FileSpreadsheet className="w-4 h-4" />
-                  <span>Download B2B Invoice</span>
-                </button>
-              ) : selectedOrder && selectedOrder.status === "Dispatched" ? (
-                <button
-                  onClick={handleMarkDelivered}
-                  disabled={isMarkingDelivered}
-                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white text-sm font-bold rounded-lg transition-all flex items-center gap-2 cursor-pointer"
-                >
-                  {isMarkingDelivered ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      <span>Marking Delivered...</span>
-                    </>
-                  ) : (
-                    <span>Mark as Delivered</span>
-                  )}
-                </button>
-              ) : (
-                <div></div>
+
+                  {/* Recommendation */}
+                  <div className="bg-white rounded p-2 text-xs text-gray-700 border border-gray-100">
+                    <span className="font-medium">💡 Recommendation: </span>
+                    {riskAssessment.recommendation}
+                  </div>
+                </div>
               )}
-              <button
-                onClick={handleCloseDetails}
-                className="px-5 py-2.5 bg-slate-800 text-white hover:bg-slate-700 text-sm font-bold rounded-lg transition-all cursor-pointer"
-              >
-                Close Details
-              </button>
+
+              <div className="flex items-center justify-between gap-3 w-full">
+                {selectedOrder && (selectedOrder.status === "Pending" || selectedOrder.status === "Needs Review") ? (
+                  <button
+                    onClick={handleConfirmOrder}
+                    disabled={isConfirming}
+                    className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white text-sm font-bold rounded-lg transition-all flex items-center gap-2 cursor-pointer"
+                  >
+                    {isConfirming ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>Confirming...</span>
+                      </>
+                    ) : (
+                      <span>Confirm Order</span>
+                    )}
+                  </button>
+                ) : selectedOrder && selectedOrder.status === "Confirmed" ? (
+                  <button
+                    onClick={() => {
+                      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+                      window.open(`${apiBase}/api/v1/orders/${selectedOrderId}/invoice`, "_blank");
+                    }}
+                    className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-lg transition-all flex items-center gap-2 cursor-pointer"
+                  >
+                    <FileSpreadsheet className="w-4 h-4" />
+                    <span>Download B2B Invoice</span>
+                  </button>
+                ) : selectedOrder && selectedOrder.status === "Dispatched" ? (
+                  <button
+                    onClick={handleMarkDelivered}
+                    disabled={isMarkingDelivered}
+                    className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white text-sm font-bold rounded-lg transition-all flex items-center gap-2 cursor-pointer"
+                  >
+                    {isMarkingDelivered ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>Marking Delivered...</span>
+                      </>
+                    ) : (
+                      <span>Mark as Delivered</span>
+                    )}
+                  </button>
+                ) : (
+                  <div></div>
+                )}
+                <button
+                  onClick={handleCloseDetails}
+                  className="px-5 py-2.5 bg-slate-800 text-white hover:bg-slate-700 text-sm font-bold rounded-lg transition-all cursor-pointer"
+                >
+                  Close Details
+                </button>
+              </div>
             </div>
           </div>
         </div>

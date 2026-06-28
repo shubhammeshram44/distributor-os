@@ -960,3 +960,86 @@ def test_orders_list_query_count_regression(db_session, client):
     # Assert query count remains bounded (constant query complexity, not O(N))
     assert queries_count_5 <= queries_count_1 + 1
 
+
+def test_order_risk_assessment(db_session, client):
+    # Setup mock data for tenant, customer, order
+    from app.models.tenant import DistributorTenant
+    from app.models.customer import Customer
+    from app.models.order import Order, OrderLineItem, OrderStateLedger
+    from app.models.product import Product
+    import uuid
+
+    tenant = DistributorTenant(id=uuid.uuid4(), name="Risk Test Tenant")
+    db_session.add(tenant)
+    
+    customer = Customer(
+        id=uuid.uuid4(),
+        tenant_id=tenant.id,
+        retailer_name="Risk Test Retailer",
+        outstanding_balance=8000.0,
+        credit_limit=10000.0,
+        phone_number="+919999999999",
+        whatsapp_notifications_enabled=True
+    )
+    db_session.add(customer)
+    
+    product = Product(
+        id=uuid.uuid4(),
+        tenant_id=tenant.id,
+        sku_id="PROD-RISK-1",
+        brand="Risk Brand",
+        category="Risk Cat",
+        pack_size="Pack of 1",
+        base_price=100.0,
+        stock_quantity=50
+    )
+    db_session.add(product)
+    db_session.flush()
+
+    order = Order(
+        id=uuid.uuid4(),
+        tenant_id=tenant.id,
+        customer_id=customer.id,
+        internal_order_id="ORD-RISK-1",
+        source="Risk Source",
+        status="Draft"
+    )
+    db_session.add(order)
+    db_session.flush()
+
+    line_item = OrderLineItem(
+        id=uuid.uuid4(),
+        tenant_id=tenant.id,
+        order_id=order.id,
+        product_id=product.id,
+        quantity=5,
+        unit_price=100.0
+    )
+    db_session.add(line_item)
+    
+    ledger = OrderStateLedger(
+        id=uuid.uuid4(),
+        tenant_id=tenant.id,
+        order_id=order.id,
+        from_status=None,
+        to_status="Draft",
+        updated_by="test"
+    )
+    db_session.add(ledger)
+    db_session.commit()
+
+    # Call risk assessment endpoint
+    resp = client.get(f"/api/v1/orders/{order.id}/risk-assessment?tenant_id={tenant.id}")
+    assert resp.status_code == 200
+    data = resp.json()
+    
+    assert data["order_id"] == str(order.id)
+    assert data["customer_id"] == str(customer.id)
+    assert data["score"] >= 0
+    assert data["level"] in ("clear", "caution", "high_risk")
+    assert "signals" in data
+    assert "recommendation" in data
+    assert data["outstanding_balance"] == 8000.0
+    assert data["credit_limit"] == 10000.0
+    assert data["credit_utilisation_pct"] == 80.0
+

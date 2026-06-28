@@ -1743,3 +1743,156 @@ def record_delivery_event(
     }
 
 
+@router.get("/{order_id}/risk-assessment")
+def get_order_risk_assessment(
+    order_id: uuid.UUID,
+    access_token: str | None = Cookie(None),
+    authorization: str | None = Header(None),
+    db: Session = Depends(get_db)
+):
+    from datetime import datetime, timedelta
+    from sqlalchemy import func
+    from app.models.payment import Payment
+    from app.models.invoice import Invoice
+
+    order = db.get(Order, order_id)
+    if not order:
+        raise HTTPException(
+            status_code=404,
+            detail="Order not found"
+        )
+
+    # Set tenant context
+    tenant_context.set(order.tenant_id)
+
+    customer = db.get(Customer, order.customer_id)
+    if not customer:
+        raise HTTPException(
+            status_code=404,
+            detail="Customer not found"
+        )
+
+    tenant = db.get(DistributorTenant, order.tenant_id)
+    if not tenant:
+        raise HTTPException(
+            status_code=404,
+            detail="Tenant not found"
+        )
+
+    current_order_total = sum(float(item.quantity * item.unit_price) for item in order.line_items)
+
+    # Outstanding and credit
+    outstanding = float(customer.outstanding_balance)
+    credit_limit = float(customer.credit_limit)
+    credit_utilisation = (outstanding / credit_limit * 100) if credit_limit > 0 else 0
+
+    # Overdue days — days since oldest unpaid invoice
+    oldest_unpaid = db.query(func.min(Invoice.created_at))\
+        .filter(Invoice.customer_id == customer.id, Invoice.payment_status != "PAID")\
+        .scalar()
+    overdue_days = (datetime.utcnow() - oldest_unpaid).days if oldest_unpaid else 0
+
+    # Average days to pay — from payment history
+    payments = db.query(Payment)\
+        .filter(Payment.customer_id == customer.id)\
+        .order_by(Payment.created_at.desc())\
+        .limit(10).all()
+    avg_days_to_pay = 0.0  # compute from payment vs invoice dates if available, else 0
+    diffs = []
+    for p in payments:
+        for link in p.invoice_links:
+            inv = db.get(Invoice, link.invoice_id)
+            if inv and inv.created_at and p.created_at:
+                diffs.append((p.created_at - inv.created_at).days)
+    if diffs:
+        avg_days_to_pay = float(sum(diffs) / len(diffs))
+
+    # Order frequency drop — compare last 30 days vs prior 30 days
+    now = datetime.utcnow()
+    recent_orders = db.query(func.count(Order.id))\
+        .filter(Order.customer_id == customer.id,
+                Order.created_at >= now - timedelta(days=30)).scalar() or 0
+    prior_orders = db.query(func.count(Order.id))\
+        .filter(Order.customer_id == customer.id,
+                Order.created_at >= now - timedelta(days=60),
+                Order.created_at < now - timedelta(days=30)).scalar() or 0
+    frequency_drop_pct = ((prior_orders - recent_orders) / prior_orders * 100) if prior_orders > 0 else 0
+
+    # Last payment date
+    last_payment = db.query(Payment)\
+        .filter(Payment.customer_id == customer.id)\
+        .order_by(Payment.created_at.desc()).first()
+    last_payment_date = last_payment.created_at.date() if last_payment else None
+    days_since_last_payment = (datetime.utcnow().date() - last_payment_date).days if last_payment_date else None
+
+    score = 0
+    signals = []
+
+    if credit_limit > 0:
+        if credit_utilisation > 90:
+            score += 40
+            signals.append(f"Credit {credit_utilisation:.0f}% utilised (₹{outstanding:,.0f} of ₹{credit_limit:,.0f})")
+        elif credit_utilisation > 70:
+            score += 25
+            signals.append(f"Credit {credit_utilisation:.0f}% utilised")
+        elif credit_utilisation > 50:
+            score += 10
+            signals.append(f"Credit {credit_utilisation:.0f}% utilised")
+
+    if overdue_days > 30:
+        score += 30
+        signals.append(f"Overdue {overdue_days} days")
+    elif overdue_days > 15:
+        score += 20
+        signals.append(f"Overdue {overdue_days} days")
+    elif overdue_days > 7:
+        score += 10
+        signals.append(f"Overdue {overdue_days} days")
+
+    if frequency_drop_pct > 40:
+        score += 10
+        signals.append(f"Orders dropped {frequency_drop_pct:.0f}% this month")
+
+    if days_since_last_payment and days_since_last_payment > 45:
+        score += 10
+        signals.append(f"No payment in {days_since_last_payment} days")
+
+    if score >= 70:
+        level = "high_risk"
+    elif score >= 40:
+        level = "caution"
+    else:
+        level = "clear"
+
+    if level == "high_risk" and overdue_days > 30:
+        recommendation = f"Collect ₹{min(current_order_total, outstanding * 0.5):,.0f} advance before confirming this order."
+    elif level == "high_risk" and credit_utilisation > 90:
+        recommendation = f"Credit limit nearly exhausted. Request partial payment of ₹{outstanding * 0.3:,.0f} before confirming."
+    elif level == "high_risk":
+        recommendation = "High risk customer. Consider requesting advance payment before confirming."
+    elif level == "caution" and overdue_days > 7:
+        recommendation = f"Payment overdue {overdue_days} days. Follow up on outstanding ₹{outstanding:,.0f} before confirming."
+    elif level == "caution":
+        recommendation = "Monitor this customer. Consider requesting UPI payment before dispatch."
+    else:
+        recommendation = "Customer is in good standing. Safe to confirm."
+
+    return {
+        "order_id": str(order_id),
+        "customer_id": str(customer.id),
+        "customer_name": customer.retailer_name,
+        "score": score,
+        "level": level,
+        "signals": signals,
+        "recommendation": recommendation,
+        "outstanding_balance": outstanding,
+        "credit_limit": credit_limit,
+        "credit_utilisation_pct": round(credit_utilisation, 1),
+        "overdue_days": overdue_days,
+        "last_payment_date": str(last_payment_date) if last_payment_date else None,
+        "days_since_last_payment": days_since_last_payment,
+        "current_order_total": current_order_total,
+        "order_frequency_drop_pct": round(frequency_drop_pct, 1)
+    }
+
+
