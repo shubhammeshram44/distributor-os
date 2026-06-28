@@ -13,6 +13,7 @@ from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql  # Import PostgreSQL dialect features
 
 
 # revision identifiers, used by Alembic.
@@ -38,11 +39,11 @@ def upgrade() -> None:
     # ------------------------------------------------------------------
     op.create_table(
         "demand_gaps",
-        sa.Column("id", sa.CHAR(36), nullable=False),
-        sa.Column("tenant_id", sa.CHAR(36), nullable=False),
-        sa.Column("order_id", sa.CHAR(36), nullable=True),
-        sa.Column("customer_id", sa.CHAR(36), nullable=False),
-        sa.Column("product_id", sa.CHAR(36), nullable=True),
+        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("tenant_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("order_id", postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column("customer_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("product_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("reason_code", sa.String(50), nullable=False),
         sa.Column("status", sa.String(20), nullable=False, server_default="OPEN"),
         sa.Column("resolved_at", sa.DateTime(), nullable=True),
