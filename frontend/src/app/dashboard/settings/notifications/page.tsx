@@ -165,19 +165,7 @@ export default function NotificationsSettingsPage() {
   };
 
   return (
-    <div className="flex bg-slate-900 min-h-screen text-slate-100 font-sans">
-      {/* Toast Notification */}
-      {toast.show && (
-        <div className={`fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-3 rounded-lg shadow-xl border transition-all duration-300 ${
-          toast.type === "success" 
-            ? "bg-emerald-950/90 border-emerald-500/30 text-emerald-200" 
-            : "bg-rose-950/90 border-rose-500/30 text-rose-200"
-        }`}>
-          {toast.type === "success" ? <CheckCircle2 className="w-5 h-5 text-emerald-400" /> : <AlertCircle className="w-5 h-5 text-rose-400" />}
-          <span className="text-sm font-medium">{toast.message}</span>
-        </div>
-      )}
-
+    <div className="flex bg-dashboard-bg min-h-screen text-slate-800 font-sans">
       {/* Sidebar */}
       <Sidebar
         activeTab="Notifications"
@@ -185,86 +173,99 @@ export default function NotificationsSettingsPage() {
         tenantName={getTenantName()}
       />
 
-      {/* Main Content */}
-      <main className="flex-1 pl-64 transition-all duration-300">
+      <div className="flex-1 pl-64 flex flex-col h-screen overflow-hidden">
         <DashboardHeader
           activeTenantId={activeTenantId}
           setActiveTenantId={handleTenantChange}
           tenantName={getTenantName()}
         />
 
-        <div className="p-8 max-w-4xl mx-auto space-y-6">
-          {/* Header Card */}
-          <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-6 backdrop-blur-md shadow-lg flex items-center justify-between">
-            <div>
-              <h2 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
-                <Bell className="w-6 h-6 text-brand-blue" />
-                WhatsApp Notifications
-              </h2>
-              <p className="text-slate-400 text-sm mt-1">
-                Configure automated WhatsApp notifications triggered by key order lifecycle events.
-              </p>
-            </div>
-            <span className="px-3 py-1 bg-brand-blue/20 text-brand-blue border border-brand-blue/30 text-xs font-semibold rounded-full uppercase tracking-wider">
-              {getTenantName()}
-            </span>
-          </div>
-
-          {loading ? (
-            <div className="flex flex-col items-center justify-center py-20 gap-3">
-              <Loader2 className="w-10 h-10 text-brand-blue animate-spin" />
-              <span className="text-slate-400 text-sm font-medium animate-pulse">Loading notification preferences...</span>
-            </div>
-          ) : (
-            <div className="bg-slate-800/40 border border-slate-700/40 rounded-xl overflow-hidden shadow-xl backdrop-blur-sm">
-              <div className="px-6 py-4 border-b border-slate-700/50 bg-slate-800/80 flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Notification Preferences</span>
-                <span className="text-xs text-slate-500 font-medium">Auto-saves on change</span>
-              </div>
-              <div className="divide-y divide-slate-700/50">
-                {(Object.keys(PREF_LABELS) as Array<keyof NotificationPrefs>).map((key) => {
-                  const label = PREF_LABELS[key];
-                  const isChecked = prefs[key];
-                  return (
-                    <div key={key} className="px-6 py-5 flex items-center justify-between hover:bg-slate-800/20 transition-all duration-200">
-                      <div className="space-y-1 pr-6">
-                        <h4 className="text-sm font-semibold text-slate-200">{label.title}</h4>
-                        <p className="text-xs text-slate-400 leading-relaxed max-w-xl">{label.desc}</p>
-                      </div>
-                      
-                      {/* Toggle Switch */}
-                      <button
-                        onClick={() => handleToggle(key)}
-                        className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                          isChecked ? "bg-emerald-500" : "bg-slate-600"
-                        }`}
-                      >
-                        <span
-                          className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                            isChecked ? "translate-x-5" : "translate-x-0"
-                          }`}
-                        />
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
+        <main className="flex-1 mt-16 p-6 overflow-y-auto space-y-6">
+          {/* Toast Notification */}
+          {toast.show && (
+            <div className={`fixed top-20 right-4 z-50 flex items-center gap-2 px-4 py-3 rounded-lg shadow-md border transition-all duration-300 ${
+              toast.type === "success" 
+                ? "bg-emerald-50 border-emerald-200 text-emerald-800" 
+                : "bg-rose-50 border-rose-200 text-rose-800"
+            }`}>
+              {toast.type === "success" ? <CheckCircle2 className="w-5 h-5 text-emerald-600" /> : <AlertCircle className="w-5 h-5 text-rose-600" />}
+              <span className="text-sm font-semibold">{toast.message}</span>
             </div>
           )}
 
-          {/* Template Info Card */}
-          <div className="bg-slate-800/20 border border-slate-700/30 rounded-xl p-5 flex gap-4">
-            <MessageSquareCode className="w-8 h-8 text-slate-500 flex-shrink-0 mt-0.5" />
-            <div className="space-y-1">
-              <h5 className="text-xs font-bold uppercase text-slate-400 tracking-wider">Templated Messaging</h5>
-              <p className="text-xs text-slate-500 leading-relaxed">
-                All alerts use pre-formatted country-code validated templates to optimize delivery success. Ensure your WhatsApp instance is correctly connected via the <a href="/dashboard/settings/integrations" className="text-brand-blue hover:underline">Integrations</a> page.
-              </p>
+          <div className="p-8 max-w-4xl mx-auto space-y-6">
+            {/* Header Card */}
+            <div className="bg-white border border-dashboard-border rounded-xl p-6 shadow-sm flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
+                  <Bell className="w-6 h-6 text-brand-blue" />
+                  WhatsApp Notifications
+                </h2>
+                <p className="text-slate-500 text-sm mt-1">
+                  Configure automated WhatsApp notifications triggered by key order lifecycle events.
+                </p>
+              </div>
+              <span className="px-3 py-1 bg-brand-blue/10 text-brand-blue border border-brand-blue/20 text-xs font-semibold rounded-full uppercase tracking-wider">
+                {getTenantName()}
+              </span>
             </div>
-          </div>
 
-        </div>
-      </main>
+            {loading ? (
+              <div className="flex flex-col items-center justify-center py-20 gap-3">
+                <Loader2 className="w-10 h-10 text-brand-blue animate-spin" />
+                <span className="text-slate-500 text-sm font-medium animate-pulse">Loading notification preferences...</span>
+              </div>
+            ) : (
+              <div className="bg-white border border-dashboard-border rounded-xl overflow-hidden shadow-sm">
+                <div className="px-6 py-4 border-b border-dashboard-border bg-slate-50 flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Notification Preferences</span>
+                  <span className="text-xs text-slate-400 font-medium">Auto-saves on change</span>
+                </div>
+                <div className="divide-y divide-dashboard-border">
+                  {(Object.keys(PREF_LABELS) as Array<keyof NotificationPrefs>).map((key) => {
+                    const label = PREF_LABELS[key];
+                    const isChecked = prefs[key];
+                    return (
+                      <div key={key} className="px-6 py-5 flex items-center justify-between hover:bg-slate-50/50 transition-all duration-200">
+                        <div className="space-y-1 pr-6">
+                          <h4 className="text-sm font-semibold text-slate-800">{label.title}</h4>
+                          <p className="text-xs text-slate-500 leading-relaxed max-w-xl">{label.desc}</p>
+                        </div>
+                        
+                        {/* Toggle Switch */}
+                        <button
+                          onClick={() => handleToggle(key)}
+                          className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                            isChecked ? "bg-emerald-500" : "bg-slate-200"
+                          }`}
+                        >
+                          <span
+                            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                              isChecked ? "translate-x-5" : "translate-x-0"
+                            }`}
+                          />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Template Info Card */}
+            <div className="bg-slate-50 border border-dashboard-border rounded-xl p-5 flex gap-4">
+              <MessageSquareCode className="w-8 h-8 text-slate-400 flex-shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <h5 className="text-xs font-bold uppercase text-slate-500 tracking-wider">Templated Messaging</h5>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  All alerts use pre-formatted country-code validated templates to optimize delivery success. Ensure your WhatsApp instance is correctly connected via the <a href="/dashboard/settings/integrations" className="text-brand-blue hover:underline">Integrations</a> page.
+                </p>
+              </div>
+            </div>
+
+          </div>
+        </main>
+      </div>
     </div>
   );
 }
