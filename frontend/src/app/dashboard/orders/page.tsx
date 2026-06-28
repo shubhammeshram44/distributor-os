@@ -204,7 +204,7 @@ export default function OrdersPage() {
     if (!orderToAssess) return;
     
     const status = orderToAssess.status;
-    const isPendingOrDraft = status === "Pending" || status === "Draft";
+    const isPendingOrDraft = status === "Pending" || status === "Draft" || status === "Needs Review";
     
     if (isPendingOrDraft) {
       const fetchRiskAssessment = async () => {

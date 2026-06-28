@@ -18,6 +18,8 @@ class Order(Base, TenantMixin):
     raw_source_text: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
     delivered_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
     delivery_source: Mapped[str | None] = mapped_column(String(100), nullable=True, default=None)
+    # ONE-TIME DATA MIGRATION:
+    # UPDATE orders SET status = 'pending_review' WHERE status = 'NEEDS_REVIEW';
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="Draft")
 
     @hybrid_property
