@@ -1,7 +1,7 @@
 import uuid
 import base64
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, status, Cookie, Header
+from fastapi import APIRouter, Depends, HTTPException, status, Cookie, Header, BackgroundTasks
 from pydantic import BaseModel
 from sqlalchemy import func, select, and_, or_
 from sqlalchemy.orm import Session, aliased, joinedload
@@ -34,6 +34,86 @@ def decode_cursor(cursor_str: str | None) -> tuple[datetime | None, uuid.UUID | 
     except Exception:
         pass
     return None, None
+
+
+def _fire_delivered_notification_sync(tenant_id: str, customer_id: str, order_id: str):
+    """Sync wrapper - runs in FastAPI background task after response is sent."""
+    import asyncio
+    import os
+    from app.database import SessionLocal
+    from app.models.tenant import DistributorTenant
+    from app.models.customer import Customer
+    from app.models.order import Order
+    from app.services.notification_service import NotificationService
+    
+    db = SessionLocal()
+    try:
+        tenant = db.get(DistributorTenant, tenant_id)
+        customer = db.get(Customer, customer_id)
+        order = db.get(Order, order_id)
+        
+        if tenant and customer and order:
+            # Eagerly load line items and products
+            for item in order.line_items:
+                if item.product:
+                    _ = item.product.brand
+            
+            svc = NotificationService(
+                evolution_base_url=os.getenv("EVOLUTION_API_URL", "http://34.158.60.42:8080"),
+                api_key=os.getenv("EVOLUTION_API_KEY", "distributorbotkey2026")
+            )
+            asyncio.run(svc.notify(
+                event="order_delivered",
+                tenant=tenant,
+                customer=customer,
+                order=order,
+                db=db
+            ))
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning("Delivered notification failed: %s", str(e))
+    finally:
+        db.close()
+
+
+def _fire_dispatched_notification_sync(tenant_id: str, customer_id: str, order_id: str):
+    """Sync wrapper - runs in FastAPI background task after response is sent."""
+    import asyncio
+    import os
+    from app.database import SessionLocal
+    from app.models.tenant import DistributorTenant
+    from app.models.customer import Customer
+    from app.models.order import Order
+    from app.services.notification_service import NotificationService
+    
+    db = SessionLocal()
+    try:
+        tenant = db.get(DistributorTenant, tenant_id)
+        customer = db.get(Customer, customer_id)
+        order = db.get(Order, order_id)
+        
+        if tenant and customer and order:
+            # Eagerly load line items and products
+            for item in order.line_items:
+                if item.product:
+                    _ = item.product.brand
+            
+            svc = NotificationService(
+                evolution_base_url=os.getenv("EVOLUTION_API_URL", "http://34.158.60.42:8080"),
+                api_key=os.getenv("EVOLUTION_API_KEY", "distributorbotkey2026")
+            )
+            asyncio.run(svc.notify(
+                event="order_dispatched",
+                tenant=tenant,
+                customer=customer,
+                order=order,
+                db=db
+            ))
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning("Dispatched notification failed: %s", str(e))
+    finally:
+        db.close()
 
 class ShipmentCreatePayload(BaseModel):
     driver_id: uuid.UUID
@@ -302,6 +382,7 @@ def get_active_shipments(
 @router.post("", status_code=status.HTTP_201_CREATED)
 def create_shipment(
     payload: ShipmentCreatePayload,
+    background_tasks: BackgroundTasks,
     access_token: str | None = Cookie(None),
     authorization: str | None = Header(None),
     db: Session = Depends(get_db)
@@ -357,54 +438,16 @@ def create_shipment(
 
     db.commit()
 
-    # Fire order_dispatched notifications (non-blocking)
+    # Fire order_dispatched notifications (non-blocking via BackgroundTasks)
     for s in created_shipments:
-        try:
-            order_obj = db.get(Order, s.order_id)
-            if order_obj:
-                customer_obj = db.query(Customer).filter(
-                    Customer.id == order_obj.customer_id,
-                    Customer.tenant_id == order_obj.tenant_id
-                ).first()
-                
-                tenant_obj = db.get(DistributorTenant, order_obj.tenant_id)
-                
-                if customer_obj and tenant_obj:
-                    for item in order_obj.line_items:
-                        if item.product:
-                            _ = item.product.brand
-                            
-                    import asyncio
-                    from app.services.notification_service import NotificationService
-                    import os
-
-                    async def fire_dispatched_notification(t_val, c_val, o_val):
-                        try:
-                            notification_service = NotificationService(
-                                evolution_base_url=os.getenv("EVOLUTION_API_URL", "http://34.158.60.42:8080"),
-                                api_key=os.getenv("EVOLUTION_API_KEY", "distributorbotkey2026")
-                            )
-                            await notification_service.notify(
-                                event="order_dispatched",
-                                tenant=t_val,
-                                customer=c_val,
-                                order=o_val,
-                                db=db
-                            )
-                        except Exception as inner_ex:
-                            pass
-
-                    try:
-                        loop = asyncio.get_running_loop()
-                    except RuntimeError:
-                        loop = None
-
-                    if loop and loop.is_running():
-                        loop.create_task(fire_dispatched_notification(tenant_obj, customer_obj, order_obj))
-                    else:
-                        asyncio.run(fire_dispatched_notification(tenant_obj, customer_obj, order_obj))
-        except Exception as e:
-            pass
+        order_obj = db.get(Order, s.order_id)
+        if order_obj:
+            background_tasks.add_task(
+                _fire_dispatched_notification_sync,
+                str(order_obj.tenant_id),
+                str(order_obj.customer_id),
+                str(order_obj.id)
+            )
 
     return {"status": "success", "count": len(created_shipments)}
 
@@ -412,6 +455,7 @@ def create_shipment(
 def update_shipment_status(
     shipment_id: uuid.UUID,
     payload: ShipmentStatusPayload,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
     shipment = db.get(Shipment, shipment_id)
@@ -443,50 +487,12 @@ def update_shipment_status(
 
     # Fire order_delivered notification if status is delivered/completed (non-blocking)
     if payload.status.upper() in ("DELIVERED", "COMPLETED") and order:
-        try:
-            customer_obj = db.query(Customer).filter(
-                Customer.id == order.customer_id,
-                Customer.tenant_id == order.tenant_id
-            ).first()
-            
-            tenant_obj = db.get(DistributorTenant, order.tenant_id)
-            
-            if customer_obj and tenant_obj:
-                for item in order.line_items:
-                    if item.product:
-                        _ = item.product.brand
-                        
-                import asyncio
-                from app.services.notification_service import NotificationService
-                import os
-
-                async def fire_delivered_notification(t_val, c_val, o_val):
-                    try:
-                        notification_service = NotificationService(
-                            evolution_base_url=os.getenv("EVOLUTION_API_URL", "http://34.158.60.42:8080"),
-                            api_key=os.getenv("EVOLUTION_API_KEY", "distributorbotkey2026")
-                        )
-                        await notification_service.notify(
-                            event="order_delivered",
-                            tenant=t_val,
-                            customer=c_val,
-                            order=o_val,
-                            db=db
-                        )
-                    except Exception as inner_ex:
-                        pass
-
-                try:
-                    loop = asyncio.get_running_loop()
-                except RuntimeError:
-                    loop = None
-
-                if loop and loop.is_running():
-                    loop.create_task(fire_delivered_notification(tenant_obj, customer_obj, order))
-                else:
-                    asyncio.run(fire_delivered_notification(tenant_obj, customer_obj, order))
-        except Exception as e:
-            pass
+        background_tasks.add_task(
+            _fire_delivered_notification_sync,
+            str(order.tenant_id),
+            str(order.customer_id),
+            str(order.id)
+        )
 
     return {
         "status": "success",
