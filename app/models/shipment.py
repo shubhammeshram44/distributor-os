@@ -1,6 +1,7 @@
 import uuid
-from sqlalchemy import String, ForeignKey
-from sqlalchemy.orm import Mapped, mapped_column, object_session
+from datetime import datetime
+from sqlalchemy import String, ForeignKey, DateTime
+from sqlalchemy.orm import Mapped, mapped_column, relationship, object_session
 from app.database import Base, TenantMixin
 
 class Shipment(Base, TenantMixin):
@@ -12,9 +13,14 @@ class Shipment(Base, TenantMixin):
     tracking_id: Mapped[str] = mapped_column(String(100), nullable=False)
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="Created")
     destination: Mapped[str] = mapped_column(String(500), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+    order: Mapped["Order"] = relationship()
 
     @property
     def payment_status(self) -> str:
+        if hasattr(self, "_payment_status") and self._payment_status is not None:
+            return self._payment_status
         session = object_session(self)
         if session is not None:
             from app.models.invoice import Invoice
@@ -25,4 +31,4 @@ class Shipment(Base, TenantMixin):
 
     @payment_status.setter
     def payment_status(self, value: str):
-        pass
+        self._payment_status = value

@@ -45,6 +45,8 @@ class Order(Base, TenantMixin):
         return sum(float(item.quantity * item.unit_price) for item in self.line_items)
     @property
     def payment_status(self) -> str:
+        if hasattr(self, "_payment_status") and self._payment_status is not None:
+            return self._payment_status
         session = object_session(self)
         if session is not None:
             from app.models.invoice import Invoice
@@ -55,7 +57,7 @@ class Order(Base, TenantMixin):
 
     @payment_status.setter
     def payment_status(self, value: str):
-        pass
+        self._payment_status = value
 
     line_items: Mapped[list["OrderLineItem"]] = relationship(back_populates="order", cascade="all, delete-orphan")
     ledger_entries: Mapped[list["OrderStateLedger"]] = relationship(back_populates="order", cascade="all, delete-orphan")

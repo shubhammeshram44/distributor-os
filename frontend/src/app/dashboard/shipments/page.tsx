@@ -49,6 +49,13 @@ export default function ShipmentsPage() {
   const [activeShipments, setActiveShipments] = useState<ActiveShipment[]>([]);
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
   
+  // Search, Filter & Keyset Pagination states
+  const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [pendingCursor, setPendingCursor] = useState<string | null>(null);
+  const [activeCursor, setActiveCursor] = useState<string | null>(null);
+
   // Form states
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [selectedDriverId, setSelectedDriverId] = useState("");
@@ -74,6 +81,14 @@ export default function ShipmentsPage() {
     }, 4000);
   };
 
+  // Debounce search query
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
   // Sync tenant from localStorage on load
   useEffect(() => {
     const stored = localStorage.getItem("tenant_id");
@@ -95,14 +110,25 @@ export default function ShipmentsPage() {
   };
 
   // Fetch pending orders & active runs
-  const fetchShipmentData = useCallback(async () => {
-    setLoading(true);
+  const fetchShipmentData = useCallback(async (isBackground = false) => {
+    if (!isBackground) {
+      setLoading(true);
+    }
     try {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
       
+      const pendingParams = new URLSearchParams();
+      if (debouncedSearchQuery) pendingParams.append("q", debouncedSearchQuery);
+      pendingParams.append("limit", "20");
+
+      const activeParams = new URLSearchParams();
+      if (debouncedSearchQuery) activeParams.append("q", debouncedSearchQuery);
+      if (statusFilter) activeParams.append("status", statusFilter);
+      activeParams.append("limit", "20");
+
       const [pendingResp, activeResp] = await Promise.all([
-        fetch(`${apiBase}/api/v1/shipments/pending`, { credentials: "include" }),
-        fetch(`${apiBase}/api/v1/shipments/active`, { credentials: "include" })
+        fetch(`${apiBase}/api/v1/shipments/pending?${pendingParams.toString()}`, { credentials: "include" }),
+        fetch(`${apiBase}/api/v1/shipments/active?${activeParams.toString()}`, { credentials: "include" })
       ]);
 
       if (!pendingResp.ok || !activeResp.ok) {
@@ -112,16 +138,79 @@ export default function ShipmentsPage() {
       const pendingData = await pendingResp.json();
       const activeData = await activeResp.json();
 
-      setPendingOrders(pendingData);
-      setActiveShipments(activeData);
+      const newPending = pendingData.items || [];
+      const newActive = activeData.items || [];
+
+      // Diff state to prevent unnecessary re-renders
+      setPendingOrders(prev => {
+        if (JSON.stringify(prev) !== JSON.stringify(newPending)) {
+          return newPending;
+        }
+        return prev;
+      });
+
+      setActiveShipments(prev => {
+        if (JSON.stringify(prev) !== JSON.stringify(newActive)) {
+          return newActive;
+        }
+        return prev;
+      });
+
+      setPendingCursor(pendingData.next_cursor || null);
+      setActiveCursor(activeData.next_cursor || null);
       setError(null);
     } catch (err: any) {
       console.error(err);
       setError(err.message || "Failed to load shipments");
     } finally {
-      setLoading(false);
+      if (!isBackground) {
+        setLoading(false);
+      }
     }
-  }, []);
+  }, [debouncedSearchQuery, statusFilter]);
+
+  const loadMorePending = async () => {
+    if (!pendingCursor) return;
+    try {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const params = new URLSearchParams();
+      if (debouncedSearchQuery) params.append("q", debouncedSearchQuery);
+      params.append("limit", "20");
+      params.append("cursor", pendingCursor);
+
+      const resp = await fetch(`${apiBase}/api/v1/shipments/pending?${params.toString()}`, { credentials: "include" });
+      if (resp.ok) {
+        const data = await resp.json();
+        const newItems = data.items || [];
+        setPendingOrders(prev => [...prev, ...newItems]);
+        setPendingCursor(data.next_cursor || null);
+      }
+    } catch (err) {
+      console.error("Failed to load more pending", err);
+    }
+  };
+
+  const loadMoreActive = async () => {
+    if (!activeCursor) return;
+    try {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const params = new URLSearchParams();
+      if (debouncedSearchQuery) params.append("q", debouncedSearchQuery);
+      if (statusFilter) params.append("status", statusFilter);
+      params.append("limit", "20");
+      params.append("cursor", activeCursor);
+
+      const resp = await fetch(`${apiBase}/api/v1/shipments/active?${params.toString()}`, { credentials: "include" });
+      if (resp.ok) {
+        const data = await resp.json();
+        const newItems = data.items || [];
+        setActiveShipments(prev => [...prev, ...newItems]);
+        setActiveCursor(data.next_cursor || null);
+      }
+    } catch (err) {
+      console.error("Failed to load more active", err);
+    }
+  };
 
   const fetchDrivers = useCallback(async (tenantId: string) => {
     try {
@@ -149,22 +238,28 @@ export default function ShipmentsPage() {
     setSelectedOrderIds([]);
   }, [activeTenantId, fetchShipmentData, fetchDrivers]);
 
+  const isActionInProgress = selectedOrderIds.length > 0 || vehicleNumber.trim() !== "" || savingRun || markingDeliveredId !== null;
+
   // Tab focus revalidation and background sync to resolve cache lag
   useEffect(() => {
     const handleFocus = () => {
-      fetchShipmentData();
-      if (activeTenantId) {
-        fetchDrivers(activeTenantId);
+      if (document.visibilityState === "visible" && !isActionInProgress) {
+        fetchShipmentData(true);
+        if (activeTenantId) {
+          fetchDrivers(activeTenantId);
+        }
       }
     };
     window.addEventListener("focus", handleFocus);
-    const interval = setInterval(handleFocus, 10000);
+    
+    // Increased poll interval to 30s as a stopgap (should move to WebSocket/SSE push or ETag/304 polling later instead of fixed-interval polling)
+    const interval = setInterval(handleFocus, 30000);
 
     return () => {
       window.removeEventListener("focus", handleFocus);
       clearInterval(interval);
     };
-  }, [activeTenantId, fetchShipmentData, fetchDrivers]);
+  }, [activeTenantId, fetchShipmentData, fetchDrivers, isActionInProgress]);
 
 
   // Create Delivery Run & Dispatch
@@ -343,16 +438,47 @@ export default function ShipmentsPage() {
 
           {!loading && !error && (
             <div className="space-y-6">
+              {/* Search & Filter Bar */}
+              <div className="bg-white p-4 rounded-xl border border-dashboard-border shadow-sm flex flex-col sm:flex-row gap-4 items-center justify-between">
+                <div className="relative w-full sm:max-w-md">
+                  <input
+                    type="text"
+                    placeholder="Search customer, order ID, or tracking ID..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-brand-blue"
+                  />
+                  <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                  </div>
+                </div>
+                
+                <div className="flex items-center gap-3 w-full sm:w-auto">
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    className="w-full sm:w-48 p-2 border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-brand-blue bg-white cursor-pointer"
+                  >
+                    <option value="">All Milestone Statuses</option>
+                    <option value="Created">Created</option>
+                    <option value="Out For Delivery">Out For Delivery</option>
+                    <option value="Delivered">Delivered</option>
+                  </select>
+                </div>
+              </div>
+
               {/* Split-Screen Interactive Builder */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Left: Tabular Checklist */}
-                <div className="lg:col-span-2 bg-white rounded-xl border border-dashboard-border shadow-sm p-5 flex flex-col h-[350px]">
+                <div className="lg:col-span-2 bg-white rounded-xl border border-dashboard-border shadow-sm p-5 flex flex-col min-h-[350px]">
                   <h3 className="text-sm font-bold text-slate-700 mb-3 uppercase tracking-wider">
                     Unallocated Orders Checklist
                   </h3>
-                  <div className="flex-1 overflow-y-auto border border-slate-100 rounded-lg">
+                  <div className="flex-1 overflow-y-auto border border-slate-100 rounded-lg mb-3">
                     {pendingOrders.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/40 text-center my-4">
+                      <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/40 text-center my-4 mx-6">
                         <div className="p-3 bg-slate-100 text-slate-400 rounded-full mb-3">
                           <Truck className="w-6 h-6" />
                         </div>
@@ -393,10 +519,20 @@ export default function ShipmentsPage() {
                       </table>
                     )}
                   </div>
+                  {pendingCursor && (
+                    <div className="flex justify-center border-t border-slate-100 pt-3">
+                      <button
+                        onClick={loadMorePending}
+                        className="px-4 py-1.5 bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100 text-[10px] font-bold rounded-lg transition-all cursor-pointer shadow-sm"
+                      >
+                        Load More Orders
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Right: Input Terminal Card */}
-                <div className="bg-white rounded-xl border border-dashboard-border shadow-sm p-5 flex flex-col justify-between h-[350px]">
+                <div className="bg-white rounded-xl border border-dashboard-border shadow-sm p-5 flex flex-col justify-between min-h-[350px]">
                   <div>
                     <h3 className="text-sm font-bold text-slate-700 mb-3 uppercase tracking-wider">
                       Dispatch Terminal
@@ -548,6 +684,16 @@ export default function ShipmentsPage() {
                         ))}
                       </tbody>
                     </table>
+                  </div>
+                )}
+                {activeCursor && (
+                  <div className="flex justify-center border-t border-slate-100 p-4">
+                    <button
+                      onClick={loadMoreActive}
+                      className="px-4 py-1.5 bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100 text-[10px] font-bold rounded-lg transition-all cursor-pointer shadow-sm"
+                    >
+                      Load More Shipments
+                    </button>
                   </div>
                 )}
               </div>
