@@ -37,81 +37,167 @@ def decode_cursor(cursor_str: str | None) -> tuple[datetime | None, uuid.UUID | 
 
 
 def _fire_delivered_notification_sync(tenant_id: str, customer_id: str, order_id: str):
-    """Sync wrapper - runs in FastAPI background task after response is sent."""
-    import asyncio
-    import os
+    import os, logging, httpx
     from app.database import SessionLocal
     from app.models.tenant import DistributorTenant
     from app.models.customer import Customer
     from app.models.order import Order
-    from app.services.notification_service import NotificationService
-    
+    from app.models.whatsapp_message_log import WhatsappMessageLog
+    from app.utils.phone import normalize_phone_number
+
+    logger = logging.getLogger(__name__)
     db = SessionLocal()
     try:
         tenant = db.get(DistributorTenant, tenant_id)
         customer = db.get(Customer, customer_id)
         order = db.get(Order, order_id)
-        
-        if tenant and customer and order:
-            # Eagerly load line items and products
-            for item in order.line_items:
-                if item.product:
-                    _ = item.product.brand
-            
-            svc = NotificationService(
-                evolution_base_url=os.getenv("EVOLUTION_API_URL", "http://34.158.60.42:8080"),
-                api_key=os.getenv("EVOLUTION_API_KEY", "distributorbotkey2026")
-            )
-            asyncio.run(svc.notify(
-                event="order_delivered",
-                tenant=tenant,
-                customer=customer,
-                order=order,
-                db=db
-            ))
+
+        if not (tenant and customer and order):
+            return
+
+        prefs = tenant.notification_prefs or {}
+        if not prefs.get("order_delivered", True):
+            return
+        if not customer.whatsapp_notifications_enabled:
+            return
+        if not tenant.whatsapp_phone_id:
+            return
+
+        phone = normalize_phone_number(customer.phone_number or "")
+        if phone.startswith("+"):
+            phone = phone[1:]
+        if not phone:
+            return
+
+        items_list = []
+        for item in order.line_items:
+            if item.product:
+                items_list.append(f"{item.product.brand} x {item.quantity}")
+            elif item.unmatched_raw_text:
+                items_list.append(f"{item.unmatched_raw_text} x {item.quantity}")
+        item_summary = ", ".join(items_list)
+
+        message = (
+            f"Hi {customer.name},\n\n"
+            f"✅ Your order {order.internal_order_id} has been delivered!\n"
+            f"Items: {item_summary}\n"
+            f"Total: ₹{order.total_amount}\n\n"
+            f"Thank you for your order. We look forward to serving you again!\n"
+            f"— {tenant.name}"
+        )
+
+        url = f"{os.getenv('EVOLUTION_API_URL', 'http://34.158.60.42:8080')}/message/sendText/{tenant.whatsapp_phone_id}"
+        headers = {"apikey": os.getenv("EVOLUTION_API_KEY", "distributorbotkey2026")}
+        payload = {"number": phone, "text": message}
+
+        success = False
+        error_msg = None
+        try:
+            resp = httpx.post(url, json=payload, headers=headers, timeout=10.0)
+            success = resp.status_code in (200, 201)
+            if not success:
+                error_msg = f"Evolution API {resp.status_code}: {resp.text}"
+        except Exception as ex:
+            error_msg = str(ex)
+
+        db.add(WhatsappMessageLog(
+            tenant_id=tenant.id,
+            customer_id=customer.id,
+            order_id=order.id,
+            event="order_delivered",
+            to_phone=phone,
+            message_body=message,
+            status="sent" if success else "failed",
+            error_message=error_msg
+        ))
+        db.commit()
+        logger.info("Delivered notification %s for order %s", "sent" if success else "failed", order_id)
+
     except Exception as e:
-        import logging
-        logging.getLogger(__name__).warning("Delivered notification failed: %s", str(e))
+        logger.warning("Delivered notification wrapper failed: %s", str(e))
     finally:
         db.close()
 
 
 def _fire_dispatched_notification_sync(tenant_id: str, customer_id: str, order_id: str):
-    """Sync wrapper - runs in FastAPI background task after response is sent."""
-    import asyncio
-    import os
+    import os, logging, httpx
     from app.database import SessionLocal
     from app.models.tenant import DistributorTenant
     from app.models.customer import Customer
     from app.models.order import Order
-    from app.services.notification_service import NotificationService
-    
+    from app.models.whatsapp_message_log import WhatsappMessageLog
+    from app.utils.phone import normalize_phone_number
+
+    logger = logging.getLogger(__name__)
     db = SessionLocal()
     try:
         tenant = db.get(DistributorTenant, tenant_id)
         customer = db.get(Customer, customer_id)
         order = db.get(Order, order_id)
-        
-        if tenant and customer and order:
-            # Eagerly load line items and products
-            for item in order.line_items:
-                if item.product:
-                    _ = item.product.brand
-            
-            svc = NotificationService(
-                evolution_base_url=os.getenv("EVOLUTION_API_URL", "http://34.158.60.42:8080"),
-                api_key=os.getenv("EVOLUTION_API_KEY", "distributorbotkey2026")
-            )
-            asyncio.run(svc.notify(
-                event="order_dispatched",
-                tenant=tenant,
-                customer=customer,
-                order=order,
-                db=db
-            ))
+
+        if not (tenant and customer and order):
+            return
+
+        prefs = tenant.notification_prefs or {}
+        if not prefs.get("order_dispatched", True):
+            return
+        if not customer.whatsapp_notifications_enabled:
+            return
+        if not tenant.whatsapp_phone_id:
+            return
+
+        phone = normalize_phone_number(customer.phone_number or "")
+        if phone.startswith("+"):
+            phone = phone[1:]
+        if not phone:
+            return
+
+        items_list = []
+        for item in order.line_items:
+            if item.product:
+                items_list.append(f"{item.product.brand} x {item.quantity}")
+            elif item.unmatched_raw_text:
+                items_list.append(f"{item.unmatched_raw_text} x {item.quantity}")
+        item_summary = ", ".join(items_list)
+
+        message = (
+            f"Hi {customer.name},\n\n"
+            f"🚚 Your order {order.internal_order_id} has been dispatched!\n"
+            f"Items: {item_summary}\n"
+            f"Total: ₹{order.total_amount}\n\n"
+            f"Your order is on its way.\n"
+            f"— {tenant.name}"
+        )
+
+        url = f"{os.getenv('EVOLUTION_API_URL', 'http://34.158.60.42:8080')}/message/sendText/{tenant.whatsapp_phone_id}"
+        headers = {"apikey": os.getenv("EVOLUTION_API_KEY", "distributorbotkey2026")}
+        payload = {"number": phone, "text": message}
+
+        success = False
+        error_msg = None
+        try:
+            resp = httpx.post(url, json=payload, headers=headers, timeout=10.0)
+            success = resp.status_code in (200, 201)
+            if not success:
+                error_msg = f"Evolution API {resp.status_code}: {resp.text}"
+        except Exception as ex:
+            error_msg = str(ex)
+
+        db.add(WhatsappMessageLog(
+            tenant_id=tenant.id,
+            customer_id=customer.id,
+            order_id=order.id,
+            event="order_dispatched",
+            to_phone=phone,
+            message_body=message,
+            status="sent" if success else "failed",
+            error_message=error_msg
+        ))
+        db.commit()
+        logger.info("Dispatched notification %s for order %s", "sent" if success else "failed", order_id)
+
     except Exception as e:
-        import logging
-        logging.getLogger(__name__).warning("Dispatched notification failed: %s", str(e))
+        logger.warning("Dispatched notification wrapper failed: %s", str(e))
     finally:
         db.close()
 
