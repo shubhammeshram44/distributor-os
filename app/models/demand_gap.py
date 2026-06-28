@@ -1,7 +1,8 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import String, ForeignKey, Integer, Numeric, DateTime, Text
+from sqlalchemy import String, ForeignKey, Integer, Numeric, DateTime, Index
 from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.dialects.postgresql import UUID  # Explicitly use PostgreSQL UUID dialect
 from app.database import Base, TenantMixin
 
 
@@ -28,20 +29,23 @@ class DemandGap(Base, TenantMixin):
 
     __tablename__ = "demand_gaps"
 
-    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
 
-    # Parent order and customer references
+    # Parent order and customer references mapped as native postgres UUIDs
     order_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
         ForeignKey("orders.id", ondelete="SET NULL"),
         nullable=True,
     )
     customer_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
         ForeignKey("customers.id", ondelete="CASCADE"),
         nullable=False,
     )
 
     # Optional product reference — NULL for CREDIT_LIMIT rows
     product_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
         ForeignKey("products.id", ondelete="SET NULL"),
         nullable=True,
     )
@@ -78,3 +82,10 @@ class DemandGap(Base, TenantMixin):
 
     # Creation timestamp — used for all time-window queries
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+    # Compounding multi-indexes required for production aggregations and customer drills
+    __table_args__ = (
+        Index("ix_demand_gaps_tenant_created_at", "tenant_id", "created_at"),
+        Index("ix_demand_gaps_tenant_reason_created_at", "tenant_id", "reason_code", "created_at"),
+        Index("ix_demand_gaps_tenant_customer_id", "tenant_id", "customer_id"),
+    )
