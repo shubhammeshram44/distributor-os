@@ -1,3 +1,10 @@
+// ===== MESSAGES TAB DISABLED 2026-06-28 =====
+// Hidden because: (a) duplicates order ingestion already handled by the WhatsApp webhook
+// pipeline, (b) the conversation thread shown here is mock/fabricated data
+// (getMockDataForCustomer), not real customer messages — see CTO review in [conversation/PR].
+// To restore: delete the stub component below, uncomment the block, and re-enable the nav
+// links in Sidebar.tsx and DashboardHeader.tsx (see comments there).
+/*
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
@@ -473,27 +480,27 @@ export default function MessagesPage() {
 
   return (
     <div className="flex bg-slate-50 min-h-screen text-slate-800 font-figtree overflow-hidden">
-      {/* Sidebar panel */}
+      {/* Sidebar panel * /}
       <Sidebar
         activeTab="Messages"
         setActiveTab={() => {}}
         tenantName={getTenantName()}
       />
 
-      {/* Main viewport */}
+      {/* Main viewport * /}
       <div className="flex-1 pl-64 flex flex-col h-screen overflow-hidden">
         
-        {/* Top bar */}
+        {/* Top bar * /}
         <DashboardHeader
           activeTenantId={activeTenantId}
           setActiveTenantId={handleTenantChange}
           tenantName={getTenantName()}
         />
 
-        {/* Three-pane layout cockpit wrapper */}
+        {/* Three-pane layout cockpit wrapper * /}
         <div className="flex flex-1 overflow-hidden mt-16">
           
-          {/* Panel 1: Left Pane (Retailers List) */}
+          {/* Panel 1: Left Pane (Retailers List) * /}
           <div className="w-80 border-r border-slate-200 bg-white flex flex-col h-full shadow-sm">
             <div className="p-4 border-b border-slate-100 flex items-center justify-between">
               <h2 className="font-bold text-lg text-slate-800 flex items-center gap-2">
@@ -507,7 +514,7 @@ export default function MessagesPage() {
               )}
             </div>
 
-            {/* Search Input */}
+            {/* Search Input * /}
             <div className="p-3 border-b border-slate-100 bg-slate-50/50">
               <div className="relative">
                 <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
@@ -521,7 +528,7 @@ export default function MessagesPage() {
               </div>
             </div>
 
-            {/* Feed Tab Bar */}
+            {/* Feed Tab Bar * /}
             <div className="flex border-b border-slate-100 bg-white">
               <button
                 onClick={() => setActiveFeedTab("inbox")}
@@ -550,7 +557,7 @@ export default function MessagesPage() {
               </button>
             </div>
 
-            {/* Customers list container */}
+            {/* Customers list container * /}
             <div className="flex-1 overflow-y-auto divide-y divide-slate-50">
               {activeFeedTab === "inbox" ? (
                 loading ? (
@@ -581,12 +588,12 @@ export default function MessagesPage() {
                             : "hover:bg-slate-50/60 border-l-4 border-transparent"
                         }`}
                       >
-                        {/* Avatar */}
+                        {/* Avatar * /}
                         <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center font-bold text-slate-600 text-sm border border-slate-200 shadow-sm flex-shrink-0">
                           {c.retailer_name.substring(0, 2).toUpperCase()}
                         </div>
 
-                        {/* Info & Last Msg */}
+                        {/* Info & Last Msg * /}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between">
                             <h4 className="font-semibold text-xs text-slate-800 truncate">
@@ -663,11 +670,11 @@ export default function MessagesPage() {
             </div>
           </div>
 
-          {/* Panel 2: Middle Pane (WhatsApp Chat Stream) */}
+          {/* Panel 2: Middle Pane (WhatsApp Chat Stream) * /}
           <div className="flex-1 bg-[#efeae2] flex flex-col h-full border-r border-slate-200 relative">
             {selectedCustomer ? (
               <>
-                {/* Chat Header */}
+                {/* Chat Header * /}
                 <div className="bg-white border-b border-slate-200 p-4 flex items-center justify-between shadow-sm z-10">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-brand-blue flex items-center justify-center font-bold text-white text-sm">
@@ -688,9 +695,9 @@ export default function MessagesPage() {
                   </div>
                 </div>
 
-                {/* Chat Messages Log */}
+                {/* Chat Messages Log * /}
                 <div className="flex-1 overflow-y-auto p-4 space-y-3 flex flex-col">
-                  {/* WhatsApp background pattern (represented by CSS styling of this div) */}
+                  {/* WhatsApp background pattern (represented by CSS styling of this div) * /}
                   <div className="text-center my-2">
                     <span className="bg-slate-200/80 text-slate-600 text-[10px] font-bold px-3 py-1 rounded-lg">
                       TODAY
@@ -708,7 +715,7 @@ export default function MessagesPage() {
                             : "bg-white text-slate-800 self-start rounded-tl-none border border-slate-200"
                         }`}
                       >
-                        {/* Sender Label */}
+                        {/* Sender Label * /}
                         <span className={`text-[9px] font-bold mb-1 block uppercase tracking-wider ${
                           isOp ? "text-emerald-700" : "text-slate-500"
                         }`}>
@@ -719,7 +726,7 @@ export default function MessagesPage() {
                           {msg.text}
                         </p>
                         
-                        {/* Timestamp & double checkmarks */}
+                        {/* Timestamp & double checkmarks * /}
                         <div className="flex items-center justify-end gap-1 mt-1 text-[9px] text-slate-400 font-semibold">
                           <span>{msg.timestamp}</span>
                           {isOp && <CheckCheck className="w-3.5 h-3.5 text-blue-500" />}
@@ -730,7 +737,7 @@ export default function MessagesPage() {
                   <div ref={chatEndRef} />
                 </div>
 
-                {/* Chat Input panel */}
+                {/* Chat Input panel * /}
                 <form
                   onSubmit={handleSendMessage}
                   className="bg-white border-t border-slate-200 p-4 flex items-center gap-3 shadow-md z-10"
@@ -758,7 +765,7 @@ export default function MessagesPage() {
             )}
           </div>
 
-          {/* Panel 3: Right Pane (AI Order Ingestion Engine) */}
+          {/* Panel 3: Right Pane (AI Order Ingestion Engine) * /}
           <div className="w-96 bg-white flex flex-col h-full overflow-y-auto border-l border-slate-200">
             {activeFeedTab === "triage" && selectedTriageOrderId ? (
               // Triage Resolution Pane
@@ -859,7 +866,7 @@ export default function MessagesPage() {
             ) : selectedCustomer && activeExtraction ? (
               // Normal AI Extraction Pane
               <div className="flex flex-col h-full">
-                {/* AI Banner Header */}
+                {/* AI Banner Header * /}
                 <div className="bg-gradient-to-r from-emerald-50 to-teal-50 border-b border-emerald-100 p-4">
                   <div className="flex items-center gap-2 text-emerald-800">
                     <div className="w-8 h-8 rounded-lg bg-emerald-500 text-white flex items-center justify-center">
@@ -875,10 +882,10 @@ export default function MessagesPage() {
                   </div>
                 </div>
 
-                {/* Extraction Body */}
+                {/* Extraction Body * /}
                 <div className="p-4 space-y-5 flex-1">
                   
-                  {/* Scope details */}
+                  {/* Scope details * /}
                   <div className="bg-slate-50 border border-slate-100 rounded-xl p-3.5 space-y-2">
                     <div className="flex justify-between items-center text-xs">
                       <span className="font-semibold text-slate-400">Customer Shop</span>
@@ -899,7 +906,7 @@ export default function MessagesPage() {
                     </div>
                   </div>
 
-                  {/* Structured SKU Table */}
+                  {/* Structured SKU Table * /}
                   <div className="space-y-2">
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
                       Extracted Order Line Items
@@ -948,7 +955,7 @@ export default function MessagesPage() {
                     </div>
                   </div>
 
-                  {/* Validation Metrics */}
+                  {/* Validation Metrics * /}
                   <div className="space-y-2">
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
                       Operations Safety Checks
@@ -987,7 +994,7 @@ export default function MessagesPage() {
                   </div>
                 </div>
 
-                {/* Approve Button overlay or action */}
+                {/* Approve Button overlay or action * /}
                 <div className="p-4 border-t border-slate-100 bg-slate-50/50">
                   {isApproved ? (
                     <div className="bg-slate-100 border border-slate-200 rounded-xl p-4 text-center space-y-3">
@@ -1041,7 +1048,7 @@ export default function MessagesPage() {
 
       </div>
 
-      {/* Local Toast UI notification */}
+      {/* Local Toast UI notification * /}
       {toast.show && (
         <div className={`fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-3 rounded-lg shadow-lg border transition-all duration-300 ${
           toast.type === "success" 
@@ -1061,4 +1068,11 @@ export default function MessagesPage() {
       )}
     </div>
   );
+}
+
+*/
+
+import { redirect } from "next/navigation";
+export default function MessagesPageDisabled() {
+  redirect("/dashboard/orders");
 }

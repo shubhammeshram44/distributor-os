@@ -62,7 +62,9 @@ export default function Sidebar({ activeTab, setActiveTab, tenantName }: Sidebar
     type?: string;
   }[] = [
     { name: "Dashboard", icon: LayoutDashboard, href: "/dashboard" },
-    { name: "Messages", icon: MessageSquare, href: "/dashboard/messages" },
+    // Hidden 2026-06-28: Messages tab disabled, see /dashboard/messages/page.tsx for details.
+    // Uncomment this line + the guard in messages/page.tsx to re-enable.
+    // { name: "Messages", icon: MessageSquare, href: "/dashboard/messages" },
     { name: "Orders", icon: ShoppingCart, href: "/dashboard/orders" },
     { name: "Inventory", icon: Box, href: "/dashboard/inventory" },
     { name: "Products", icon: Layers, href: "/dashboard/products" },

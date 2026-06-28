@@ -110,6 +110,8 @@ export default function DashboardHeader({
         </div>
 
         {/* Notifications & Badges */}
+        {/* Hidden 2026-06-28: Messages tab disabled, see /dashboard/messages/page.tsx for details.
+        // Uncomment this block to re-enable.
         <div className="flex items-center gap-4">
 
 
@@ -123,6 +125,7 @@ export default function DashboardHeader({
 
 
         </div>
+        */}
 
         {/* User Profile with Dropdown */}
         <div className="relative">
