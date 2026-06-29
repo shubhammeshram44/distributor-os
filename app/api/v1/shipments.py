@@ -524,24 +524,6 @@ def create_shipment(
 
     db.commit()
 
-    # Release quantity_committed when order is dispatched
-    try:
-        from app.models.inventory import Inventory
-        for s in created_shipments:
-            order_obj = db.get(Order, s.order_id)
-            if order_obj:
-                for item in order_obj.line_items:
-                    inv_record = db.query(Inventory).filter(
-                        Inventory.tenant_id == order_obj.tenant_id,
-                        Inventory.sku_id == item.product_id
-                    ).first()
-                    if inv_record:
-                        dispatched_qty = item.allocated_quantity if item.allocated_quantity is not None else item.quantity
-                        inv_record.quantity_committed = max(0, (inv_record.quantity_committed or 0) - dispatched_qty)
-        db.commit()
-    except Exception as e:
-        logger.warning("Failed to release quantity_committed on dispatch: %s", str(e))
-
     # Fire order_dispatched notifications (non-blocking via BackgroundTasks)
     for s in created_shipments:
         order_obj = db.get(Order, s.order_id)

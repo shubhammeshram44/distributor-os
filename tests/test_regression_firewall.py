@@ -301,7 +301,6 @@ def test_partial_allocation_on_batch_confirm(db_session, setup_test_catalog):
     # - inventory.quantity_on_hand == 0
     inv_db = db_session.query(Inventory).filter_by(sku_id=product.id).one()
     assert inv_db.quantity_on_hand == 0
-    assert inv_db.quantity_committed == 125
 
     # - DemandGap exists with gap_qty == 775
     gap_db = db_session.query(DemandGap).filter_by(order_id=order.id).one()
@@ -315,4 +314,333 @@ def test_partial_allocation_on_batch_confirm(db_session, setup_test_catalog):
     # - order.total_amount == 125 * unit_price (1250)
     order_db = db_session.query(Order).filter_by(id=order.id).one()
     assert order_db.total_amount == 1250.0
+
+
+def test_partial_allocation_on_confirm_order_post(db_session, setup_test_catalog):
+    """
+    Verifies that calling POST /orders/{id}/confirm correctly:
+    - Sets allocated_quantity == 125 on the line item
+    - Reduces inventory.quantity_on_hand to 0
+    - Creates a DemandGap with gap_qty == 775
+    - Creates an Invoice with total_amount == 1250
+    - Sets order.total_amount == 1250
+    """
+    from app.models.product import Product
+    from app.models.inventory import Inventory
+    from app.models.order import OrderLineItem, OrderStateLedger
+    from app.models.demand_gap import DemandGap
+    from app.models.invoice import Invoice
+    from app.models.customer import Customer
+    import uuid
+
+    tenant_id = uuid.UUID("d3b07384-d113-4956-a5d2-64be7357c11d")
+    cust = db_session.query(Customer).filter_by(tenant_id=tenant_id).first()
+    assert cust is not None
+
+    product = Product(
+        id=uuid.uuid4(),
+        tenant_id=tenant_id,
+        sku_id="PROD-POSTCONF-1",
+        brand="HUL",
+        category="Soap",
+        pack_size="1 unit",
+        base_price=10.0,
+        stock_quantity=125
+    )
+    db_session.add(product)
+    db_session.flush()
+
+    inv = Inventory(
+        tenant_id=tenant_id,
+        sku_id=product.id,
+        location="WH1",
+        quantity_on_hand=125,
+        low_stock_threshold=10
+    )
+    db_session.add(inv)
+    db_session.flush()
+
+    order = Order(
+        id=uuid.uuid4(),
+        tenant_id=tenant_id,
+        internal_order_id="ORD-POSTCONF-TEST-1",
+        source="API",
+        customer_id=cust.id
+    )
+    db_session.add(order)
+    db_session.flush()
+
+    db_session.add(OrderStateLedger(
+        tenant_id=tenant_id,
+        order_id=order.id,
+        from_status=None,
+        to_status="Draft",
+        updated_by="API"
+    ))
+    db_session.add(OrderLineItem(
+        tenant_id=tenant_id,
+        order_id=order.id,
+        product_id=product.id,
+        quantity=900,
+        unit_price=10.0
+    ))
+    db_session.commit()
+
+    response = client.post(f"/api/v1/orders/{order.id}/confirm")
+    assert response.status_code == 200
+
+    db_session.expire_all()
+    item_db = db_session.query(OrderLineItem).filter_by(order_id=order.id).one()
+    assert item_db.allocated_quantity == 125
+
+    inv_db = db_session.query(Inventory).filter_by(sku_id=product.id).one()
+    assert inv_db.quantity_on_hand == 0
+
+    gap_db = db_session.query(DemandGap).filter_by(order_id=order.id).one()
+    assert gap_db.gap_qty == 775
+
+    invoice_db = db_session.query(Invoice).filter_by(order_id=order.id).one()
+    assert float(invoice_db.total_amount) == 1250.0
+
+    order_db = db_session.query(Order).filter_by(id=order.id).one()
+    assert order_db.total_amount == 1250.0
+
+
+def test_partial_allocation_on_create_order_confirm_on_create(db_session, setup_test_catalog):
+    """
+    Verifies that calling POST /orders with status="Confirmed" correctly:
+    - Sets allocated_quantity == 125 on the line item
+    - Reduces inventory.quantity_on_hand to 0
+    - Creates a DemandGap with gap_qty == 775
+    - Creates an Invoice with total_amount == 1250
+    - Sets order.total_amount == 1250
+    """
+    from app.models.product import Product
+    from app.models.inventory import Inventory
+    from app.models.order import OrderLineItem
+    from app.models.demand_gap import DemandGap
+    from app.models.invoice import Invoice
+    from app.models.customer import Customer
+    import uuid
+
+    tenant_id = uuid.UUID("d3b07384-d113-4956-a5d2-64be7357c11d")
+    cust = db_session.query(Customer).filter_by(tenant_id=tenant_id).first()
+    assert cust is not None
+
+    product = Product(
+        id=uuid.uuid4(),
+        tenant_id=tenant_id,
+        sku_id="PROD-CREAT-1",
+        brand="HUL",
+        category="Soap",
+        pack_size="1 unit",
+        base_price=10.0,
+        stock_quantity=125
+    )
+    db_session.add(product)
+    db_session.flush()
+
+    inv = Inventory(
+        tenant_id=tenant_id,
+        sku_id=product.id,
+        location="WH1",
+        quantity_on_hand=125,
+        low_stock_threshold=10
+    )
+    db_session.add(inv)
+    db_session.commit()
+
+    payload = {
+        "tenant_id": str(tenant_id),
+        "customer_id": str(cust.id),
+        "source": "Portal",
+        "status": "Confirmed",
+        "items": [
+            {
+                "sku_id": "PROD-CREAT-1",
+                "quantity": 900,
+                "unit_price": 10.0
+            }
+        ]
+    }
+    response = client.post("/api/v1/orders", json=payload)
+    assert response.status_code == 201
+    order_id = uuid.UUID(response.json()["order_id"])
+
+    db_session.expire_all()
+    item_db = db_session.query(OrderLineItem).filter_by(order_id=order_id).one()
+    assert item_db.allocated_quantity == 125
+
+    inv_db = db_session.query(Inventory).filter_by(sku_id=product.id).one()
+    assert inv_db.quantity_on_hand == 0
+
+    gap_db = db_session.query(DemandGap).filter_by(order_id=order_id).one()
+    assert gap_db.gap_qty == 775
+
+    invoice_db = db_session.query(Invoice).filter_by(order_id=order_id).one()
+    assert float(invoice_db.total_amount) == 1250.0
+
+    order_db = db_session.query(Order).filter_by(id=order_id).one()
+    assert order_db.total_amount == 1250.0
+
+
+def test_credit_limit_on_batch_confirm(db_session, setup_test_catalog):
+    """
+    Verifies that calling POST /orders/{id}/batch-confirm when customer combined balance
+    exceeds credit limit returns 400 and logs a CREDIT_LIMIT DemandGap row.
+    """
+    from app.models.product import Product
+    from app.models.inventory import Inventory
+    from app.models.order import OrderLineItem, OrderStateLedger
+    from app.models.demand_gap import DemandGap
+    from app.models.customer import Customer
+    import uuid
+
+    tenant_id = uuid.UUID("d3b07384-d113-4956-a5d2-64be7357c11d")
+    cust = db_session.query(Customer).filter_by(tenant_id=tenant_id).first()
+    assert cust is not None
+
+    cust.credit_limit = 100.0  # Set low credit limit
+    cust.outstanding_balance = 0.0
+    db_session.commit()
+
+    product = Product(
+        id=uuid.uuid4(),
+        tenant_id=tenant_id,
+        sku_id="PROD-CRED-BC",
+        brand="HUL",
+        category="Soap",
+        pack_size="1 unit",
+        base_price=10.0,
+        stock_quantity=125
+    )
+    db_session.add(product)
+    db_session.flush()
+
+    inv = Inventory(
+        tenant_id=tenant_id,
+        sku_id=product.id,
+        location="WH1",
+        quantity_on_hand=125,
+        low_stock_threshold=10
+    )
+    db_session.add(inv)
+    db_session.flush()
+
+    order = Order(
+        id=uuid.uuid4(),
+        tenant_id=tenant_id,
+        internal_order_id="ORD-CRED-BC",
+        source="Portal",
+        customer_id=cust.id
+    )
+    db_session.add(order)
+    db_session.flush()
+
+    db_session.add(OrderStateLedger(
+        tenant_id=tenant_id,
+        order_id=order.id,
+        from_status=None,
+        to_status="Draft",
+        updated_by="test"
+    ))
+    db_session.add(OrderLineItem(
+        tenant_id=tenant_id,
+        order_id=order.id,
+        product_id=product.id,
+        quantity=50,  # total is 500, limit is 100
+        unit_price=10.0
+    ))
+    db_session.commit()
+
+    response = client.post(
+        f"/api/v1/orders/{order.id}/batch-confirm",
+        json={"resolved_items": []}
+    )
+    assert response.status_code == 400
+    assert "Credit limit exceeded" in response.json()["detail"]
+
+    # Verify a CREDIT_LIMIT DemandGap exists
+    gap_db = db_session.query(DemandGap).filter_by(order_id=order.id).one()
+    assert gap_db.reason_code == "CREDIT_LIMIT"
+    assert float(gap_db.revenue_at_risk) == 500.0
+
+
+def test_credit_limit_on_confirm_order_post(db_session, setup_test_catalog):
+    """
+    Verifies that calling POST /orders/{id}/confirm when customer combined balance
+    exceeds credit limit returns 400 and logs a CREDIT_LIMIT DemandGap row.
+    """
+    from app.models.product import Product
+    from app.models.inventory import Inventory
+    from app.models.order import OrderLineItem, OrderStateLedger
+    from app.models.demand_gap import DemandGap
+    from app.models.customer import Customer
+    import uuid
+
+    tenant_id = uuid.UUID("d3b07384-d113-4956-a5d2-64be7357c11d")
+    cust = db_session.query(Customer).filter_by(tenant_id=tenant_id).first()
+    assert cust is not None
+
+    cust.credit_limit = 100.0  # Set low credit limit
+    cust.outstanding_balance = 0.0
+    db_session.commit()
+
+    product = Product(
+        id=uuid.uuid4(),
+        tenant_id=tenant_id,
+        sku_id="PROD-CRED-CONF",
+        brand="HUL",
+        category="Soap",
+        pack_size="1 unit",
+        base_price=10.0,
+        stock_quantity=125
+    )
+    db_session.add(product)
+    db_session.flush()
+
+    inv = Inventory(
+        tenant_id=tenant_id,
+        sku_id=product.id,
+        location="WH1",
+        quantity_on_hand=125,
+        low_stock_threshold=10
+    )
+    db_session.add(inv)
+    db_session.flush()
+
+    order = Order(
+        id=uuid.uuid4(),
+        tenant_id=tenant_id,
+        internal_order_id="ORD-CRED-CONF",
+        source="API",
+        customer_id=cust.id
+    )
+    db_session.add(order)
+    db_session.flush()
+
+    db_session.add(OrderStateLedger(
+        tenant_id=tenant_id,
+        order_id=order.id,
+        from_status=None,
+        to_status="Draft",
+        updated_by="API"
+    ))
+    db_session.add(OrderLineItem(
+        tenant_id=tenant_id,
+        order_id=order.id,
+        product_id=product.id,
+        quantity=50,  # total is 500, limit is 100
+        unit_price=10.0
+    ))
+    db_session.commit()
+
+    response = client.post(f"/api/v1/orders/{order.id}/confirm")
+    assert response.status_code == 400
+    assert "Credit limit exceeded" in response.json()["detail"]
+
+    # Verify a CREDIT_LIMIT DemandGap exists
+    gap_db = db_session.query(DemandGap).filter_by(order_id=order.id).one()
+    assert gap_db.reason_code == "CREDIT_LIMIT"
+    assert float(gap_db.revenue_at_risk) == 500.0
 

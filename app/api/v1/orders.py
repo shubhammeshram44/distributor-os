@@ -205,159 +205,19 @@ def update_order_status(
         items = db.query(OrderLineItem).filter(OrderLineItem.order_id == order_id).all()
 
         if payload.to_status == "Confirmed":
-            # 1. Fetch Customer
-            customer = db.get(Customer, order.customer_id)
-            if not customer:
-                raise HTTPException(
-                    status_code=404,
-                    detail="Customer not found"
-                )
-
-            # 2. Calculate current order total
-            current_order_total = sum(float(item.quantity * item.unit_price) for item in items)
-
-            # 3. Aggregate Confirmed orders' outstanding balances
-            total_confirmed_outstanding = 0.0
-            confirmed_orders = db.query(Order).filter(Order.customer_id == order.customer_id).all()
-            for co in confirmed_orders:
-                if co.id != order.id and co.current_status == "Confirmed":
-                    order_total = sum(float(line.quantity * line.unit_price) for line in co.line_items)
-                    total_confirmed_outstanding += order_total
-
-            # 4. Check Credit Limit — uses original requested total; behaviour unchanged.
-            combined_balance = total_confirmed_outstanding + current_order_total
-            if combined_balance > float(customer.credit_limit):
-                try:
-                    db.add(DemandGap(
-                        id=uuid.uuid4(),
-                        tenant_id=order.tenant_id,
-                        order_id=order.id,
-                        customer_id=order.customer_id,
-                        product_id=None,
-                        reason_code="CREDIT_LIMIT",
-                        status="OPEN",
-                        resolved_at=None,
-                        requested_qty=None,
-                        allocated_qty=None,
-                        gap_qty=None,
-                        unit_price=None,
-                        revenue_at_risk=current_order_total,
-                        created_at=datetime.utcnow(),
-                    ))
-                    db.commit()
-                except Exception as _gap_err:
-                    logger.warning("Failed to persist CREDIT_LIMIT DemandGap: %s", _gap_err)
-                    db.rollback()
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Credit limit exceeded for customer '{customer.retailer_name}'. Combined balance: ₹{combined_balance:,.2f}, Credit Limit: ₹{customer.credit_limit:,.2f}"
-                )
-
-            # Resolve product variables dynamically
-            for item in items:
-                prod_data = db.query(Product).filter(Product.id == item.product_id).first()
-                if prod_data:
-                    item.sku_code = prod_data.sku_id
-                    item.product_name = prod_data.sku_id
-                else:
-                    item.sku_code = "UNKNOWN_SKU"
-                    item.product_name = "Unknown Product"
-
-            # 5. Single-pass inventory allocation — partial allocation replaces hard reject.
-            #    For each line item we fill as much as stock allows and record any shortfall
-            #    as a STOCK_SHORTAGE DemandGap row (committed with the rest of the transaction).
-            for item in items:
-                inv_record = db.query(Inventory).filter(
-                    Inventory.tenant_id == order.tenant_id,
-                    Inventory.sku_id == item.product_id,
-                ).first()
-
-                available = inv_record.quantity_on_hand if inv_record else 0
-                allocated = min(item.quantity, available)
-                item.allocated_quantity = allocated
-                gap_qty = item.quantity - allocated
-
-                if gap_qty > 0:
-                    # Record shortfall — revenue_at_risk = units not fulfilled × unit price
-                    db.add(DemandGap(
-                        id=uuid.uuid4(),
-                        tenant_id=order.tenant_id,
-                        order_id=order.id,
-                        customer_id=order.customer_id,
-                        product_id=item.product_id,
-                        reason_code="STOCK_SHORTAGE",
-                        status="OPEN",
-                        resolved_at=None,
-                        requested_qty=item.quantity,
-                        allocated_qty=allocated,
-                        gap_qty=gap_qty,
-                        unit_price=float(item.unit_price),
-                        revenue_at_risk=float(gap_qty * item.unit_price),
-                        created_at=datetime.utcnow(),
-                    ))
-
-                # Decrement inventory only by what was actually allocated
-                if inv_record and allocated > 0:
-                    inv_record.quantity_on_hand -= allocated
-                    inv_record.quantity_committed = (inv_record.quantity_committed or 0) + allocated
-
-            # 6. Recompute billing total using allocated quantities (not original quantities).
-            billing_total = sum(
-                float(
-                    (item.allocated_quantity if item.allocated_quantity is not None else item.quantity)
-                    * item.unit_price
-                )
-                for item in items
-            )
-            order.total_amount = billing_total
-
-            # Update Customer outstanding balance
-            customer.outstanding_balance = float(customer.outstanding_balance) + billing_total
-
-            # Record a DEBIT transaction in the customer ledger
-            db.add(CustomerLedger(
-                id=uuid.uuid4(),
-                tenant_id=order.tenant_id,
-                customer_id=order.customer_id,
-                type="DEBIT",
-                amount=billing_total,
-                reference_id=order.internal_order_id
-            ))
-
-            # Create Invoice directly
-            invoice = Invoice(
+            from app.services.order_confirmation_service import confirm_order
+            confirm_order(db, order, updated_by="system_orders_agent")
+        else:
+            # Record state transition to OrderStateLedger
+            current_status = order.current_status
+            db.add(OrderStateLedger(
                 tenant_id=order.tenant_id,
                 order_id=order.id,
-                gstin=customer.gstin if customer.gstin else "29AAAAA1111A1Z1",
-                total_amount=billing_total,
-                irn_status="Cleared",
-                qr_code_status="Generated",
-                customer_id=order.customer_id,
-                payment_status="UNPAID",
-                amount_paid=0.0,
-                created_at=datetime.utcnow()
-            )
-            db.add(invoice)
-            db.flush()
-
-            # Reconcile customer payments immediately to consume any credits
-            from app.services.payment_service import reconcile_payments_and_invoices
-            reconcile_payments_and_invoices(db, order.tenant_id, order.customer_id)
-
-            # Process bulk self-learning
-            process_order_self_learning(db, order.id, order.tenant_id)
-
-        # Record state transition to OrderStateLedger
-
-        current_status = order.current_status
-        db.add(OrderStateLedger(
-            tenant_id=order.tenant_id,
-            order_id=order.id,
-            from_status=current_status,
-            to_status=payload.to_status,
-            updated_by="system_orders_agent"
-        ))
-        order.status = payload.to_status
+                from_status=current_status,
+                to_status=payload.to_status,
+                updated_by="system_orders_agent"
+            ))
+            order.status = payload.to_status
 
         db.commit()
         return {
@@ -1090,48 +950,22 @@ def create_order(
             unit_price=item.unit_price
         ))
 
-    # Add ledger transition entry
-    db.add(OrderStateLedger(
-        tenant_id=payload.tenant_id,
-        order_id=new_order.id,
-        from_status=None,
-        to_status=payload.status,
-        updated_by="operator"
-    ))
-    new_order.status = payload.status
+    db.flush()
+    db.refresh(new_order)
 
     if payload.status == "Confirmed":
-        customer = db.get(Customer, payload.customer_id)
-        if customer:
-            amount_sum = sum(float(item.quantity * item.unit_price) for item in payload.items)
-            customer.outstanding_balance = float(customer.outstanding_balance) + amount_sum
-            
-            db.add(CustomerLedger(
-                id=uuid.uuid4(),
-                tenant_id=payload.tenant_id,
-                customer_id=payload.customer_id,
-                type="DEBIT",
-                amount=amount_sum,
-                reference_id=generated_order_id
-            ))
-            
-            invoice = Invoice(
-                tenant_id=payload.tenant_id,
-                order_id=new_order.id,
-                gstin=customer.gstin if customer.gstin else "29AAAAA1111A1Z1",
-                total_amount=amount_sum,
-                irn_status="Cleared",
-                qr_code_status="Generated",
-                customer_id=payload.customer_id,
-                payment_status="UNPAID",
-                amount_paid=0.0,
-                created_at=new_order.created_at
-            )
-            db.add(invoice)
-            db.flush()
-            
-            from app.services.payment_service import reconcile_payments_and_invoices
-            reconcile_payments_and_invoices(db, payload.tenant_id, payload.customer_id)
+        from app.services.order_confirmation_service import confirm_order
+        confirm_order(db, new_order, updated_by="operator")
+    else:
+        # Add ledger transition entry
+        db.add(OrderStateLedger(
+            tenant_id=payload.tenant_id,
+            order_id=new_order.id,
+            from_status=None,
+            to_status=payload.status,
+            updated_by="operator"
+        ))
+        new_order.status = payload.status
 
     db.commit()
     return {
@@ -1311,50 +1145,8 @@ def confirm_order_post(order_id: uuid.UUID, db: Session = Depends(get_db)):
 
     tenant_context.set(order.tenant_id)
     
-    current_status = order.current_status
-    db.add(OrderStateLedger(
-        tenant_id=order.tenant_id,
-        order_id=order.id,
-        from_status=current_status,
-        to_status="Confirmed",
-        updated_by="API"
-    ))
-    order.status = "Confirmed"
-    
-    # Also log DEBIT and generate Invoice as standard confirmation does to support FIFO payment collect
-    customer = db.get(Customer, order.customer_id)
-    if customer:
-        current_order_total = sum(float(item.quantity * item.unit_price) for item in order.line_items)
-        customer.outstanding_balance = float(customer.outstanding_balance) + current_order_total
-        db.add(CustomerLedger(
-            id=uuid.uuid4(),
-            tenant_id=order.tenant_id,
-            customer_id=order.customer_id,
-            type="DEBIT",
-            amount=current_order_total,
-            reference_id=order.internal_order_id
-        ))
-        
-        # Create Invoice
-        from app.models.invoice import Invoice
-        invoice = Invoice(
-            tenant_id=order.tenant_id,
-            order_id=order.id,
-            gstin=customer.gstin if customer.gstin else "29AAAAA1111A1Z1",
-            total_amount=current_order_total,
-            irn_status="Cleared",
-            qr_code_status="Generated",
-            customer_id=order.customer_id,
-            payment_status="UNPAID",
-            amount_paid=0.0,
-            created_at=datetime.utcnow()
-        )
-        db.add(invoice)
-        db.flush()
-        
-        # Process bulk self-learning
-        process_order_self_learning(db, order.id, order.tenant_id)
-        
+    from app.services.order_confirmation_service import confirm_order
+    confirm_order(db, order, updated_by="API")
     db.commit()
 
     # Fire order_confirmed notification (non-blocking)
@@ -1501,108 +1293,9 @@ def batch_confirm_order(
         # ── PHASE 2: Self-learning alias engine ─────────────────────────────
         process_order_self_learning(db, order.id, order.tenant_id)
 
-        # ── PHASE 3: Ledger debit + Invoice creation ─────────────────────────
-        customer = db.get(Customer, order.customer_id)
-        if customer:
-            db.refresh(order)  # ensure line_items reflect Phase 1 changes
-
-            # ── INVENTORY ALLOCATION (partial fill if stock insufficient) ──
-            from app.models.inventory import Inventory
-            from app.models.demand_gap import DemandGap
-
-            for item in order.line_items:
-                inv_record = db.query(Inventory).filter(
-                    Inventory.tenant_id == order.tenant_id,
-                    Inventory.sku_id == item.product_id,
-                ).first()
-
-                available = inv_record.quantity_on_hand if inv_record else 0
-                allocated = min(item.quantity, available)
-                item.allocated_quantity = allocated
-                gap_qty = item.quantity - allocated
-
-                if gap_qty > 0:
-                    # Check if DemandGap already exists for this order+product to avoid duplicates
-                    existing_gap = db.query(DemandGap).filter(
-                        DemandGap.order_id == order.id,
-                        DemandGap.product_id == item.product_id,
-                        DemandGap.reason_code == "STOCK_SHORTAGE"
-                    ).first()
-                    if not existing_gap:
-                        db.add(DemandGap(
-                            id=uuid.uuid4(),
-                            tenant_id=order.tenant_id,
-                            order_id=order.id,
-                            customer_id=order.customer_id,
-                            product_id=item.product_id,
-                            reason_code="STOCK_SHORTAGE",
-                            status="OPEN",
-                            resolved_at=None,
-                            requested_qty=item.quantity,
-                            allocated_qty=allocated,
-                            gap_qty=gap_qty,
-                            unit_price=float(item.unit_price),
-                            revenue_at_risk=float(gap_qty * item.unit_price),
-                            created_at=datetime.utcnow(),
-                        ))
-
-                if inv_record and allocated > 0:
-                    inv_record.quantity_on_hand -= allocated
-                    inv_record.quantity_committed = (inv_record.quantity_committed or 0) + allocated
-
-            db.flush()
-
-            # ── BILLING TOTAL using allocated quantities ──
-            current_order_total = sum(
-                float(
-                    (item.allocated_quantity if item.allocated_quantity is not None else item.quantity)
-                    * item.unit_price
-                )
-                for item in order.line_items
-            )
-            order.total_amount = current_order_total
-
-            customer.outstanding_balance = (
-                float(customer.outstanding_balance) + current_order_total
-            )
-            db.add(
-                CustomerLedger(
-                    id=uuid.uuid4(),
-                    tenant_id=order.tenant_id,
-                    customer_id=order.customer_id,
-                    type="DEBIT",
-                    amount=current_order_total,
-                    reference_id=order.internal_order_id,
-                )
-            )
-            from app.models.invoice import Invoice
-            db.add(
-                Invoice(
-                    tenant_id=order.tenant_id,
-                    order_id=order.id,
-                    gstin=customer.gstin if customer.gstin else "29AAAAA1111A1Z1",
-                    total_amount=current_order_total,
-                    irn_status="Cleared",
-                    qr_code_status="Generated",
-                    customer_id=order.customer_id,
-                    payment_status="UNPAID",
-                    amount_paid=0.0,
-                    created_at=datetime.utcnow(),
-                )
-            )
-
-        # ── PHASE 4: Advance order state to Confirmed ────────────────────────
-        db.add(
-            OrderStateLedger(
-                tenant_id=order.tenant_id,
-                order_id=order.id,
-                from_status=current_status,
-                to_status="Confirmed",
-                updated_by="API",
-            )
-        )
-        order.status = "Confirmed"
-
+        db.refresh(order)  # ensure line_items reflect Phase 1 changes
+        from app.services.order_confirmation_service import confirm_order
+        confirm_order(db, order, updated_by="API")
         db.commit()
 
         # Fire order_confirmed notification (non-blocking)
