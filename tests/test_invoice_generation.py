@@ -124,3 +124,77 @@ def test_retail_cash_invoice_pdf_content(db_session, client):
     assert "TAX INVOICE" not in pdf_text
     assert "GSTIN:" not in pdf_text
     assert "GST (18%):" not in pdf_text
+
+
+def test_invoice_pdf_partial_allocation(db_session, client):
+    # Setup Tenant
+    tenant = DistributorTenant(name="Partial Allocation Test Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+
+    tenant_context.set(tenant.id)
+
+    # Setup Product with stock = 300
+    p = Product(sku_id="PROD-PARTIAL-INV", brand="BrandX", category="TestCategory", pack_size="1 unit", base_price=7.0, stock_quantity=300)
+    db_session.add(p)
+    db_session.flush()
+
+    from app.models.inventory import Inventory
+    inv = Inventory(
+        tenant_id=tenant.id,
+        sku_id=p.id,
+        location="WH1",
+        quantity_on_hand=300,
+        low_stock_threshold=10
+    )
+    db_session.add(inv)
+    db_session.flush()
+
+    # Setup Customer
+    cust = Customer(
+        retailer_name="Partial Invoice Stores", customer_id="C-PARTIAL-INV", address_text="Some Street",
+        gstin="07AAAAA1111A1Z1", tax_group="GST", payment_terms="COD", credit_limit=100000.0, outstanding_balance=0.0
+    )
+    db_session.add(cust)
+    db_session.flush()
+
+    # Setup Order
+    order = Order(
+        tenant_id=tenant.id,
+        internal_order_id="ORD-PARTIAL-INV-1",
+        source="WhatsApp",
+        customer_id=cust.id,
+        invoice_type="GST_TAX_INVOICE"
+    )
+    db_session.add(order)
+    db_session.flush()
+
+    # Add line item with quantity = 400 (which is > 300)
+    db_session.add(OrderLineItem(order_id=order.id, product_id=p.id, quantity=400, unit_price=7.0))
+
+    # Ledger transition: None -> Draft
+    db_session.add(OrderStateLedger(order_id=order.id, from_status=None, to_status="Draft", updated_by="admin"))
+    db_session.commit()
+
+    # Confirm order via confirm endpoint
+    response = client.post(f"/api/v1/orders/{order.id}/confirm")
+    assert response.status_code == 200
+
+    # Get PDF invoice
+    response = client.get(f"/api/v1/orders/{order.id}/invoice")
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/pdf"
+    
+    # Extract and assert text content
+    pdf_text = extract_text_from_pdf(response.content)
+    # The subtotal should reflect 300 * 7 = 2100, not 400 * 7 = 2800.
+    # GST should be 2100 * 18% = 378, not 2800 * 18% = 504.
+    # Total Payable should be 2100 + 378 = 2478, not 2800 + 504 = 3304.
+    assert "300" in pdf_text
+    assert "400" not in pdf_text
+    assert "2,100.00" in pdf_text
+    assert "2,800.00" not in pdf_text
+    assert "378.00" in pdf_text
+    assert "504.00" not in pdf_text
+    assert "2,478.00" in pdf_text
+    assert "3,304.00" not in pdf_text

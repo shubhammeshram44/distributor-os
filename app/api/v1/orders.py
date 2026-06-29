@@ -504,7 +504,7 @@ def generate_invoice_pdf_bytes(order: Order, db: Session) -> bytes:
         product = db.get(Product, item.product_id)
         sku = product.sku_id if product else item.sku_code or "UNKNOWN"
         item_name = f"{product.brand} {product.category} ({product.pack_size})" if product else "Unknown Product"
-        qty = item.quantity
+        qty = item.allocated_quantity if item.allocated_quantity is not None else item.quantity
         price = float(item.unit_price)
         total = qty * price
         subtotal += total
