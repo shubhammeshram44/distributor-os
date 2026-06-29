@@ -72,11 +72,13 @@ def test_confirm_order_success(db_session, client):
     # 6. Verify database state
     db_session.expire_all()
 
-    # Verify stock decrements in Inventory
+    # Verify stock decrements in Inventory (no change to physical stock, committed pool incremented)
     inv1_db = db_session.query(Inventory).filter_by(sku_id=p1.id).one()
     inv2_db = db_session.query(Inventory).filter_by(sku_id=p2.id).one()
-    assert inv1_db.quantity_on_hand == 70  # 100 - 30
-    assert inv2_db.quantity_on_hand == 40  # 50 - 10
+    assert inv1_db.quantity_on_hand == 100
+    assert inv1_db.quantity_committed == 30
+    assert inv2_db.quantity_on_hand == 50
+    assert inv2_db.quantity_committed == 10
 
     # Verify ledger entry
     latest_ledger = db_session.query(OrderStateLedger).filter_by(order_id=order.id).order_by(OrderStateLedger.timestamp.desc()).first()
@@ -135,10 +137,11 @@ def test_confirm_order_insufficient_stock(db_session, client):
     assert response.status_code == 200
     assert response.json()["new_status"] == "Confirmed"
 
-    # Inventory should be fully consumed (20 → 0)
+    # Inventory physical stock should be unchanged, committed should be fully allocated (20)
     db_session.expire_all()
     inv_db = db_session.query(Inventory).filter_by(sku_id=p.id).one()
-    assert inv_db.quantity_on_hand == 0
+    assert inv_db.quantity_on_hand == 20
+    assert inv_db.quantity_committed == 20
 
     # Line item should have allocated_quantity = 20 (available), not 30 (requested)
     item_db = db_session.query(OrderLineItem).filter_by(order_id=order.id).one()
@@ -206,13 +209,15 @@ def test_confirm_order_atomic_rollback(db_session, client):
     # Partial allocation — order succeeds
     assert response.status_code == 200
 
-    # p1 fully allocated: 100 – 30 = 70
-    # p2 partially allocated: 5 – 5 = 0
+    # p1 fully allocated: physical stock 100, committed 30
+    # p2 partially allocated: physical stock 5, committed 5
     db_session.expire_all()
     inv1_db = db_session.query(Inventory).filter_by(sku_id=p1.id).one()
     inv2_db = db_session.query(Inventory).filter_by(sku_id=p2.id).one()
-    assert inv1_db.quantity_on_hand == 70
-    assert inv2_db.quantity_on_hand == 0
+    assert inv1_db.quantity_on_hand == 100
+    assert inv1_db.quantity_committed == 30
+    assert inv2_db.quantity_on_hand == 5
+    assert inv2_db.quantity_committed == 5
 
     # DemandGap row for p2's shortage
     from app.models.demand_gap import DemandGap

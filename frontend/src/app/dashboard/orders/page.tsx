@@ -26,6 +26,7 @@ interface OrderItem {
   category: string;
   pack_size: string;
   quantity: number;
+  allocated_quantity: number | null;
   unit_price: number;
   total_price: number;
   raw_source_text?: string;
@@ -738,15 +739,29 @@ export default function OrdersPage() {
                           {formatCurrency(order.amount)}
                         </td>
                         <td className="py-4 px-6 text-center">
-                          <span className={`inline-flex items-center justify-center px-2.5 py-1 rounded-full text-xs font-bold leading-none ${
-                            order.status === "Confirmed"
-                              ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                              : order.status === "Needs Review"
-                              ? "bg-rose-50 text-rose-700 border border-rose-200"
-                              : "bg-amber-50 text-amber-700 border border-amber-200"
-                          }`}>
-                            {order.status}
-                          </span>
+                          {(() => {
+                            const totalRequested = order.line_items?.reduce((sum: number, i: any) => sum + i.quantity, 0) || 0;
+                            const totalAllocated = order.line_items?.reduce((sum: number, i: any) => sum + (i.allocated_quantity !== null && i.allocated_quantity !== undefined ? i.allocated_quantity : i.quantity), 0) || 0;
+                            const hasShortfall = totalAllocated < totalRequested;
+                            if (order.status === "Confirmed" && hasShortfall) {
+                              return (
+                                <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-full text-xs font-bold leading-none bg-amber-50 text-amber-700 border border-amber-200">
+                                  Confirmed ({totalAllocated} of {totalRequested} allocated)
+                                </span>
+                              );
+                            }
+                            return (
+                              <span className={`inline-flex items-center justify-center px-2.5 py-1 rounded-full text-xs font-bold leading-none ${
+                                order.status === "Confirmed"
+                                  ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                  : order.status === "Needs Review"
+                                  ? "bg-rose-50 text-rose-700 border border-rose-200"
+                                  : "bg-amber-50 text-amber-700 border border-amber-200"
+                              }`}>
+                                {order.status}
+                              </span>
+                            );
+                          })()}
                         </td>
                         <td className="py-4 px-6 text-center">
                           <span className={`inline-flex items-center justify-center w-24 px-2.5 py-1 rounded-full text-xs font-bold leading-none ${
@@ -906,8 +921,15 @@ export default function OrdersPage() {
                               </>
                             )}
                           </div>
-                          <div className="flex flex-col items-end shrink-0">
-                            <span className="text-xs font-bold text-slate-500">Qty: {item.quantity}</span>
+                          <div className="flex flex-col items-end shrink-0 text-right">
+                            {item.allocated_quantity !== null && item.allocated_quantity !== undefined && item.allocated_quantity < item.quantity ? (
+                              <>
+                                <span className="text-xs font-bold text-slate-400 line-through">Requested: {item.quantity}</span>
+                                <span className="text-xs font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-100 mt-0.5">{item.allocated_quantity} units allocated</span>
+                              </>
+                            ) : (
+                              <span className="text-xs font-bold text-slate-500">Qty: {item.quantity}</span>
+                            )}
                           </div>
                         </div>
 

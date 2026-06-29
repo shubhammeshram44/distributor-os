@@ -20,3 +20,17 @@ export interface Order {
   invoice_type: InvoiceType;
   raw_source_text?: string;
 }
+
+export interface OrderLineItem {
+  id: string;
+  sku_id: string;
+  brand: string;
+  category: string;
+  pack_size: string;
+  quantity: number;
+  allocated_quantity: number | null;
+  unit_price: number;
+  total_price: number;
+  raw_source_text?: string;
+  product_id?: string | null;
+}

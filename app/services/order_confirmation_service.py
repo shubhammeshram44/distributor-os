@@ -88,7 +88,7 @@ def confirm_order(db: Session, order: Order, updated_by: str) -> None:
             Inventory.sku_id == item.product_id,
         ).first()
 
-        available = inv_record.quantity_on_hand if inv_record else 0
+        available = max(0, inv_record.quantity_on_hand - (inv_record.quantity_committed or 0)) if inv_record else 0
         allocated = min(item.quantity, available)
         item.allocated_quantity = allocated
         gap_qty = item.quantity - allocated
@@ -119,7 +119,7 @@ def confirm_order(db: Session, order: Order, updated_by: str) -> None:
                 ))
 
         if inv_record and allocated > 0:
-            inv_record.quantity_on_hand -= allocated
+            inv_record.quantity_committed = (inv_record.quantity_committed or 0) + allocated
 
     db.flush()
 

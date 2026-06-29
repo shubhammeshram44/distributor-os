@@ -31,6 +31,19 @@ Order.total_amount = property(get_total_amount, set_total_amount)
 
 
 
+class OrderLineItemResponse(BaseModel):
+    id: str
+    product_id: str | None = None
+    sku_code: str | None = None
+    product_name: str | None = None
+    quantity: int
+    allocated_quantity: int | None = None
+    unit_price: float
+
+    class Config:
+        from_attributes = True
+
+
 class OrderResponse(BaseModel):
     id: str
     order_id: str
@@ -44,6 +57,7 @@ class OrderResponse(BaseModel):
     amount_paid: float
     invoice_type: str
     raw_source_text: str | None = None
+    line_items: list[OrderLineItemResponse] = []
 
 
 class AllocatedPayment(BaseModel):
@@ -125,6 +139,20 @@ def list_orders(
         payment_status = inv.payment_status if inv else "UNPAID"
         amount_paid = float(inv.amount_paid) if inv else 0.0
 
+        line_items_data = []
+        for item in o.line_items:
+            sku = item.product.sku_id if item.product else "UNMATCHED_SKU"
+            p_name = f"{item.product.brand} {item.product.category}" if item.product else (item.unmatched_raw_text or "Unknown Product")
+            line_items_data.append({
+                "id": str(item.id),
+                "product_id": str(item.product_id) if item.product_id else None,
+                "sku_code": sku,
+                "product_name": p_name,
+                "quantity": item.quantity,
+                "allocated_quantity": item.allocated_quantity,
+                "unit_price": float(item.unit_price)
+            })
+
         results.append({
             "id": str(o.id),
             "order_id": o.internal_order_id,
@@ -137,7 +165,8 @@ def list_orders(
             "payment_status": payment_status,
             "amount_paid": amount_paid,
             "invoice_type": o.invoice_type,
-            "raw_source_text": o.raw_source_text
+            "raw_source_text": o.raw_source_text,
+            "line_items": line_items_data
         })
 
     return results
@@ -261,10 +290,9 @@ def restore_inventory_for_order(db: Session, order: Order) -> None:
         ).first()
         if inv_record:
             restored_qty = item.allocated_quantity if item.allocated_quantity is not None else item.quantity
-            inv_record.quantity_on_hand += restored_qty
             inv_record.quantity_committed = max(0, (inv_record.quantity_committed or 0) - restored_qty)
             logger.info(
-                "Inventory restored: product=%s qty=%s for order=%s",
+                "Inventory restored (committed pool decremented): product=%s qty=%s for order=%s",
                 item.product_id, restored_qty, order.id
             )
 

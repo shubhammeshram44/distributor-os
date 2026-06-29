@@ -29,6 +29,7 @@ export interface RecentOrder {
   status: string;
   created_on?: string;
   eta: string;
+  line_items?: OrderDetail[];
 }
 
 export interface OrderDetail {
@@ -38,6 +39,7 @@ export interface OrderDetail {
   category: string;
   pack_size: string;
   quantity: number;
+  allocated_quantity?: number | null;
   unit_price: number;
   total_price: number;
 }

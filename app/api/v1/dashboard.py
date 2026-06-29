@@ -23,6 +23,18 @@ from app.models.demand_gap import DemandGap
 
 from pydantic import BaseModel
 
+class DashboardLineItemResponse(BaseModel):
+    id: str
+    sku_id: str
+    brand: str
+    category: str
+    pack_size: str
+    quantity: int
+    allocated_quantity: int | None = None
+    unit_price: float
+    total_price: float
+
+
 class RecentOrderResponse(BaseModel):
     id: str
     order_id: str
@@ -34,6 +46,7 @@ class RecentOrderResponse(BaseModel):
     eta: str
     invoice_type: str
     raw_source_text: str | None = None
+    line_items: list[DashboardLineItemResponse] = []
 
 class DashboardOverviewResponse(BaseModel):
     metrics: dict
@@ -298,6 +311,25 @@ def get_recent_orders(
             status_raw = "pending_review"
         status_resolved = "Pending" if status_raw == "Draft" else ("Needs Review" if status_raw in ["NEEDS_REVIEW", "pending_review"] else status_raw)
 
+        line_items_data = []
+        for item in o.line_items:
+            sku = item.product.sku_id if item.product else "UNMATCHED_SKU"
+            brand = item.product.brand if item.product else (item.unmatched_raw_text or "")
+            category = item.product.category if item.product else "Triage"
+            pack_size = item.product.pack_size if item.product else "1 Unit"
+            allocated_qty = item.allocated_quantity if item.allocated_quantity is not None else item.quantity
+            line_items_data.append({
+                "id": str(item.id),
+                "sku_id": sku,
+                "brand": brand,
+                "category": category,
+                "pack_size": pack_size,
+                "quantity": item.quantity,
+                "allocated_quantity": item.allocated_quantity,
+                "unit_price": float(item.unit_price),
+                "total_price": float(allocated_qty * item.unit_price)
+            })
+
         results.append({
             "id": str(o.id),
             "order_id": o.internal_order_id,
@@ -308,7 +340,8 @@ def get_recent_orders(
             "created_on": o.created_at.strftime("%d %b, %I:%M %p"),
             "eta": o.created_at.strftime("%d %b, %I:%M %p"),
             "invoice_type": o.invoice_type,
-            "raw_source_text": o.raw_source_text
+            "raw_source_text": o.raw_source_text,
+            "line_items": line_items_data
         })
 
     return results
@@ -544,6 +577,25 @@ def get_dashboard_overview(
             status_raw = "pending_review"
         status_resolved = "Pending" if status_raw == "Draft" else ("Needs Review" if status_raw in ["NEEDS_REVIEW", "pending_review"] else status_raw)
 
+        line_items_data = []
+        for item in o.line_items:
+            sku = item.product.sku_id if item.product else "UNMATCHED_SKU"
+            brand = item.product.brand if item.product else (item.unmatched_raw_text or "")
+            category = item.product.category if item.product else "Triage"
+            pack_size = item.product.pack_size if item.product else "1 Unit"
+            allocated_qty = item.allocated_quantity if item.allocated_quantity is not None else item.quantity
+            line_items_data.append({
+                "id": str(item.id),
+                "sku_id": sku,
+                "brand": brand,
+                "category": category,
+                "pack_size": pack_size,
+                "quantity": item.quantity,
+                "allocated_quantity": item.allocated_quantity,
+                "unit_price": float(item.unit_price),
+                "total_price": float(allocated_qty * item.unit_price)
+            })
+
         recent_orders.append({
             "id": str(o.id),
             "order_id": o.internal_order_id,
@@ -554,7 +606,8 @@ def get_dashboard_overview(
             "created_on": o.created_at.strftime("%d %b, %I:%M %p"),
             "eta": o.created_at.strftime("%d %b, %I:%M %p"),
             "invoice_type": o.invoice_type,
-            "raw_source_text": o.raw_source_text
+            "raw_source_text": o.raw_source_text,
+            "line_items": line_items_data
         })
 
     # ---------------- COLLECTIONS DONUT CALCULATION ----------------
@@ -625,6 +678,7 @@ def get_order_details(
     details = []
     for item in items:
         prod = db.get(Product, item.product_id) if item.product_id is not None else None
+        allocated_qty = item.allocated_quantity if item.allocated_quantity is not None else item.quantity
         details.append({
             "id": str(item.id),
             "sku_id": prod.sku_id if prod else "UNMATCHED_SKU",
@@ -632,8 +686,9 @@ def get_order_details(
             "category": prod.category if prod else "Triage",
             "pack_size": prod.pack_size if prod else "1 Unit",
             "quantity": item.quantity,
+            "allocated_quantity": item.allocated_quantity,
             "unit_price": float(item.unit_price),
-            "total_price": float(item.quantity * item.unit_price),
+            "total_price": float(allocated_qty * item.unit_price),
             "raw_source_text": order.raw_source_text,
             "product_id": str(item.product_id) if item.product_id is not None else None
         })
