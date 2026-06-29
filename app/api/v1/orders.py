@@ -1151,6 +1151,7 @@ def confirm_order_post(order_id: uuid.UUID, db: Session = Depends(get_db)):
 
     # Fire order_confirmed notification (non-blocking)
     try:
+        customer = db.get(Customer, order.customer_id)
         if customer:
             # Eagerly load relationships so they are in-memory before background task starts
             for item in order.line_items:
@@ -1300,6 +1301,7 @@ def batch_confirm_order(
 
         # Fire order_confirmed notification (non-blocking)
         try:
+            customer = db.get(Customer, order.customer_id)
             if customer:
                 # Eagerly load relationships so they are in-memory before background task starts
                 for item in order.line_items:
