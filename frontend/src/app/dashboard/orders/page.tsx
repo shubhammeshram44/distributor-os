@@ -887,6 +887,9 @@ export default function OrdersPage() {
                   <h4 className="font-bold text-slate-800 text-sm border-b pb-2 mb-3">Line Items</h4>
                   {editedLineItems.map((item, idx) => {
                     const isUnmatched = item.sku_id === "UNMATCHED_SKU" || item.sku_id === "UNMATCHED_TRIAGE_SKU";
+                    // Line total = allocated_quantity * unit_price (not full quantity)
+                    const displayQty = item.allocated_quantity ?? item.quantity;
+                    const lineTotal = displayQty * item.unit_price;
                     return (
                       <div key={idx} className="p-4 rounded-xl border border-dashboard-border bg-slate-50/50 flex flex-col justify-between gap-2">
                         <div className="flex items-start justify-between">
@@ -921,21 +924,22 @@ export default function OrdersPage() {
                               </>
                             )}
                           </div>
-                          <div className="flex flex-col items-end shrink-0 text-right">
+                          <div className="flex flex-col items-end shrink-0 text-right text-xs font-bold text-slate-500">
+                            {/* Show allocated quantity if partial, otherwise show full quantity */}
                             {item.allocated_quantity !== null && item.allocated_quantity !== undefined && item.allocated_quantity < item.quantity ? (
-                              <>
-                                <span className="text-xs font-bold text-slate-400 line-through">Requested: {item.quantity}</span>
-                                <span className="text-xs font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-100 mt-0.5">{item.allocated_quantity} units allocated</span>
-                              </>
+                              <span>
+                                <span className="line-through text-gray-400">{item.quantity}</span>
+                                {" "}{item.allocated_quantity} allocated
+                              </span>
                             ) : (
-                              <span className="text-xs font-bold text-slate-500">Qty: {item.quantity}</span>
+                              <span>{item.allocated_quantity ?? item.quantity}</span>
                             )}
                           </div>
                         </div>
 
                         <div className="flex items-center justify-between border-t border-dashed border-slate-200 pt-2 mt-1">
                           <span className="text-xs text-slate-400">Rate: {formatCurrency(item.unit_price)}</span>
-                          <span className="text-sm font-bold text-slate-800">{formatCurrency(item.total_price)}</span>
+                          <span className="text-sm font-bold text-slate-800">{formatCurrency(lineTotal)}</span>
                         </div>
                       </div>
                     );
