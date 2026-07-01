@@ -11,11 +11,12 @@ def get_or_create_payment_session(
     invoice: Invoice,
     customer: Customer,
     order_id: uuid.UUID,
-    tenant_id: uuid.UUID
+    tenant_id: uuid.UUID,
+    custom_amount: float | None = None  # NEW
 ) -> PaymentSession:
     """
-    Returns existing ACTIVE session if valid link exists.
-    Creates new session + Razorpay link if none exists or link is expired.
+    Returns existing ACTIVE session if valid link exists and amount matches.
+    Creates new session + Razorpay link if none exists, amount differs, or link is expired.
     This is the single entry point for all payment link generation.
     """
     # Check for existing active session
@@ -25,8 +26,13 @@ def get_or_create_payment_session(
     ).first()
     
     if existing:
-        # Check if link is still valid (not expired)
-        if existing.payment_link_expires_at and existing.payment_link_expires_at > datetime.utcnow():
+        # Check if amount matches if custom_amount is passed
+        amount_mismatch = False
+        if custom_amount is not None:
+            amount_mismatch = abs(float(existing.amount) - custom_amount) > 0.01
+
+        # Check if link is still valid (not expired) and amount matches
+        if not amount_mismatch and existing.payment_link_expires_at and existing.payment_link_expires_at > datetime.utcnow():
             return existing
         else:
             # Mark expired
@@ -35,7 +41,7 @@ def get_or_create_payment_session(
     
     # Create new payment link via Razorpay
     gateway = PaymentGateway()
-    amount_due = float(invoice.total_amount) - float(invoice.amount_paid or 0)
+    amount_due = custom_amount if custom_amount is not None else (float(invoice.total_amount) - float(invoice.amount_paid or 0))
     
     expire_by = int((datetime.utcnow() + timedelta(days=7)).timestamp())
     

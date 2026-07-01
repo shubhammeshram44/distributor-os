@@ -324,3 +324,81 @@ def test_razorpay_webhook_paid_event(db_session, client):
             invoice = db_session.query(Invoice).filter(Invoice.order_id == order.id).first()
             assert float(invoice.amount_paid) == 600.0
             assert invoice.payment_status == "PAID"
+
+
+def test_preferred_invoice_paid_first(db_session):
+    from app.services.payment_service import process_payment
+    from app.models.invoice import Invoice
+    from app.models.tenant import DistributorTenant
+    from app.models.customer import Customer
+    from datetime import datetime, timedelta
+
+    # 1. Setup Tenant and Customer
+    tenant = DistributorTenant(name="Preferred Invoice Tenant")
+    db_session.add(tenant)
+    db_session.flush()
+
+    customer = Customer(
+        tenant_id=tenant.id,
+        retailer_name="Preferred Retailer",
+        payment_terms="Net 30",
+        phone_number="+919876543219"
+    )
+    db_session.add(customer)
+    db_session.flush()
+
+    # 2. Create two unpaid invoices (older one 500, newer one 1000)
+    invoice_older = Invoice(
+        tenant_id=tenant.id,
+        order_id=uuid.uuid4(),
+        gstin="29AAAAA1111A1Z1",
+        total_amount=500.0,
+        irn_status="Cleared",
+        qr_code_status="Generated",
+        customer_id=customer.id,
+        payment_status="UNPAID",
+        amount_paid=0.0,
+        created_at=datetime.utcnow() - timedelta(days=2)
+    )
+    db_session.add(invoice_older)
+
+    invoice_newer = Invoice(
+        tenant_id=tenant.id,
+        order_id=uuid.uuid4(),
+        gstin="29AAAAA1111A1Z1",
+        total_amount=1000.0,
+        irn_status="Cleared",
+        qr_code_status="Generated",
+        customer_id=customer.id,
+        payment_status="UNPAID",
+        amount_paid=0.0,
+        created_at=datetime.utcnow() - timedelta(days=1)
+    )
+    db_session.add(invoice_newer)
+    
+    # Update customer outstanding balance to match invoice sum
+    customer.outstanding_balance = 1500.0
+    db_session.commit()
+
+    # 3. Call process_payment with preferred_invoice_id pointing to invoice_newer
+    payment = process_payment(
+        db=db_session,
+        tenant_id=tenant.id,
+        customer_id=customer.id,
+        amount=1000.0,
+        method="RAZORPAY_UPI",
+        reference_number="pay_pref_123",
+        preferred_invoice_id=invoice_newer.id
+    )
+    db_session.commit()
+
+    # 4. Asserts
+    db_session.refresh(invoice_older)
+    db_session.refresh(invoice_newer)
+    db_session.refresh(customer)
+
+    assert invoice_newer.payment_status == "PAID"
+    assert float(invoice_newer.amount_paid) == 1000.0
+    assert invoice_older.payment_status == "UNPAID"
+    assert float(invoice_older.amount_paid) == 0.0
+    assert float(customer.outstanding_balance) == 500.0

@@ -1089,6 +1089,13 @@ export default function OrdersPage() {
                   >
                     <FileSpreadsheet className="w-4 h-4" />
                     <span>Download B2B Invoice</span>
+                    {/* TODO: Payment Options Card
+                        Show three options to customer via WhatsApp:
+                        1. Pay Invoice ₹1,100 → payment_links.pay_invoice
+                        2. Pay Full Outstanding ₹58,420 → payment_links.pay_outstanding  
+                        3. Custom Amount → generate link on demand
+                        Endpoint: GET /api/v1/payments/payment-options?invoice_id={id}
+                    */}
                   </button>
                 ) : selectedOrder && selectedOrder.status === "Dispatched" ? (
                   <button

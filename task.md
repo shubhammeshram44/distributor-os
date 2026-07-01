@@ -1,0 +1,7 @@
+- [x] Implement preferred invoice support in `process_payment` inside `app/services/payment_service.py`
+- [x] Simplify webhook reconciliation call in `app/api/v1/payments.py`
+- [x] Support custom_amount in `get_or_create_payment_session` inside `app/services/payment_session_service.py`
+- [x] Implement `GET /api/v1/payments/payment-options` endpoint in `app/api/v1/payments.py`
+- [x] Add comment placeholder in `frontend/src/app/dashboard/orders/page.tsx`
+- [x] Add regression test `test_preferred_invoice_paid_first` in `tests/test_razorpay.py`
+- [x] Run backend tests and verify

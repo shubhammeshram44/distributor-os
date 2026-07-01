@@ -166,8 +166,7 @@ async def razorpay_webhook(request: Request, db: Session = Depends(get_db)):
             session.status = "PAID"
             session.razorpay_payment_id = razorpay_payment_id
             session.paid_at = datetime.utcnow()
-            
-            # Auto-reconcile via existing process_payment
+
             from app.services.payment_service import process_payment
             process_payment(
                 db=db,
@@ -175,10 +174,15 @@ async def razorpay_webhook(request: Request, db: Session = Depends(get_db)):
                 customer_id=session.customer_id,
                 amount=amount_paid_inr,
                 method="RAZORPAY_UPI",
-                reference_number=razorpay_payment_id
+                reference_number=razorpay_payment_id,
+                preferred_invoice_id=session.invoice_id  # pay this invoice first
             )
+
             db.commit()
-            logger.info("Razorpay payment reconciled: session=%s amount=%.2f", session.id, amount_paid_inr)
+            logger.info(
+                "Razorpay reconciled: session=%s invoice=%s amount=%.2f",
+                session.id, session.invoice_id, amount_paid_inr
+            )
     
     return {"status": "ok"}
 
@@ -224,3 +228,85 @@ def get_payment_link(
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to generate payment session: {str(e)}")
+
+
+@router.get("/payment-options")
+def get_payment_options(
+    invoice_id: uuid.UUID,
+    tenant_id: uuid.UUID,
+    db: Session = Depends(get_db)
+):
+    """
+    Returns customer details and various payment links (pay_invoice, pay_outstanding).
+    """
+    from app.models.invoice import Invoice
+    from app.models.customer import Customer
+    from app.models.payment_session import PaymentSession
+    from app.services.payment_session_service import get_or_create_payment_session
+    import logging
+
+    logger = logging.getLogger("uvicorn.error")
+
+    # 1. Fetch invoice
+    invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+        
+    # 2. Fetch customer
+    customer = db.query(Customer).filter(Customer.id == invoice.customer_id).first()
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+        
+    invoice_amount = float(invoice.total_amount)
+    outstanding_balance = float(customer.outstanding_balance)
+    
+    # generate pay_invoice link
+    try:
+        session_invoice = get_or_create_payment_session(
+            db=db,
+            invoice=invoice,
+            customer=customer,
+            order_id=invoice.order_id,
+            tenant_id=tenant_id
+        )
+        pay_invoice_link = session_invoice.payment_link_url
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate invoice payment link: {str(e)}")
+        
+    pay_outstanding_link = None
+    if outstanding_balance > invoice_amount:
+        # Find oldest unpaid invoice
+        oldest_unpaid = db.query(Invoice).filter(
+            Invoice.customer_id == customer.id,
+            Invoice.payment_status.in_(["UNPAID", "PARTIALLY_PAID"])
+        ).order_by(Invoice.created_at.asc()).first()
+        
+        if oldest_unpaid:
+            try:
+                session_outstanding = get_or_create_payment_session(
+                    db=db,
+                    invoice=oldest_unpaid,
+                    customer=customer,
+                    order_id=oldest_unpaid.order_id,
+                    tenant_id=tenant_id,
+                    custom_amount=outstanding_balance
+                )
+                pay_outstanding_link = session_outstanding.payment_link_url
+            except Exception as e:
+                # Log but do not crash the request if pay_outstanding fails
+                logger.warning("Failed to generate outstanding payment link: %s", str(e))
+                
+    db.commit()
+    
+    return {
+        "customer_name": customer.retailer_name,
+        "invoice_id": str(invoice.id),
+        "invoice_amount": invoice_amount,
+        "invoice_status": invoice.payment_status,
+        "outstanding_balance": outstanding_balance,
+        "payment_links": {
+            "pay_invoice": pay_invoice_link,
+            "pay_outstanding": pay_outstanding_link,
+            "custom_amount_enabled": True
+        }
+    }

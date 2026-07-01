@@ -147,7 +147,8 @@ def process_payment(
     customer_id: uuid.UUID,
     amount: float,
     method: str,
-    reference_number: str | None = None
+    reference_number: str | None = None,
+    preferred_invoice_id: uuid.UUID | None = None  # NEW
 ) -> Payment:
     """
     Core handler to process a customer payment, update their outstanding balance,
@@ -189,8 +190,38 @@ def process_payment(
         
         db.flush()
 
-        # Centralized Reconciler handles FIFO allocation and status updates
-        reconcile_payments_and_invoices(db, tenant_id, customer_id)
+        # ── PREFERRED INVOICE ALLOCATION ──
+        amount_remaining = amount
+
+        # If a preferred invoice is specified, pay it first
+        if preferred_invoice_id:
+            preferred_invoice = db.get(Invoice, preferred_invoice_id)
+            if preferred_invoice and preferred_invoice.payment_status not in ("PAID",):
+                invoice_total = float(preferred_invoice.total_amount)
+                invoice_paid = float(preferred_invoice.amount_paid or 0)
+                amount_due = invoice_total - invoice_paid
+                if amount_due > 0:
+                    allocated = min(amount_remaining, amount_due)
+                    preferred_invoice.amount_paid = invoice_paid + allocated
+                    preferred_invoice.payment_status = "PAID" if preferred_invoice.amount_paid >= invoice_total else "PARTIALLY_PAID"
+                    amount_remaining -= allocated
+                    db.add(PaymentInvoiceLink(
+                        id=uuid.uuid4(),
+                        tenant_id=tenant_id,
+                        payment_id=payment.id,
+                        invoice_id=preferred_invoice.id,
+                        amount_allocated=allocated
+                    ))
+
+        # Apply remainder (or full amount if no preferred invoice) via FIFO
+        if amount_remaining > 0:
+            allocate_payment_fifo(
+                db=db,
+                customer_id=customer_id,
+                payment_id=payment.id,
+                total_amount=amount_remaining,
+                tenant_id=tenant_id
+            )
 
         db.refresh(payment)
         return payment
