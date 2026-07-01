@@ -17,4 +17,5 @@ alembic>=1.13.0
 tenacity>=8.3.0
 rapidfuzz>=3.0.0
 apscheduler>=3.10.4
+razorpay>=1.4.1
 

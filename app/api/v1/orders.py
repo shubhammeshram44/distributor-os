@@ -1325,6 +1325,28 @@ def batch_confirm_order(
         db.refresh(order)  # ensure line_items reflect Phase 1 changes
         from app.services.order_confirmation_service import confirm_order
         confirm_order(db, order, updated_by="API")
+
+        # Create PaymentSession eagerly on confirmation
+        try:
+            from app.services.payment_session_service import get_or_create_payment_session
+            from app.models.payment_session import PaymentSession
+            from app.models.invoice import Invoice
+            from app.models.customer import Customer
+            
+            customer = db.get(Customer, order.customer_id)
+            new_invoice = db.query(Invoice).filter(Invoice.order_id == order.id).first()
+            if customer and new_invoice:
+                payment_session = get_or_create_payment_session(
+                    db=db,
+                    invoice=new_invoice,
+                    customer=customer,
+                    order_id=order.id,
+                    tenant_id=order.tenant_id
+                )
+                logger.info("PaymentSession created: %s link=%s", payment_session.id, payment_session.payment_link_url)
+        except Exception as e:
+            logger.warning("PaymentSession creation failed silently: %s", str(e))
+
         db.commit()
 
         # Fire order_confirmed notification (non-blocking)

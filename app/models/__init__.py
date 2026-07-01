@@ -13,6 +13,7 @@ from app.models.ledger import CustomerLedger
 from app.models.auth import WhatsAppVerification
 from app.models.whatsapp_message_log import WhatsappMessageLog
 from app.models.demand_gap import DemandGap
+from app.models.payment_session import PaymentSession
 
 __all__ = [
     "Base",
@@ -39,6 +40,7 @@ __all__ = [
     "WhatsAppVerification",
     "WhatsappMessageLog",
     "DemandGap",
+    "PaymentSession",
 ]
 
 
