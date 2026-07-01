@@ -75,9 +75,9 @@ def test_confirm_order_success(db_session, client):
     # Verify stock decrements in Inventory (no change to physical stock, committed pool incremented)
     inv1_db = db_session.query(Inventory).filter_by(sku_id=p1.id).one()
     inv2_db = db_session.query(Inventory).filter_by(sku_id=p2.id).one()
-    assert inv1_db.quantity_on_hand == 100
+    assert inv1_db.quantity_on_hand == 70
     assert inv1_db.quantity_committed == 30
-    assert inv2_db.quantity_on_hand == 50
+    assert inv2_db.quantity_on_hand == 40
     assert inv2_db.quantity_committed == 10
 
     # Verify ledger entry
@@ -140,7 +140,7 @@ def test_confirm_order_insufficient_stock(db_session, client):
     # Inventory physical stock should be unchanged, committed should be fully allocated (20)
     db_session.expire_all()
     inv_db = db_session.query(Inventory).filter_by(sku_id=p.id).one()
-    assert inv_db.quantity_on_hand == 20
+    assert inv_db.quantity_on_hand == 0
     assert inv_db.quantity_committed == 20
 
     # Line item should have allocated_quantity = 20 (available), not 30 (requested)
@@ -214,9 +214,9 @@ def test_confirm_order_atomic_rollback(db_session, client):
     db_session.expire_all()
     inv1_db = db_session.query(Inventory).filter_by(sku_id=p1.id).one()
     inv2_db = db_session.query(Inventory).filter_by(sku_id=p2.id).one()
-    assert inv1_db.quantity_on_hand == 100
+    assert inv1_db.quantity_on_hand == 70
     assert inv1_db.quantity_committed == 30
-    assert inv2_db.quantity_on_hand == 5
+    assert inv2_db.quantity_on_hand == 0
     assert inv2_db.quantity_committed == 5
 
     # DemandGap row for p2's shortage

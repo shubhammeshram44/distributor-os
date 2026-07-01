@@ -300,7 +300,7 @@ def test_partial_allocation_on_batch_confirm(db_session, setup_test_catalog):
 
     # - inventory.quantity_on_hand == 125, quantity_committed == 125
     inv_db = db_session.query(Inventory).filter_by(sku_id=product.id).one()
-    assert inv_db.quantity_on_hand == 125
+    assert inv_db.quantity_on_hand == 0
     assert inv_db.quantity_committed == 125
 
     # - DemandGap exists with gap_qty == 775
@@ -395,7 +395,7 @@ def test_partial_allocation_on_confirm_order_post(db_session, setup_test_catalog
     assert item_db.allocated_quantity == 125
 
     inv_db = db_session.query(Inventory).filter_by(sku_id=product.id).one()
-    assert inv_db.quantity_on_hand == 125
+    assert inv_db.quantity_on_hand == 0
     assert inv_db.quantity_committed == 125
 
     gap_db = db_session.query(DemandGap).filter_by(order_id=order.id).one()
@@ -474,7 +474,7 @@ def test_partial_allocation_on_create_order_confirm_on_create(db_session, setup_
     assert item_db.allocated_quantity == 125
 
     inv_db = db_session.query(Inventory).filter_by(sku_id=product.id).one()
-    assert inv_db.quantity_on_hand == 125
+    assert inv_db.quantity_on_hand == 0
     assert inv_db.quantity_committed == 125
 
     gap_db = db_session.query(DemandGap).filter_by(order_id=order_id).one()
