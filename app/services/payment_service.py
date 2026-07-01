@@ -223,6 +223,7 @@ def process_payment(
                 tenant_id=tenant_id
             )
 
+        db.commit()
         db.refresh(payment)
         return payment
     except Exception as e:
