@@ -1346,7 +1346,10 @@ def batch_confirm_order(
                     order_id=order.id,
                     tenant_id=order.tenant_id
                 )
-                logger.info("PaymentSession created: %s link=%s", payment_session.id, payment_session.payment_link_url)
+                if payment_session:
+                    logger.info("PaymentSession created: %s link=%s", payment_session.id, payment_session.payment_link_url)
+                else:
+                    logger.info("PaymentSession skipped for order %s (zero amount or limit exceeded)", order.id)
         except Exception as e:
             logger.warning("PaymentSession creation failed silently: %s", str(e))
 

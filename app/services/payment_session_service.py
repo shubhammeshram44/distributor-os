@@ -1,3 +1,4 @@
+import logging
 from sqlalchemy.orm import Session
 from app.models.payment_session import PaymentSession
 from app.models.invoice import Invoice
@@ -6,6 +7,8 @@ from app.services.payment_gateway import PaymentGateway
 from datetime import datetime, timedelta
 import uuid
 
+logger = logging.getLogger("uvicorn.error")
+
 def get_or_create_payment_session(
     db: Session,
     invoice: Invoice,
@@ -13,7 +16,7 @@ def get_or_create_payment_session(
     order_id: uuid.UUID,
     tenant_id: uuid.UUID,
     custom_amount: float | None = None  # NEW
-) -> PaymentSession:
+) -> PaymentSession | None:
     """
     Returns existing ACTIVE session if valid link exists and amount matches.
     Creates new session + Razorpay link if none exists, amount differs, or link is expired.
@@ -39,9 +42,19 @@ def get_or_create_payment_session(
             existing.status = "EXPIRED"
             db.flush()
     
+    # Razorpay test mode limit is ₹5,00,000
+    # In production with live keys this limit is much higher
+    RAZORPAY_TEST_MAX_AMOUNT = 499999.0
+
+    amount_due = custom_amount if custom_amount is not None else (float(invoice.total_amount) - float(invoice.amount_paid or 0))
+    if amount_due <= 0:
+        logger.warning("PaymentSession skipped: zero or negative amount_due for invoice %s", invoice.id)
+        return None  # caller must handle None
+
+    amount_due = min(amount_due, RAZORPAY_TEST_MAX_AMOUNT)
+
     # Create new payment link via Razorpay
     gateway = PaymentGateway()
-    amount_due = custom_amount if custom_amount is not None else (float(invoice.total_amount) - float(invoice.amount_paid or 0))
     
     expire_by = int((datetime.utcnow() + timedelta(days=7)).timestamp())
     
