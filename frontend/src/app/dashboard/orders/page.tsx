@@ -90,6 +90,7 @@ export default function OrdersPage() {
       reference_number: string | null;
       created_at: string;
     }[];
+    invoice_id?: string | null;
   } | null>(null);
 
   const [toast, setToast] = useState<{ show: boolean; message: string; type: "success" | "error" }>({
@@ -1125,7 +1126,7 @@ export default function OrdersPage() {
                     <button
                       onClick={async () => {
                         try {
-                          const invoiceId = selectedOrder?.invoice_id || selectedOrderPayments?.invoice_id;
+                          const invoiceId = selectedOrderPayments?.invoice_id;
                           if (!invoiceId) {
                             showToast("No invoice found for this order.", "error");
                             return;
