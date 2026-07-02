@@ -269,9 +269,14 @@ def get_payment_options(
             order_id=invoice.order_id,
             tenant_id=tenant_id
         )
-        pay_invoice_link = session_invoice.payment_link_url
+        pay_invoice_link = session_invoice.payment_link_url if session_invoice else None
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to generate invoice payment link: {str(e)}")
+        logger.warning("PaymentSession creation failed, checking DB for existing: %s", str(e))
+        existing = db.query(PaymentSession).filter(
+            PaymentSession.invoice_id == invoice_id,
+            PaymentSession.status == "ACTIVE"
+        ).first()
+        pay_invoice_link = existing.payment_link_url if existing else None
         
     pay_outstanding_link = None
     if outstanding_balance > invoice_amount:
@@ -291,10 +296,14 @@ def get_payment_options(
                     tenant_id=tenant_id,
                     custom_amount=outstanding_balance
                 )
-                pay_outstanding_link = session_outstanding.payment_link_url
+                pay_outstanding_link = session_outstanding.payment_link_url if session_outstanding else None
             except Exception as e:
-                # Log but do not crash the request if pay_outstanding fails
-                logger.warning("Failed to generate outstanding payment link: %s", str(e))
+                logger.warning("Outstanding PaymentSession creation failed, checking DB for existing: %s", str(e))
+                existing = db.query(PaymentSession).filter(
+                    PaymentSession.invoice_id == oldest_unpaid.id,
+                    PaymentSession.status == "ACTIVE"
+                ).first()
+                pay_outstanding_link = existing.payment_link_url if existing else None
                 
     db.commit()
     
