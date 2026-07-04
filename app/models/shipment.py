@@ -31,4 +31,7 @@ class Shipment(Base, TenantMixin):
 
     @payment_status.setter
     def payment_status(self, value: str):
+        # Cache an explicit override; the getter reads _payment_status first and
+        # otherwise derives status from the Invoice. Having a setter also avoids
+        # AttributeError on payment_service sync writes.
         self._payment_status = value

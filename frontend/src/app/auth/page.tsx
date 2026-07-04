@@ -7,15 +7,39 @@ import { RecaptchaVerifier, signInWithPhoneNumber, ConfirmationResult } from "fi
 import { auth } from "@/lib/firebase";
 
 function cleanAndNormalizePhone(input: string): string | null {
-  // Strip all non-digit components (spaces, dashes, parentheses, etc.)
-  const digits = input.replace(/\D/g, "");
-  if (digits.length === 10) {
-    return `+91${digits}`;
+  const trimmed = input.trim();
+  const digits = trimmed.replace(/\D/g, "");
+
+  // Already in E.164 format (starts with +): strip non-digits and return
+  if (trimmed.startsWith("+") && digits.length >= 10 && digits.length <= 15) {
+    return `+${digits}`;
   }
-  if (digits.length === 12 && digits.startsWith("91")) {
-    return `+91${digits.slice(2)}`;
-  }
+  // Bare 10-digit Indian number → prepend +91
+  if (digits.length === 10) return `+91${digits}`;
+  // 12-digit with 91 country code but no leading + (e.g. 919876543210)
+  if (digits.length === 12 && digits.startsWith("91")) return `+${digits}`;
   return null;
+}
+
+function getFirebaseErrorMessage(err: unknown): string {
+  if (err instanceof Error) {
+    const code = (err as any).code as string | undefined;
+    const firebaseMessages: Record<string, string> = {
+      "auth/too-many-requests": "Too many attempts. Please wait a few minutes before trying again.",
+      "auth/invalid-phone-number": "The phone number you entered is invalid. Please check and try again.",
+      "auth/quota-exceeded": "SMS quota exceeded. Please try again later.",
+      "auth/captcha-check-failed": "reCAPTCHA verification failed. Please refresh and try again.",
+      "auth/invalid-verification-code": "The code you entered is incorrect. Please try again.",
+      "auth/code-expired": "The verification code has expired. Please request a new one.",
+      "auth/session-expired": "Your session has expired. Please request a new OTP.",
+      "auth/missing-verification-code": "Please enter the 6-digit verification code.",
+      "auth/network-request-failed": "Network error. Please check your connection and try again.",
+      "auth/user-disabled": "This account has been disabled. Please contact support.",
+    };
+    if (code && firebaseMessages[code]) return firebaseMessages[code];
+    if (err.message) return err.message;
+  }
+  return "Something went wrong. Please try again.";
 }
 
 export default function AuthPage() {
@@ -53,7 +77,7 @@ export default function AuthPage() {
 
     const e164 = cleanAndNormalizePhone(mobileNumber);
     if (!e164) {
-      setError("Please enter a valid 10-digit Indian mobile number (e.g. 98765 43210).");
+      setError("Please enter a valid mobile number (e.g. 98765 43210 or +91 98765 43210).");
       return;
     }
 
@@ -66,8 +90,7 @@ export default function AuthPage() {
     } catch (err: unknown) {
       recaptchaRef.current?.clear();
       recaptchaRef.current = null;
-      const message = err instanceof Error ? err.message : "Failed to send OTP. Please try again.";
-      setError(message);
+      setError(getFirebaseErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -131,7 +154,7 @@ export default function AuthPage() {
 
       setTimeout(() => router.push("/dashboard"), 1000);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Failed to verify OTP.";
+      const message = err instanceof Error && err.message ? err.message : getFirebaseErrorMessage(err);
       setError(message);
     } finally {
       setLoading(false);

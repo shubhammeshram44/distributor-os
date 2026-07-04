@@ -1,10 +1,3 @@
-// ===== MESSAGES TAB DISABLED 2026-06-28 =====
-// Hidden because: (a) duplicates order ingestion already handled by the WhatsApp webhook
-// pipeline, (b) the conversation thread shown here is mock/fabricated data
-// (getMockDataForCustomer), not real customer messages — see CTO review in [conversation/PR].
-// To restore: delete the stub component below, uncomment the block, and re-enable the nav
-// links in Sidebar.tsx and DashboardHeader.tsx (see comments there).
-/*
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
@@ -49,113 +42,33 @@ interface Message {
   timestamp: string;
 }
 
-interface OrderItem {
+interface ThreadItem {
+  id: string;
   sku_id: string;
   product_name: string;
+  brand: string;
+  category: string;
+  pack_size: string;
   quantity: number;
   unit_price: number;
+  total_price: number;
 }
 
-interface Extraction {
-  items: OrderItem[];
-  confidence: string;
+interface ThreadOrder {
+  id: string;
+  order_id: string;
   status: string;
+  source: string;
+  created_on: string;
+  invoice_type: string;
 }
 
-const getMockDataForCustomer = (custName: string) => {
-  const name = custName.toLowerCase();
-  if (name.includes("kaveri")) {
-    return {
-      unreadCount: 2,
-      messages: [
-        { id: 1, text: "Hello! Need to place a new stock order.", sender: "customer", timestamp: "10:05 AM" },
-        { id: 2, text: "Sure, please share the item list.", sender: "operator", timestamp: "10:06 AM" },
-        { id: 3, text: "Please send 15 units of Maggi 2-Min Noodles (PROD-MAGGI-PACK) and 10 units of Tata Premium Soap (PROD-HUL-SOAP) to our main shop.", sender: "customer", timestamp: "10:08 AM" },
-        { id: 4, text: "Let me know the total price and if they are available.", sender: "customer", timestamp: "10:09 AM" },
-      ],
-      extraction: {
-        items: [
-          { sku_id: "PROD-MAGGI-PACK", product_name: "Maggi 2-Min Noodles", quantity: 15, unit_price: 450.0 },
-          { sku_id: "PROD-HUL-SOAP", product_name: "Tata Premium Soap", quantity: 10, unit_price: 45.0 }
-        ],
-        confidence: "98%",
-        status: "Draft"
-      }
-    };
-  } else if (name.includes("maruthi")) {
-    return {
-      unreadCount: 0,
-      messages: [
-        { id: 1, text: "Do you have Aashirvaad Aata in stock?", sender: "customer", timestamp: "Yesterday 4:15 PM" },
-        { id: 2, text: "Yes, we have plenty of Aashirvaad Aata.", sender: "operator", timestamp: "Yesterday 4:18 PM" },
-        { id: 3, text: "Excellent. Please book 10 units of Aashirvaad Aata (PROD-ITC-AATA) for us.", sender: "customer", timestamp: "Yesterday 4:20 PM" },
-      ],
-      extraction: {
-        items: [
-          { sku_id: "PROD-ITC-AATA", product_name: "Aashirvaad Aata", quantity: 10, unit_price: 260.0 }
-        ],
-        confidence: "95%",
-        status: "Draft"
-      }
-    };
-  } else if (name.includes("venkateshwara") || name.includes("sri venk")) {
-    return {
-      unreadCount: 0,
-      messages: [
-        { id: 1, text: "Hi, please check our last order. Also we need 50 packets of Chips.", sender: "customer", timestamp: "2 days ago" },
-        { id: 2, text: "Sure, chips are in stock (PROD-ITC-CHIPS).", sender: "operator", timestamp: "2 days ago" },
-        { id: 3, text: "Okay, please add 50 packets of Chips (PROD-ITC-CHIPS) and 2 units of Stayfree XL (PROD-STAYFREE-XL).", sender: "customer", timestamp: "2 days ago" },
-      ],
-      extraction: {
-        items: [
-          { sku_id: "PROD-ITC-CHIPS", product_name: "Chips", quantity: 50, unit_price: 10.0 },
-          { sku_id: "PROD-STAYFREE-XL", product_name: "Stayfree XL", quantity: 2, unit_price: 1250.0 }
-        ],
-        confidence: "97%",
-        status: "Draft"
-      }
-    };
-  } else if (name.includes("jayam")) {
-    return {
-      unreadCount: 0,
-      messages: [
-        { id: 1, text: "Need 100 packets of Chips (PROD-ITC-CHIPS).", sender: "customer", timestamp: "3 days ago" },
-        { id: 2, text: "Noted, booking them now.", sender: "operator", timestamp: "3 days ago" }
-      ],
-      extraction: {
-        items: [
-          { sku_id: "PROD-ITC-CHIPS", product_name: "Chips", quantity: 100, unit_price: 10.0 }
-        ],
-        confidence: "99%",
-        status: "Draft"
-      }
-    };
-  } else if (name.includes("balaji")) {
-    return {
-      unreadCount: 0,
-      messages: [
-        { id: 1, text: "Are there any offers on HUL Soap?", sender: "customer", timestamp: "4 days ago" },
-        { id: 2, text: "Current price is 45 per unit. For orders above 100 units, we offer 5% cash discount.", sender: "operator", timestamp: "4 days ago" },
-        { id: 3, text: "Great, please send 120 units of HUL Soap (PROD-HUL-SOAP).", sender: "customer", timestamp: "4 days ago" }
-      ],
-      extraction: {
-        items: [
-          { sku_id: "PROD-HUL-SOAP", product_name: "Tata Premium Soap", quantity: 120, unit_price: 45.0 }
-        ],
-        confidence: "96%",
-        status: "Draft"
-      }
-    };
-  } else {
-    return {
-      unreadCount: 0,
-      messages: [
-        { id: 1, text: "Hello, we want to place a standard grocery replenishment order.", sender: "customer", timestamp: "Just now" }
-      ],
-      extraction: null
-    };
-  }
-};
+interface CustomerThread {
+  order: ThreadOrder | null;
+  items: ThreadItem[];
+  total: number;
+  has_unmatched: boolean;
+}
 
 export default function MessagesPage() {
   const [activeTenantId, setActiveTenantId] = useState("");
@@ -167,9 +80,13 @@ export default function MessagesPage() {
   const [chatStreams, setChatStreams] = useState<Record<string, Message[]>>({});
   const [unreadStates, setUnreadStates] = useState<Record<string, number>>({});
   const [inputText, setInputText] = useState("");
-  
+
+  // Real WhatsApp-ingested order for the selected customer (replaces mock extraction).
+  const [thread, setThread] = useState<CustomerThread | null>(null);
+  const [threadLoading, setThreadLoading] = useState(false);
+
   const [submittingOrder, setSubmittingOrder] = useState(false);
-  const [approvedOrders, setApprovedOrders] = useState<Record<string, { internalId: string; id: string }>>({});
+  const [confirmedOrderIds, setConfirmedOrderIds] = useState<Record<string, boolean>>({});
 
   // Triage state variables
   const [activeFeedTab, setActiveFeedTab] = useState<"inbox" | "triage">("inbox");
@@ -187,21 +104,21 @@ export default function MessagesPage() {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
       
       // Fetch orders
-      const ordersResp = await fetch(`${apiBase}/api/v1/orders?tenant_id=${activeTenantId}`, {
+      const ordersResp = await fetch(`${apiBase}/api/v1/orders?tenant_id=${activeTenantId}&limit=200`, {
         credentials: "include"
       });
       if (ordersResp.ok) {
         const ordersData = await ordersResp.json();
-        setOrders(ordersData);
+        setOrders(ordersData.items ?? ordersData);
       }
 
       // Fetch products catalog
-      const productsResp = await fetch(`${apiBase}/api/v1/products?tenant_id=${activeTenantId}`, {
+      const productsResp = await fetch(`${apiBase}/api/v1/products?tenant_id=${activeTenantId}&limit=200`, {
         credentials: "include"
       });
       if (productsResp.ok) {
         const productsData = await productsResp.json();
-        setProductsList(productsData);
+        setProductsList(productsData.items ?? productsData);
       }
     } catch (err) {
       console.error("Failed to fetch triage data:", err);
@@ -340,24 +257,36 @@ export default function MessagesPage() {
     fetchCustomers();
   }, [fetchCustomers]);
 
-  // Sync / Initialize chat states from customers list
+  // Fetch the real WhatsApp-ingested order thread when the selected customer changes.
   useEffect(() => {
-    if (customers.length === 0) return;
-    
-    const initialChats: Record<string, Message[]> = { ...chatStreams };
-    const initialUnreads: Record<string, number> = { ...unreadStates };
-    
-    customers.forEach((c) => {
-      if (!initialChats[c.id]) {
-        const mock = getMockDataForCustomer(c.retailer_name);
-        initialChats[c.id] = mock.messages as Message[];
-        initialUnreads[c.id] = mock.unreadCount;
+    if (!selectedCustomer || !activeTenantId) {
+      setThread(null);
+      return;
+    }
+    let cancelled = false;
+    const loadThread = async () => {
+      setThreadLoading(true);
+      try {
+        const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+        const resp = await fetch(
+          `${apiBase}/api/v1/dashboard/customer-whatsapp-thread/${selectedCustomer.id}?tenant_id=${activeTenantId}`,
+          { credentials: "include" }
+        );
+        if (!resp.ok) throw new Error("Failed to load thread");
+        const data: CustomerThread = await resp.json();
+        if (!cancelled) setThread(data);
+      } catch (err) {
+        console.error("Failed to load customer thread:", err);
+        if (!cancelled) setThread({ order: null, items: [], total: 0, has_unmatched: false });
+      } finally {
+        if (!cancelled) setThreadLoading(false);
       }
-    });
-    
-    setChatStreams(initialChats);
-    setUnreadStates(initialUnreads);
-  }, [customers]);
+    };
+    loadThread();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedCustomer, activeTenantId]);
 
   // Scroll to bottom of chat
   const scrollToBottom = () => {
@@ -397,59 +326,38 @@ export default function MessagesPage() {
     setInputText("");
   };
 
-  // Submit parsed items directly to POST /api/v1/orders
-  const handleApproveOrder = async () => {
-    if (!selectedCustomer) return;
-    const mockData = getMockDataForCustomer(selectedCustomer.retailer_name);
-    const extraction = mockData.extraction;
-    
-    if (!extraction || extraction.items.length === 0) {
-      showToast("No structured items parsed for this retailer.", "error");
+  // Confirm the existing WhatsApp-ingested order (Draft -> Confirmed).
+  const handleConfirmOrder = async () => {
+    if (!thread?.order) return;
+    const order = thread.order;
+
+    if (thread.has_unmatched) {
+      showToast("Resolve unmatched SKUs in the Triage Queue before confirming.", "error");
       return;
     }
-    
+
     setSubmittingOrder(true);
     try {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-      const payload = {
-        tenant_id: activeTenantId,
-        customer_id: selectedCustomer.id,
-        source: "WhatsApp",
-        status: "Draft",
-        items: extraction.items.map(item => ({
-          sku_id: item.sku_id,
-          quantity: item.quantity,
-          unit_price: item.unit_price
-        }))
-      };
-      
-      const response = await fetch(`${apiBase}/api/v1/orders`, {
+      const response = await fetch(`${apiBase}/api/v1/orders/${order.id}/confirm`, {
         method: "POST",
         credentials: "include",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(payload)
+        headers: { "Content-Type": "application/json" }
       });
-      
+
       const result = await response.json();
-      
+
       if (response.ok && result.status === "success") {
-        showToast(`Digital Order generated successfully: ${result.internal_order_id}`, "success");
-        setApprovedOrders(prev => ({
-          ...prev,
-          [selectedCustomer.id]: {
-            internalId: result.internal_order_id,
-            id: result.order_id
-          }
-        }));
+        showToast(`Order ${order.order_id} confirmed.`, "success");
+        setConfirmedOrderIds(prev => ({ ...prev, [order.id]: true }));
+        // Refresh triage feed so any state changes are reflected.
+        fetchTriageData();
       } else {
-        const errorMsg = result.detail || "Standard Order creation error.";
-        showToast(errorMsg, "error");
+        showToast(result.detail || "Order confirmation failed.", "error");
       }
     } catch (err: any) {
       console.error(err);
-      showToast("Network breakdown during Order routing transaction.", "error");
+      showToast("Network failure during order confirmation.", "error");
     } finally {
       setSubmittingOrder(false);
     }
@@ -461,14 +369,27 @@ export default function MessagesPage() {
     c.phone.includes(searchQuery)
   );
 
-  const activeMessages = selectedCustomer ? chatStreams[selectedCustomer.id] || [] : [];
-  const activeExtraction = selectedCustomer ? getMockDataForCustomer(selectedCustomer.retailer_name).extraction : null;
-  const isApproved = selectedCustomer ? approvedOrders[selectedCustomer.id] : null;
+  // Synthesize a chat bubble from the real ingested order, then append operator-typed messages.
+  const syntheticMessages: Message[] = thread?.order
+    ? [{
+        id: -1,
+        sender: "customer",
+        timestamp: thread.order.created_on,
+        text:
+          `Order ${thread.order.order_id} received via WhatsApp:\n` +
+          thread.items.map(it => `• ${it.quantity} × ${it.product_name}`).join("\n")
+      }]
+    : [];
+  const operatorMessages = selectedCustomer ? chatStreams[selectedCustomer.id] || [] : [];
+  const activeMessages = [...syntheticMessages, ...operatorMessages];
 
-  // Calculate order total
-  const orderTotal = activeExtraction 
-    ? activeExtraction.items.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0)
-    : 0;
+  const activeOrder = thread?.order || null;
+  const activeItems = thread?.items || [];
+  const orderTotal = thread?.total || 0;
+  const matchedCount = activeItems.filter(it => it.sku_id !== "UNMATCHED_SKU" && it.sku_id !== "UNMATCHED_TRIAGE_SKU").length;
+  const isConfirmed = activeOrder
+    ? (confirmedOrderIds[activeOrder.id] || activeOrder.status === "Confirmed")
+    : false;
 
   if (!activeTenantId) {
     return (
@@ -479,28 +400,28 @@ export default function MessagesPage() {
   }
 
   return (
-    <div className="flex bg-slate-50 min-h-screen text-slate-800 font-figtree overflow-hidden">
-      {/* Sidebar panel * /}
+    <div className="flex bg-slate-50 min-h-screen text-slate-800 font-figtree overflow-x-auto">
+      {/* Sidebar panel */}
       <Sidebar
         activeTab="Messages"
         setActiveTab={() => {}}
         tenantName={getTenantName()}
       />
 
-      {/* Main viewport * /}
+      {/* Main viewport */}
       <div className="flex-1 pl-64 flex flex-col h-screen overflow-hidden">
         
-        {/* Top bar * /}
+        {/* Top bar */}
         <DashboardHeader
           activeTenantId={activeTenantId}
           setActiveTenantId={handleTenantChange}
           tenantName={getTenantName()}
         />
 
-        {/* Three-pane layout cockpit wrapper * /}
-        <div className="flex flex-1 overflow-hidden mt-16">
+        {/* Three-pane layout cockpit wrapper */}
+        <div className="flex flex-1 overflow-hidden mt-16 min-w-[1024px]">
           
-          {/* Panel 1: Left Pane (Retailers List) * /}
+          {/* Panel 1: Left Pane (Retailers List) */}
           <div className="w-80 border-r border-slate-200 bg-white flex flex-col h-full shadow-sm">
             <div className="p-4 border-b border-slate-100 flex items-center justify-between">
               <h2 className="font-bold text-lg text-slate-800 flex items-center gap-2">
@@ -514,7 +435,7 @@ export default function MessagesPage() {
               )}
             </div>
 
-            {/* Search Input * /}
+            {/* Search Input */}
             <div className="p-3 border-b border-slate-100 bg-slate-50/50">
               <div className="relative">
                 <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
@@ -528,7 +449,7 @@ export default function MessagesPage() {
               </div>
             </div>
 
-            {/* Feed Tab Bar * /}
+            {/* Feed Tab Bar */}
             <div className="flex border-b border-slate-100 bg-white">
               <button
                 onClick={() => setActiveFeedTab("inbox")}
@@ -557,7 +478,7 @@ export default function MessagesPage() {
               </button>
             </div>
 
-            {/* Customers list container * /}
+            {/* Customers list container */}
             <div className="flex-1 overflow-y-auto divide-y divide-slate-50">
               {activeFeedTab === "inbox" ? (
                 loading ? (
@@ -588,12 +509,12 @@ export default function MessagesPage() {
                             : "hover:bg-slate-50/60 border-l-4 border-transparent"
                         }`}
                       >
-                        {/* Avatar * /}
+                        {/* Avatar */}
                         <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center font-bold text-slate-600 text-sm border border-slate-200 shadow-sm flex-shrink-0">
                           {c.retailer_name.substring(0, 2).toUpperCase()}
                         </div>
 
-                        {/* Info & Last Msg * /}
+                        {/* Info & Last Msg */}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between">
                             <h4 className="font-semibold text-xs text-slate-800 truncate">
@@ -670,11 +591,11 @@ export default function MessagesPage() {
             </div>
           </div>
 
-          {/* Panel 2: Middle Pane (WhatsApp Chat Stream) * /}
+          {/* Panel 2: Middle Pane (WhatsApp Chat Stream) */}
           <div className="flex-1 bg-[#efeae2] flex flex-col h-full border-r border-slate-200 relative">
             {selectedCustomer ? (
               <>
-                {/* Chat Header * /}
+                {/* Chat Header */}
                 <div className="bg-white border-b border-slate-200 p-4 flex items-center justify-between shadow-sm z-10">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-brand-blue flex items-center justify-center font-bold text-white text-sm">
@@ -695,14 +616,21 @@ export default function MessagesPage() {
                   </div>
                 </div>
 
-                {/* Chat Messages Log * /}
+                {/* Chat Messages Log */}
                 <div className="flex-1 overflow-y-auto p-4 space-y-3 flex flex-col">
-                  {/* WhatsApp background pattern (represented by CSS styling of this div) * /}
+                  {/* WhatsApp background pattern (represented by CSS styling of this div) */}
                   <div className="text-center my-2">
                     <span className="bg-slate-200/80 text-slate-600 text-[10px] font-bold px-3 py-1 rounded-lg">
                       TODAY
                     </span>
                   </div>
+
+                  {!threadLoading && activeMessages.length === 0 && (
+                    <div className="flex-1 flex flex-col items-center justify-center text-slate-400 gap-2 py-10">
+                      <MessageSquare className="w-8 h-8" />
+                      <p className="text-xs font-semibold">No WhatsApp orders ingested for this retailer yet.</p>
+                    </div>
+                  )}
 
                   {activeMessages.map((msg, index) => {
                     const isOp = msg.sender === "operator";
@@ -715,7 +643,7 @@ export default function MessagesPage() {
                             : "bg-white text-slate-800 self-start rounded-tl-none border border-slate-200"
                         }`}
                       >
-                        {/* Sender Label * /}
+                        {/* Sender Label */}
                         <span className={`text-[9px] font-bold mb-1 block uppercase tracking-wider ${
                           isOp ? "text-emerald-700" : "text-slate-500"
                         }`}>
@@ -726,7 +654,7 @@ export default function MessagesPage() {
                           {msg.text}
                         </p>
                         
-                        {/* Timestamp & double checkmarks * /}
+                        {/* Timestamp & double checkmarks */}
                         <div className="flex items-center justify-end gap-1 mt-1 text-[9px] text-slate-400 font-semibold">
                           <span>{msg.timestamp}</span>
                           {isOp && <CheckCheck className="w-3.5 h-3.5 text-blue-500" />}
@@ -737,7 +665,7 @@ export default function MessagesPage() {
                   <div ref={chatEndRef} />
                 </div>
 
-                {/* Chat Input panel * /}
+                {/* Chat Input panel */}
                 <form
                   onSubmit={handleSendMessage}
                   className="bg-white border-t border-slate-200 p-4 flex items-center gap-3 shadow-md z-10"
@@ -765,7 +693,7 @@ export default function MessagesPage() {
             )}
           </div>
 
-          {/* Panel 3: Right Pane (AI Order Ingestion Engine) * /}
+          {/* Panel 3: Right Pane (AI Order Ingestion Engine) */}
           <div className="w-96 bg-white flex flex-col h-full overflow-y-auto border-l border-slate-200">
             {activeFeedTab === "triage" && selectedTriageOrderId ? (
               // Triage Resolution Pane
@@ -863,29 +791,34 @@ export default function MessagesPage() {
                   )}
                 </div>
               </div>
-            ) : selectedCustomer && activeExtraction ? (
+            ) : threadLoading ? (
+              <div className="flex flex-col items-center justify-center h-full gap-3 text-slate-400">
+                <Loader2 className="w-6 h-6 text-emerald-500 animate-spin" />
+                <span className="text-xs font-semibold">Loading ingested order...</span>
+              </div>
+            ) : selectedCustomer && activeOrder ? (
               // Normal AI Extraction Pane
               <div className="flex flex-col h-full">
-                {/* AI Banner Header * /}
+                {/* AI Banner Header */}
                 <div className="bg-gradient-to-r from-emerald-50 to-teal-50 border-b border-emerald-100 p-4">
                   <div className="flex items-center gap-2 text-emerald-800">
                     <div className="w-8 h-8 rounded-lg bg-emerald-500 text-white flex items-center justify-center">
                       <Bot className="w-5 h-5" />
                     </div>
                     <div>
-                      <h3 className="font-bold text-sm">Gemini AI Order Generator</h3>
+                      <h3 className="font-bold text-sm">Gemini AI Ingested Order</h3>
                       <p className="text-[10px] text-emerald-600 font-semibold flex items-center gap-1 mt-0.5">
                         <Sparkles className="w-3 h-3 animate-pulse" />
-                        <span>Confidence: {activeExtraction.confidence} (Flash-1.5)</span>
+                        <span>{activeOrder.order_id} · {activeOrder.created_on}</span>
                       </p>
                     </div>
                   </div>
                 </div>
 
-                {/* Extraction Body * /}
+                {/* Extraction Body */}
                 <div className="p-4 space-y-5 flex-1">
                   
-                  {/* Scope details * /}
+                  {/* Scope details */}
                   <div className="bg-slate-50 border border-slate-100 rounded-xl p-3.5 space-y-2">
                     <div className="flex justify-between items-center text-xs">
                       <span className="font-semibold text-slate-400">Customer Shop</span>
@@ -899,14 +832,20 @@ export default function MessagesPage() {
                       </span>
                     </div>
                     <div className="flex justify-between items-center text-xs">
-                      <span className="font-semibold text-slate-400">Order Format Status</span>
-                      <span className="bg-amber-50 text-amber-700 font-bold px-2 py-0.5 rounded border border-amber-100 text-[10px]">
-                        Draft / Pending
+                      <span className="font-semibold text-slate-400">Order Status</span>
+                      <span className={`font-bold px-2 py-0.5 rounded border text-[10px] ${
+                        activeOrder.status === "Confirmed"
+                          ? "bg-emerald-50 text-emerald-700 border-emerald-100"
+                          : thread?.has_unmatched
+                            ? "bg-rose-50 text-rose-700 border-rose-100"
+                            : "bg-amber-50 text-amber-700 border-amber-100"
+                      }`}>
+                        {activeOrder.status}
                       </span>
                     </div>
                   </div>
 
-                  {/* Structured SKU Table * /}
+                  {/* Structured SKU Table */}
                   <div className="space-y-2">
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
                       Extracted Order Line Items
@@ -922,13 +861,17 @@ export default function MessagesPage() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                          {activeExtraction.items.map((item, index) => {
-                            const total = item.quantity * item.unit_price;
+                          {activeItems.map((item, index) => {
+                            const isUnmatched = item.sku_id === "UNMATCHED_SKU" || item.sku_id === "UNMATCHED_TRIAGE_SKU";
                             return (
-                              <tr key={index} className="hover:bg-slate-50/50 font-medium">
+                              <tr key={item.id || index} className="hover:bg-slate-50/50 font-medium">
                                 <td className="py-2.5 px-3">
-                                  <p className="font-bold text-slate-700">{item.product_name}</p>
-                                  <p className="text-[9px] text-slate-400 font-semibold">{item.sku_id}</p>
+                                  <p className={`font-bold ${isUnmatched ? "text-rose-600" : "text-slate-700"}`}>
+                                    {isUnmatched ? "Unmatched item" : item.product_name}
+                                  </p>
+                                  <p className="text-[9px] text-slate-400 font-semibold">
+                                    {isUnmatched ? "Needs triage" : item.sku_id}
+                                  </p>
                                 </td>
                                 <td className="py-2.5 px-2 text-center text-slate-600">
                                   {item.quantity}
@@ -937,7 +880,7 @@ export default function MessagesPage() {
                                   ₹{item.unit_price.toFixed(2)}
                                 </td>
                                 <td className="py-2.5 px-3 text-right font-bold text-slate-700">
-                                  ₹{total.toLocaleString([], { minimumFractionDigits: 2 })}
+                                  ₹{item.total_price.toLocaleString([], { minimumFractionDigits: 2 })}
                                 </td>
                               </tr>
                             );
@@ -955,55 +898,53 @@ export default function MessagesPage() {
                     </div>
                   </div>
 
-                  {/* Validation Metrics * /}
+                  {/* Validation Metrics */}
                   <div className="space-y-2">
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                      Operations Safety Checks
+                      Catalog Resolution
                     </label>
                     <div className="space-y-2">
                       <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex items-center justify-between text-xs font-semibold">
                         <div className="flex items-center gap-2">
-                          <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                          <span className="text-slate-600">Real-time Catalog Match</span>
+                          {thread?.has_unmatched ? (
+                            <AlertCircle className="w-4 h-4 text-rose-600" />
+                          ) : (
+                            <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                          )}
+                          <span className="text-slate-600">SKU Catalog Match</span>
                         </div>
-                        <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 text-[10px]">
-                          100% SKU Resolved
+                        <span className={`font-bold px-2 py-0.5 rounded border text-[10px] ${
+                          thread?.has_unmatched
+                            ? "text-rose-700 bg-rose-50 border-rose-100"
+                            : "text-emerald-700 bg-emerald-50 border-emerald-100"
+                        }`}>
+                          {matchedCount}/{activeItems.length} resolved
                         </span>
                       </div>
 
-                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex items-center justify-between text-xs font-semibold">
-                        <div className="flex items-center gap-2">
-                          <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                          <span className="text-slate-600">Physical Inventory Check</span>
-                        </div>
-                        <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 text-[10px]">
-                          In Stock ✅
-                        </span>
-                      </div>
-
-                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex items-center justify-between text-xs font-semibold">
-                        <div className="flex items-center gap-2">
-                          <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                          <span className="text-slate-600">B2B Credit Guardrail</span>
-                        </div>
-                        <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 text-[10px]">
-                          Limit Approved ✅
-                        </span>
-                      </div>
+                      {thread?.has_unmatched && (
+                        <button
+                          onClick={() => { setActiveFeedTab("triage"); handleSelectTriageOrder({ id: activeOrder.id, customer: selectedCustomer?.retailer_name }); }}
+                          className="w-full bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl p-3 flex items-center justify-between text-xs font-bold text-rose-700 transition-all"
+                        >
+                          <span>Resolve unmatched SKUs in Triage</span>
+                          <ArrowRight className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
 
-                {/* Approve Button overlay or action * /}
+                {/* Confirm action */}
                 <div className="p-4 border-t border-slate-100 bg-slate-50/50">
-                  {isApproved ? (
+                  {isConfirmed ? (
                     <div className="bg-slate-100 border border-slate-200 rounded-xl p-4 text-center space-y-3">
                       <div className="flex items-center justify-center gap-2 text-slate-500 font-bold text-xs uppercase tracking-wide">
                         <CheckCircle2 className="w-5 h-5 text-emerald-500" />
-                        <span>Order Approved & Committed</span>
+                        <span>Order Confirmed</span>
                       </div>
                       <div className="text-sm font-extrabold text-brand-blue bg-white p-2 rounded-lg border border-slate-200 shadow-sm flex items-center justify-center gap-2">
-                        <span>{isApproved.internalId}</span>
+                        <span>{activeOrder.order_id}</span>
                         <Link href="/dashboard/orders" className="text-slate-400 hover:text-brand-blue" title="Go to Orders Grid">
                           <ExternalLink className="w-4 h-4" />
                         </Link>
@@ -1014,19 +955,19 @@ export default function MessagesPage() {
                     </div>
                   ) : (
                     <button
-                      onClick={handleApproveOrder}
-                      disabled={submittingOrder}
-                      className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold py-3 px-6 rounded-xl shadow-lg hover:shadow-emerald-100 transition-all duration-300 transform active:scale-95 flex items-center justify-center gap-2 border border-emerald-500/25"
+                      onClick={handleConfirmOrder}
+                      disabled={submittingOrder || thread?.has_unmatched}
+                      className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold py-3 px-6 rounded-xl shadow-lg hover:shadow-emerald-100 transition-all duration-300 transform active:scale-95 flex items-center justify-center gap-2 border border-emerald-500/25 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {submittingOrder ? (
                         <>
                           <Loader2 className="w-4 h-4 animate-spin" />
-                          <span>Creating Digital Order...</span>
+                          <span>Confirming Order...</span>
                         </>
                       ) : (
                         <>
                           <Bot className="w-4 h-4" />
-                          <span>Approve & Create Digital Order</span>
+                          <span>{thread?.has_unmatched ? "Resolve Triage First" : "Confirm Order"}</span>
                         </>
                       )}
                     </button>
@@ -1036,9 +977,9 @@ export default function MessagesPage() {
             ) : (
               <div className="h-full flex flex-col items-center justify-center text-slate-400 p-6 text-center gap-3">
                 <Bot className="w-12 h-12 text-slate-300" />
-                <h4 className="font-bold text-sm text-slate-600">No Pending AI Extraction</h4>
+                <h4 className="font-bold text-sm text-slate-600">No Ingested Order</h4>
                 <p className="text-xs font-semibold leading-relaxed max-w-[200px]">
-                  Select a retailer and place a structured request inside the chat stream to parse SKUs.
+                  This retailer has no WhatsApp-ingested order yet. Orders captured via the WhatsApp webhook will appear here.
                 </p>
               </div>
             )}
@@ -1048,7 +989,7 @@ export default function MessagesPage() {
 
       </div>
 
-      {/* Local Toast UI notification * /}
+      {/* Local Toast UI notification */}
       {toast.show && (
         <div className={`fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-3 rounded-lg shadow-lg border transition-all duration-300 ${
           toast.type === "success" 
@@ -1068,11 +1009,4 @@ export default function MessagesPage() {
       )}
     </div>
   );
-}
-
-*/
-
-import { redirect } from "next/navigation";
-export default function MessagesPageDisabled() {
-  redirect("/dashboard/orders");
 }

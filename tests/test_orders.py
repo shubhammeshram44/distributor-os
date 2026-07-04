@@ -427,11 +427,12 @@ def test_list_orders(db_session, client):
     response = client.get(f"/api/v1/orders?tenant_id={tenant.id}")
     assert response.status_code == 200
     data = response.json()
-    assert len(data) >= 1
-    assert data[0]["order_id"] == "ORD-LIST-TEST-1"
-    assert data[0]["customer"] == "List Customer"
-    assert data[0]["amount"] == 225.0
-    assert data[0]["status"] == "Pending"  # Draft maps to Pending
+    items = data["items"]
+    assert len(items) >= 1
+    assert items[0]["order_id"] == "ORD-LIST-TEST-1"
+    assert items[0]["customer"] == "List Customer"
+    assert items[0]["amount"] == 225.0
+    assert items[0]["status"] == "Pending"  # Draft maps to Pending
 
 
 def test_credit_limit_guardrail_success_and_failure(db_session, client):
@@ -566,10 +567,11 @@ def test_list_orders_with_invoice_payment_status(db_session, client):
     response = client.get(f"/api/v1/orders?tenant_id={tenant.id}")
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 2
+    items = data["items"]
+    assert len(items) == 2
 
     # Map results by order_id
-    results_map = {item["order_id"]: item for item in data}
+    results_map = {item["order_id"]: item for item in items}
 
     # Verify Order 1 (no invoice, should default to UNPAID and 0.0 amount_paid)
     assert "ORD-PAY-LIST-1" in results_map

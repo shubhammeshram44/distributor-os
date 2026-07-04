@@ -47,7 +47,7 @@ export default function RecentOrders({
         });
         if (res.ok) {
           const data = await res.json();
-          setProductsList(data);
+          setProductsList(data.items ?? data);
         }
       } catch (err) {
         console.error("Failed to load products list for resolution drawer:", err);

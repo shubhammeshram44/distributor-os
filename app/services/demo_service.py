@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
 from app.database import tenant_context
 from app.models.tenant import DistributorTenant
@@ -17,14 +18,20 @@ from app.services.tenant_service import DEMO_TENANT_ID
 
 def ensure_demo_data(db: Session, tenant_id: uuid.UUID | None = None):
     """
-    Seeds the database with the exact B2B distributor data matching the Operations Dashboard
-    screenshot if the database is empty.
+    Seeds the database with demo data for the demo tenant if not already seeded.
+    Only runs for the well-known demo tenant ID — all other tenants are ignored.
     """
     # Hard multi-tenant lockout constraint
     if tenant_id != DEMO_TENANT_ID and str(tenant_id) != str(DEMO_TENANT_ID):
         return  # Abort immediately. NEVER seed default rows into custom distributor profiles.
 
-    # 1. Check if the default tenant exists
+    try:
+        _seed_demo_data(db)
+    except IntegrityError:
+        db.rollback()  # Concurrent request already seeded — safe to ignore
+
+
+def _seed_demo_data(db: Session):
     tenant = db.get(DistributorTenant, DEMO_TENANT_ID)
     if not tenant:
         tenant = DistributorTenant(id=DEMO_TENANT_ID, name="S.V. Distributors")

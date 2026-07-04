@@ -2,7 +2,7 @@ import uuid
 import base64
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status, Cookie, Header, BackgroundTasks
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select, and_, or_
 from sqlalchemy.orm import Session, aliased, joinedload
 from app.database import get_db, tenant_context
@@ -203,7 +203,7 @@ def _fire_dispatched_notification_sync(tenant_id: str, customer_id: str, order_i
 
 class ShipmentCreatePayload(BaseModel):
     driver_id: uuid.UUID
-    vehicle_number: str
+    vehicle_number: str = Field(..., min_length=1)
     order_ids: list[uuid.UUID]
 
 

@@ -60,11 +60,10 @@ export default function Sidebar({ activeTab, setActiveTab, tenantName }: Sidebar
     icon?: any;
     href?: string;
     type?: string;
+    badge?: string;
   }[] = [
     { name: "Dashboard", icon: LayoutDashboard, href: "/dashboard" },
-    // Hidden 2026-06-28: Messages tab disabled, see /dashboard/messages/page.tsx for details.
-    // Uncomment this line + the guard in messages/page.tsx to re-enable.
-    // { name: "Messages", icon: MessageSquare, href: "/dashboard/messages" },
+    { name: "Messages", icon: MessageSquare, href: "/dashboard/messages" },
     { name: "Orders", icon: ShoppingCart, href: "/dashboard/orders" },
     { name: "Inventory", icon: Box, href: "/dashboard/inventory" },
     { name: "Products", icon: Layers, href: "/dashboard/products" },
@@ -78,7 +77,7 @@ export default function Sidebar({ activeTab, setActiveTab, tenantName }: Sidebar
     { name: "Integrations", icon: Link2, href: "/dashboard/settings/integrations" },
     { name: "Notifications", icon: Bell, href: "/dashboard/settings/notifications" },
     { name: "Payments", icon: CreditCard, href: "/dashboard/settings/payments" },
-    { name: "Automations", icon: Zap }
+    { name: "Automations", icon: Zap, badge: "Soon" }
   ];
 
 
@@ -114,13 +113,11 @@ export default function Sidebar({ activeTab, setActiveTab, tenantName }: Sidebar
             ? (item.href === "/dashboard" ? pathname === "/dashboard" || pathname === "/" : pathname.startsWith(item.href))
             : activeTab === item.name;
 
-          const className = `w-full flex items-center ${
-            isCollapsed ? 'justify-center p-3' : 'gap-3 px-4 py-3'
-          } rounded-lg text-sm font-medium transition-all text-left relative group ${
-            isActive
+          const className = `w-full flex items-center ${isCollapsed ? 'justify-center p-3' : 'gap-3 px-4 py-3'
+            } rounded-lg text-sm font-medium transition-all text-left relative group ${isActive
               ? "bg-brand-blue text-white shadow-md shadow-brand-blue/20"
               : "text-brand-textMuted hover:bg-brand-darkHover hover:text-white"
-          }`;
+            }`;
 
           const tooltip = isCollapsed && (
             <span className="absolute left-full ml-3 px-2 py-1 bg-slate-950 text-white text-xs rounded-md whitespace-nowrap shadow-xl opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none z-50 invisible group-hover:visible">
@@ -134,9 +131,19 @@ export default function Sidebar({ activeTab, setActiveTab, tenantName }: Sidebar
                 key={item.name}
                 href={item.href}
                 className={className}
+                aria-label={item.name}
               >
                 <Icon className="w-5 h-5 flex-shrink-0" />
-                {!isCollapsed && <span className="ml-3 transition-opacity duration-200">{item.name}</span>}
+                {!isCollapsed && (
+                  <span className="ml-3 transition-opacity duration-200 flex items-center gap-2">
+                    {item.name}
+                    {item.badge && (
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 bg-slate-600 text-slate-200 rounded-full uppercase tracking-wide">
+                        {item.badge}
+                      </span>
+                    )}
+                  </span>
+                )}
                 {tooltip}
               </Link>
             );

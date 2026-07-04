@@ -136,7 +136,7 @@ def firebase_login(
             detail="Invalid Firebase token. Please re-authenticate."
         )
     except ValueError as ve:
-        logger.error(f"Firebase Initialization/Value Error: {ve}")
+        logger.warning(f"Firebase token rejected (malformed/empty): {ve}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Firebase token is invalid or has expired. Please request a new OTP."
@@ -161,8 +161,8 @@ def firebase_login(
     clean_10_digits = phone_number[-10:] if phone_number else ""
 
     user = db.query(User).filter(
-        (User.firebase_uid == uid) | 
-        (User.phone_number.like(f"%{clean_10_digits}")) | 
+        (User.firebase_uid == uid) |
+        (User.phone_number.like(f"%{clean_10_digits}")) |
         (User.email_or_phone.like(f"%{clean_10_digits}"))
     ).first()
 
@@ -199,12 +199,13 @@ def firebase_login(
     token = sign_jwt(token_payload)
 
     # Step 6: Set HttpOnly session cookie
+    _is_prod = os.getenv("ENVIRONMENT", "development") == "production"
     response.set_cookie(
         key="access_token",
         value=token,
         httponly=True,
-        secure=True,
-        samesite="none",
+        secure=_is_prod,
+        samesite="none" if _is_prod else "lax",
         max_age=3600 * 24,
     )
 
@@ -248,12 +249,13 @@ def _issue_session_response(
     }
     token = sign_jwt(token_payload)
 
+    _is_prod = os.getenv("ENVIRONMENT", "development") == "production"
     response.set_cookie(
         key="access_token",
         value=token,
         httponly=True,
-        secure=True,
-        samesite="none",
+        secure=_is_prod,
+        samesite="none" if _is_prod else "lax",
         max_age=3600 * 24,
     )
 

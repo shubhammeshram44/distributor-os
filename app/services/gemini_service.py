@@ -131,30 +131,6 @@ class GeminiService:
         elif any(phrase in normalized for phrase in ["gst lagana", "tax invoice", "gst bill", "tax bill", "company ka bill", "gst number", "gst invoice"]):
             extracted_pref = "GST_TAX_INVOICE"
 
-        # Check hardcoded test match patterns first for predictable test behavior
-        if "please send 50 hul soap and 12 itc aashirvaad aata" in normalized:
-            return AntigravityParsedOrder(
-                items=[
-                    ParsedOrderItem(raw_product_name="HUL Soap", quantity=50),
-                    ParsedOrderItem(raw_product_name="ITC Aashirvaad Aata", quantity=12)
-                ],
-                extracted_invoice_preference=extracted_pref
-            )
-        elif "need 50 hul soap" in normalized:
-            return AntigravityParsedOrder(
-                items=[
-                    ParsedOrderItem(raw_product_name="HUL Soap", quantity=50)
-                ],
-                extracted_invoice_preference=extracted_pref
-            )
-        elif "nestle maggi" in normalized:
-            return AntigravityParsedOrder(
-                items=[
-                    ParsedOrderItem(raw_product_name="Nestle Maggi", quantity=10)
-                ],
-                extracted_invoice_preference=extracted_pref
-            )
-
         # General regex matching mapping
         matches = re.finditer(r'(\d+)\s*(?:packets?|pkts?|bags?|kg|liters?|pcs?|units?|box)?\s+([A-Za-z0-9\s\u0900-\u097F]{3,20})', text, re.IGNORECASE)
         for match in matches:

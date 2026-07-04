@@ -13,6 +13,7 @@ class Product(Base, TenantMixin):
     pack_size: Mapped[str] = mapped_column(String(50), nullable=False)
     base_price: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
     stock_quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
+    is_active: Mapped[bool] = mapped_column(default=True, nullable=False, server_default="1")
 
     aliases: Mapped[list["ProductAlias"]] = relationship(back_populates="product", cascade="all, delete-orphan")
     prices: Mapped[list["ProductPrice"]] = relationship(back_populates="product", cascade="all, delete-orphan")

@@ -14,7 +14,21 @@ from app.database import tenant_context
 def fixture_client():
     return TestClient(app)
 
-def test_whatsapp_ingestion_success(db_session):
+def test_whatsapp_ingestion_success(db_session, monkeypatch):
+    # Mock the Gemini parser (no API key in tests) so parsing is deterministic.
+    from app.services.gemini_service import GeminiService, AntigravityParsedOrder, ParsedOrderItem
+    monkeypatch.setattr(
+        GeminiService,
+        "parse_order_text",
+        lambda self, text: AntigravityParsedOrder(
+            items=[
+                ParsedOrderItem(raw_product_name="HUL Soap", quantity=50),
+                ParsedOrderItem(raw_product_name="ITC Aashirvaad Aata", quantity=12),
+            ],
+            extracted_invoice_preference="UNSPECIFIED",
+        ),
+    )
+
     # 1. Setup Tenant
     tenant = DistributorTenant(name="Tata Distributors Ltd")
     db_session.add(tenant)

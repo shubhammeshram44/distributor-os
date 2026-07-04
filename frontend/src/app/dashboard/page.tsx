@@ -12,6 +12,7 @@ import InventorySummary from "@/components/InventorySummary";
 import DemandGapCard from "@/components/DemandGapCard";
 import ActivityFeed from "@/components/ActivityFeed";
 import { useDashboardData } from "@/hooks/useDashboardData";
+import ErrorBanner from "@/components/ui/ErrorBanner";
 import { ChevronDown, SlidersHorizontal, RefreshCw, CheckCircle2, AlertCircle, X } from "lucide-react";
 import WhatsAppSimulator from "@/components/WhatsAppSimulator";
 
@@ -56,7 +57,7 @@ export default function DashboardPage() {
           if (profileData.tenant?.name) {
             localStorage.setItem("tenant_name", profileData.tenant.name);
           }
-          
+
           if (!storedTenant && profileData.tenant?.id) {
             setTenantId(profileData.tenant.id);
             localStorage.setItem("tenant_id", profileData.tenant.id);
@@ -188,13 +189,13 @@ export default function DashboardPage() {
                   <h1 className="text-xl font-bold text-slate-800 tracking-tight">Dashboard</h1>
                   <p className="text-xs text-slate-400 font-semibold mt-0.5">Real-time operational workflow management</p>
                 </div>
-                
+
                 {/* Date Picker & Action Controls */}
                 <div className="flex items-center gap-3">
                   {/* Unified Timeframe Selector */}
                   <div className="flex items-center gap-2">
                     <label className="text-xs font-semibold text-slate-500">Timeframe:</label>
-                    <select 
+                    <select
                       value={timeframe}
                       onChange={(e) => {
                         setTimeframe(e.target.value);
@@ -251,6 +252,14 @@ export default function DashboardPage() {
                   </button>
                 </div>
               </div>
+
+              {/* API Error Banner */}
+              {error && (
+                <ErrorBanner
+                  message={`Dashboard data could not be loaded: ${error}`}
+                  onRetry={() => refreshAll()}
+                />
+              )}
 
               {/* A. Core Operational Metrics Row */}
               <MetricCards metrics={metrics} />
@@ -328,7 +337,7 @@ export default function DashboardPage() {
             <p className="text-xs font-bold text-slate-800">{toast.type === "success" ? "Success" : "Error"}</p>
             <p className="text-[11px] text-slate-500 font-semibold mt-0.5 break-words">{toast.message}</p>
           </div>
-          <button 
+          <button
             onClick={() => setToast(prev => ({ ...prev, show: false }))}
             className="text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-50 transition-all shrink-0"
           >

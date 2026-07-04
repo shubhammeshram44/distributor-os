@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, Suspense } from "react";
 import Sidebar from "@/components/Sidebar";
 import DashboardHeader from "@/components/DashboardHeader";
 import { useSearchParams } from "next/navigation";
+import Pagination from "@/components/ui/Pagination";
 import {
   Search,
   Loader2,
@@ -15,7 +16,8 @@ import {
   TrendingUp,
   AlertTriangle,
   Coins,
-  Edit3
+  Edit3,
+  CreditCard
 } from "lucide-react";
 
 interface CustomerRow {
@@ -65,6 +67,17 @@ function CustomersContent() {
   const [loadingStatement, setLoadingStatement] = useState(false);
   const [statementCustomerName, setStatementCustomerName] = useState("");
 
+  // Payment history drawer states
+  const [isPaymentDrawerOpen, setIsPaymentDrawerOpen] = useState(false);
+  const [paymentHistory, setPaymentHistory] = useState<any[]>([]);
+  const [loadingPayments, setLoadingPayments] = useState(false);
+  const [paymentDrawerCustomer, setPaymentDrawerCustomer] = useState("");
+
+  // Pagination states
+  const [total, setTotal] = useState(0);
+  const [skip, setSkip] = useState(0);
+  const limit = 50;
+
 
   const [toast, setToast] = useState<{ show: boolean; message: string; type: "success" | "error" }>({
     show: false,
@@ -100,20 +113,25 @@ function CustomersContent() {
   };
 
   // Fetch all customers for active tenant
-  const fetchCustomers = useCallback(async (tenantId?: string) => {
+  const fetchCustomers = useCallback(async (tenantId?: string, newSkip?: number) => {
     const targetTenant = (typeof tenantId === "string") ? tenantId : activeTenantId;
     if (!targetTenant) return;
     setLoading(true);
+    const currentSkip = newSkip !== undefined ? newSkip : skip;
     try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-      const resp = await fetch(`${apiBase}/api/v1/dashboard/customers?tenant_id=${targetTenant}`, {
-        credentials: "include"
-      });
+      const resp = await fetch(
+        `${apiBase}/api/v1/customers?tenant_id=${targetTenant}&skip=${currentSkip}&limit=${limit}`,
+        { credentials: "include", headers: token ? { Authorization: `Bearer ${token}` } : {} }
+      );
       if (!resp.ok) throw new Error("Failed to fetch customers");
       const data = await resp.json();
-      setCustomers(data);
-      setTotalRetailers(data.length);
-      setTotalOutstanding(data.reduce((sum: number, c: any) => sum + c.outstanding_balance, 0));
+      const items = data.items ?? data;
+      setCustomers(items);
+      setTotal(data.total ?? items.length);
+      setTotalRetailers(data.total ?? items.length);
+      setTotalOutstanding(items.reduce((sum: number, c: any) => sum + (c.outstanding_balance ?? 0), 0));
       setError(null);
     } catch (err: any) {
       console.error("Customers load failed:", err);
@@ -121,21 +139,53 @@ function CustomersContent() {
     } finally {
       setLoading(false);
     }
-  }, [activeTenantId]);
+  }, [activeTenantId, skip, limit]);
 
   useEffect(() => {
     // 1. Immediately wipe out old data rows so they can never leak or persist
-    setCustomers([]); 
-    
+    setCustomers([]);
+
     // 2. Clear out any summary metric banners (Total Retailers, Outstanding Balances)
     setTotalRetailers(0);
     setTotalOutstanding(0);
 
     // 3. Initiate the secure network request for the new active tenant context
     if (activeTenantId) {
-      fetchCustomers(activeTenantId);
+      setSkip(0);
+      fetchCustomers(activeTenantId, 0);
     }
-  }, [activeTenantId, fetchCustomers]);
+  }, [activeTenantId]);
+
+  const handlePageChange = (newSkip: number) => {
+    setSkip(newSkip);
+    fetchCustomers(activeTenantId, newSkip);
+  };
+
+  const handleOpenPaymentHistory = async (customer: CustomerRow) => {
+    setPaymentDrawerCustomer(customer.retailer_name);
+    setIsPaymentDrawerOpen(true);
+    setLoadingPayments(true);
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const resp = await fetch(
+        `${apiBase}/api/v1/customers/${customer.id}/payments?tenant_id=${activeTenantId}`,
+        { credentials: "include", headers: token ? { Authorization: `Bearer ${token}` } : {} }
+      );
+      if (resp.ok) {
+        const data = await resp.json();
+        setPaymentHistory(data.items ?? []);
+      } else {
+        showToast("Failed to retrieve payment history.", "error");
+        setIsPaymentDrawerOpen(false);
+      }
+    } catch {
+      showToast("Network error loading payment history.", "error");
+      setIsPaymentDrawerOpen(false);
+    } finally {
+      setLoadingPayments(false);
+    }
+  };
 
   const handleOpenStatement = async (customer: CustomerRow) => {
     setStatementCustomerName(customer.retailer_name);
@@ -343,7 +393,7 @@ function CustomersContent() {
     <div className="flex bg-dashboard-bg min-h-screen text-slate-800">
       <Sidebar
         activeTab="Customers"
-        setActiveTab={() => {}}
+        setActiveTab={() => { }}
         tenantName={getTenantName()}
       />
 
@@ -542,12 +592,22 @@ function CustomersContent() {
                             )}
                           </td>
                           <td className="py-4 px-6 text-center">
-                            <button
-                              onClick={() => handleOpenStatement(c)}
-                              className="inline-flex items-center gap-1 bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 px-2.5 py-1 rounded-lg text-[10px] font-bold cursor-pointer transition-all shadow-sm"
-                            >
-                              <span>📄 View Statement</span>
-                            </button>
+                            <div className="flex items-center justify-center gap-1.5">
+                              <button
+                                onClick={() => handleOpenStatement(c)}
+                                className="inline-flex items-center gap-1 bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 px-2.5 py-1 rounded-lg text-[10px] font-bold cursor-pointer transition-all shadow-sm"
+                              >
+                                <span>📄 Statement</span>
+                              </button>
+                              <button
+                                onClick={() => handleOpenPaymentHistory(c)}
+                                className="inline-flex items-center gap-1 bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 px-2.5 py-1 rounded-lg text-[10px] font-bold cursor-pointer transition-all shadow-sm"
+                                title="Payment History"
+                              >
+                                <CreditCard className="w-3 h-3" />
+                                <span>Payments</span>
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -556,9 +616,58 @@ function CustomersContent() {
                 </table>
               )}
             </div>
+
+            {/* Pagination */}
+            {!loading && !error && total > limit && (
+              <div className="p-4 border-t border-dashboard-border">
+                <Pagination total={total} skip={skip} limit={limit} onPageChange={handlePageChange} />
+              </div>
+            )}
           </div>
         </main>
       </div>
+
+      {/* Payment History Drawer */}
+      {isPaymentDrawerOpen && (
+        <div className="fixed inset-y-0 right-0 z-50 flex justify-end pointer-events-none">
+          <div className="w-[420px] bg-white h-screen shadow-2xl flex flex-col animate-slide-in border-l border-slate-200 pointer-events-auto">
+            <div className="p-5 border-b border-dashboard-border flex items-center justify-between bg-brand-dark text-white">
+              <div>
+                <h3 className="font-bold text-base">Payment History</h3>
+                <p className="text-xs text-brand-textMuted mt-0.5">{paymentDrawerCustomer}</p>
+              </div>
+              <button onClick={() => setIsPaymentDrawerOpen(false)} className="p-1.5 rounded-full hover:bg-brand-darkHover transition-all cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-5 space-y-3">
+              {loadingPayments ? (
+                [1, 2, 3].map(i => <div key={i} className="animate-pulse h-14 bg-slate-100 rounded-xl" />)
+              ) : paymentHistory.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-40 text-center gap-2">
+                  <CreditCard className="w-8 h-8 text-slate-300" />
+                  <p className="text-sm font-semibold text-slate-500">No payments recorded</p>
+                  <p className="text-xs text-slate-400">Payments will appear here once recorded</p>
+                </div>
+              ) : (
+                paymentHistory.map((p: any, i: number) => (
+                  <div key={i} className="p-3 rounded-xl border border-dashboard-border bg-slate-50/50 flex flex-col gap-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold font-mono text-slate-700">{p.payment_code || p.id?.slice(0, 8)}</span>
+                      <span className="text-xs font-extrabold text-emerald-700">₹{Number(p.total_amount ?? p.amount ?? 0).toLocaleString("en-IN")}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] text-slate-500">
+                      <span>{p.method || p.payment_method || "—"}</span>
+                      <span>{p.created_at ? new Date(p.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "—"}</span>
+                    </div>
+                    {p.reference_number && <p className="text-[10px] text-slate-400 font-mono truncate">Ref: {p.reference_number}</p>}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Edit Configuration Modal */}
       {isEditModalOpen && selectedCustomer && (

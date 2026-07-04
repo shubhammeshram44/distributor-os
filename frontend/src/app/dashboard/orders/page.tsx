@@ -4,6 +4,8 @@ import React, { useState, useEffect, useCallback } from "react";
 import Sidebar from "@/components/Sidebar";
 import DashboardHeader from "@/components/DashboardHeader";
 import { InvoiceTypes, InvoiceType } from "@/types/order";
+import Pagination from "@/components/ui/Pagination";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import {
   Search,
   Loader2,
@@ -15,6 +17,7 @@ import {
   Globe,
   FileSpreadsheet,
   ChevronRight,
+  Download,
   SlidersHorizontal,
   ChevronDown
 } from "lucide-react";
@@ -93,6 +96,12 @@ export default function OrdersPage() {
     invoice_id?: string | null;
   } | null>(null);
 
+  const [total, setTotal] = useState(0);
+  const [skip, setSkip] = useState(0);
+  const limit = 50;
+  const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
+
   const [toast, setToast] = useState<{ show: boolean; message: string; type: "success" | "error" }>({
     show: false,
     message: "",
@@ -148,18 +157,22 @@ export default function OrdersPage() {
   };
 
   // Fetch all orders for active tenant
-  const fetchOrders = useCallback(async (tenantId?: string) => {
+  const fetchOrders = useCallback(async (tenantId?: string, newSkip?: number) => {
     const targetTenant = tenantId || activeTenantId;
     if (!targetTenant) return;
     setLoading(true);
+    const currentSkip = newSkip !== undefined ? newSkip : skip;
     try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-      const resp = await fetch(`${apiBase}/api/v1/orders?tenant_id=${targetTenant}`, {
-        credentials: "include"
-      });
+      const resp = await fetch(
+        `${apiBase}/api/v1/orders?tenant_id=${targetTenant}&skip=${currentSkip}&limit=${limit}`,
+        { credentials: "include", headers: token ? { Authorization: `Bearer ${token}` } : {} }
+      );
       if (!resp.ok) throw new Error("Failed to fetch orders");
       const data = await resp.json();
-      setOrders(data);
+      setOrders(data.items ?? data);
+      setTotal(data.total ?? (data.items ?? data).length);
       setError(null);
     } catch (err: any) {
       console.error("Orders load failed:", err);
@@ -167,7 +180,7 @@ export default function OrdersPage() {
     } finally {
       setLoading(false);
     }
-  }, [activeTenantId]);
+  }, [activeTenantId, skip, limit]);
 
 
   // Fetch products for resolving dropdowns
@@ -176,12 +189,12 @@ export default function OrdersPage() {
       if (!activeTenantId) return;
       try {
         const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-        const res = await fetch(`${apiBase}/api/v1/products?tenant_id=${activeTenantId}`, {
+        const res = await fetch(`${apiBase}/api/v1/products?tenant_id=${activeTenantId}&limit=200`, {
           credentials: "include"
         });
         if (res.ok) {
           const data = await res.json();
-          setProductsList(data);
+          setProductsList(data.items ?? data);
         }
       } catch (err) {
         console.error("Failed to load products list for resolution drawer:", err);
@@ -193,8 +206,47 @@ export default function OrdersPage() {
   useEffect(() => {
     if (!activeTenantId) return;
     setOrders([]);
-    fetchOrders(activeTenantId);
-  }, [activeTenantId, fetchOrders]);
+    setSkip(0);
+    fetchOrders(activeTenantId, 0);
+  }, [activeTenantId]);
+
+  const handlePageChange = (newSkip: number) => {
+    setSkip(newSkip);
+    fetchOrders(activeTenantId, newSkip);
+  };
+
+  const handleCancelOrder = async () => {
+    if (!selectedOrderId) return;
+    setIsCancelling(true);
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const resp = await fetch(`${apiBase}/api/v1/orders/${selectedOrderId}/cancel`, {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) }
+      });
+      if (!resp.ok) {
+        const d = await resp.json();
+        throw new Error(d.detail || "Failed to cancel order");
+      }
+      showToast("Order cancelled successfully.", "success");
+      setIsCancelDialogOpen(false);
+      handleCloseDetails();
+      fetchOrders(activeTenantId, skip);
+    } catch (err: any) {
+      showToast(err.message || "Failed to cancel order.", "error");
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
+  const handleExportCSV = () => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+    const url = `${apiBase}/api/v1/orders/export?tenant_id=${activeTenantId}`;
+    // Open in new tab to trigger file download
+    window.open(url, "_blank");
+  };
 
 
   useEffect(() => {
@@ -435,7 +487,7 @@ export default function OrdersPage() {
           credentials: "include"
         });
         if (!res.ok) throw new Error("Failed to fetch job status");
-        
+
         const data = await res.json();
         setBulkProgress(data.progress);
         setBulkStatus(data.status);
@@ -534,7 +586,7 @@ export default function OrdersPage() {
     <div className="flex bg-dashboard-bg min-h-screen text-slate-800">
       <Sidebar
         activeTab="Orders"
-        setActiveTab={() => {}}
+        setActiveTab={() => { }}
         tenantName={getTenantName()}
       />
 
@@ -556,6 +608,14 @@ export default function OrdersPage() {
             </div>
 
             <div className="flex items-center gap-2">
+              <button
+                onClick={handleExportCSV}
+                className="flex items-center gap-1.5 px-3 py-2 border border-dashboard-border bg-white rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-all shadow-sm cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5 text-slate-400" />
+                <span>Export CSV</span>
+              </button>
+
               <button
                 disabled={orders.filter(o => o.status === "Confirmed").length === 0 || isBulkProcessing}
                 onClick={handleBulkDownloadInvoices}
@@ -592,11 +652,10 @@ export default function OrdersPage() {
             <div className="flex flex-wrap items-center gap-1 bg-slate-100/80 p-1 rounded-xl">
               <button
                 onClick={() => setSelectedStatus("All")}
-                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                  selectedStatus === "All"
+                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${selectedStatus === "All"
                     ? "bg-white text-brand-blue shadow-sm"
                     : "text-slate-500 hover:text-slate-800"
-                }`}
+                  }`}
               >
                 <span>All</span>
                 <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${selectedStatus === "All" ? "bg-blue-50 text-brand-blue" : "bg-slate-200 text-slate-600"}`}>
@@ -606,11 +665,10 @@ export default function OrdersPage() {
 
               <button
                 onClick={() => setSelectedStatus("Pending")}
-                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                  selectedStatus === "Pending"
+                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${selectedStatus === "Pending"
                     ? "bg-white text-brand-blue shadow-sm"
                     : "text-slate-500 hover:text-slate-800"
-                }`}
+                  }`}
               >
                 <span>Pending</span>
                 <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${selectedStatus === "Pending" ? "bg-amber-50 text-amber-700" : "bg-slate-200 text-slate-600"}`}>
@@ -620,11 +678,10 @@ export default function OrdersPage() {
 
               <button
                 onClick={() => setSelectedStatus("Confirmed")}
-                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                  selectedStatus === "Confirmed"
+                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${selectedStatus === "Confirmed"
                     ? "bg-white text-brand-blue shadow-sm"
                     : "text-slate-500 hover:text-slate-800"
-                }`}
+                  }`}
               >
                 <span>Confirmed</span>
                 <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${selectedStatus === "Confirmed" ? "bg-emerald-50 text-emerald-700" : "bg-slate-200 text-slate-600"}`}>
@@ -634,11 +691,10 @@ export default function OrdersPage() {
 
               <button
                 onClick={() => setSelectedStatus("Needs Review")}
-                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                  selectedStatus === "Needs Review"
+                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${selectedStatus === "Needs Review"
                     ? "bg-white text-brand-blue shadow-sm"
                     : "text-slate-500 hover:text-slate-800"
-                }`}
+                  }`}
               >
                 <span>Needs Review</span>
                 <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${selectedStatus === "Needs Review" ? "bg-rose-50 text-rose-700" : "bg-slate-200 text-slate-600"}`}>
@@ -765,18 +821,17 @@ export default function OrdersPage() {
                           })()}
                         </td>
                         <td className="py-4 px-6 text-center">
-                          <span className={`inline-flex items-center justify-center w-24 px-2.5 py-1 rounded-full text-xs font-bold leading-none ${
-                            order.payment_status === "PAID"
+                          <span className={`inline-flex items-center justify-center w-24 px-2.5 py-1 rounded-full text-xs font-bold leading-none ${order.payment_status === "PAID"
                               ? "bg-emerald-50 text-emerald-700 border border-emerald-200/60"
                               : order.payment_status === "PARTIALLY_PAID"
-                              ? "bg-amber-50 text-amber-700 border border-amber-200/60"
-                              : "bg-rose-50 text-rose-700 border border-rose-200/60"
-                          }`}>
+                                ? "bg-amber-50 text-amber-700 border border-amber-200/60"
+                                : "bg-rose-50 text-rose-700 border border-rose-200/60"
+                            }`}>
                             {order.payment_status === "PAID"
                               ? "🟢 Paid"
                               : order.payment_status === "PARTIALLY_PAID"
-                              ? "🟡 Partial"
-                              : "🔴 Unpaid"}
+                                ? "🟡 Partial"
+                                : "🔴 Unpaid"}
                           </span>
                         </td>
                         <td className="py-4 px-6 text-center">
@@ -801,6 +856,11 @@ export default function OrdersPage() {
               )}
             </div>
           </div>
+
+          {/* Pagination */}
+          {!loading && !error && total > limit && (
+            <Pagination total={total} skip={skip} limit={limit} onPageChange={handlePageChange} />
+          )}
         </main>
       </div>
 
@@ -968,7 +1028,7 @@ export default function OrdersPage() {
                       <h5 className="font-bold text-slate-800 text-xs uppercase tracking-wider mb-3 flex items-center gap-1.5">
                         <span>💳 Payment Audit Trail</span>
                       </h5>
-                      
+
                       {selectedOrderPayments.payments_allocated.length > 0 ? (
                         <div className="space-y-3">
                           {selectedOrderPayments.payments_allocated.map((payment, idx) => (
@@ -1069,6 +1129,14 @@ export default function OrdersPage() {
               )}
 
               <div className="flex items-center justify-between gap-3 w-full">
+                {selectedOrder && (selectedOrder.status === "Draft" || selectedOrder.status === "Pending" || selectedOrder.status === "Confirmed") && (
+                  <button
+                    onClick={() => setIsCancelDialogOpen(true)}
+                    className="px-4 py-2.5 bg-rose-50 border border-rose-200 text-rose-700 hover:bg-rose-100 text-sm font-bold rounded-lg transition-all cursor-pointer"
+                  >
+                    Cancel Order
+                  </button>
+                )}
                 {selectedOrder && (selectedOrder.status === "Pending" || selectedOrder.status === "Needs Review") && (
                   <button
                     onClick={handleConfirmOrder}
@@ -1173,20 +1241,32 @@ export default function OrdersPage() {
         </div>
       )}
 
+      {/* Cancel Order Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={isCancelDialogOpen}
+        title="Cancel Order"
+        message={`Are you sure you want to cancel order ${selectedOrderNo}? This will reverse any reserved inventory and cannot be undone.`}
+        confirmLabel="Yes, Cancel Order"
+        cancelLabel="Keep Order"
+        variant="danger"
+        loading={isCancelling}
+        onConfirm={handleCancelOrder}
+        onCancel={() => setIsCancelDialogOpen(false)}
+      />
+
       {/* Bulk Action Sticky Progress Tracker Footer */}
       {bulkJobId && (
         <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 bg-white/95 backdrop-blur-md border border-slate-100 shadow-2xl p-6 rounded-2xl w-[450px] animate-slide-in pointer-events-auto flex flex-col gap-3">
           <div className="flex items-center justify-between">
             <h4 className="font-bold text-slate-800 text-sm">Bulk Invoice Download</h4>
-            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-              bulkStatus === "COMPLETED"
+            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${bulkStatus === "COMPLETED"
                 ? "bg-emerald-50 text-emerald-700 border border-emerald-100"
                 : bulkStatus === "PARTIALLY_COMPLETED"
-                ? "bg-amber-50 text-amber-700 border border-amber-100"
-                : bulkStatus === "FAILED"
-                ? "bg-rose-50 text-rose-700 border border-rose-100"
-                : "bg-blue-50 text-brand-blue border border-blue-100 animate-pulse"
-            }`}>
+                  ? "bg-amber-50 text-amber-700 border border-amber-100"
+                  : bulkStatus === "FAILED"
+                    ? "bg-rose-50 text-rose-700 border border-rose-100"
+                    : "bg-blue-50 text-brand-blue border border-blue-100 animate-pulse"
+              }`}>
               {bulkStatus}
             </span>
           </div>
@@ -1194,9 +1274,8 @@ export default function OrdersPage() {
           {/* Progress Bar Component */}
           <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
             <div
-              className={`h-full transition-all duration-300 ${
-                bulkStatus === "FAILED" ? "bg-rose-500" : "bg-brand-blue"
-              }`}
+              className={`h-full transition-all duration-300 ${bulkStatus === "FAILED" ? "bg-rose-500" : "bg-brand-blue"
+                }`}
               style={{ width: `${bulkProgress}%` }}
             />
           </div>

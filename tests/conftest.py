@@ -42,6 +42,16 @@ def fixture_db_session(db_engine):
     # Reset tenant context
     tenant_context.set(None)
 
+@pytest.fixture(autouse=True)
+def reset_webhook_dedup_cache():
+    """The WhatsApp webhook keeps a module-level set of processed Evolution API
+    message IDs to dedupe retries. Clear it between tests so reused ids (e.g.
+    'wamid.123') in different tests don't leak across and look like duplicates."""
+    from app.api.v1 import whatsapp as _wa
+    _wa._PROCESSED_MSG_IDS.clear()
+    yield
+    _wa._PROCESSED_MSG_IDS.clear()
+
 @pytest.fixture
 def seed_demo_data(db_session):
     """Opt-in fixture: seeds the demo tenant, customers, products, orders.

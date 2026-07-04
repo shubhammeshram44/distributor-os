@@ -130,25 +130,126 @@ def adjust_stock(
 @router.get("", status_code=status.HTTP_200_OK)
 def get_products(
     tenant_id: uuid.UUID,
+    skip: int = 0,
+    limit: int = 50,
+    search: str | None = None,
+    sort_by: str = "sku_id",
+    sort_order: str = "asc",
     db: Session = Depends(get_db)
 ):
     """
-    Retrieves the complete product catalog for a given tenant.
+    Returns paginated product catalog with optional search and sorting.
     """
     tenant_context.set(tenant_id)
-    products = db.query(Product).filter(Product.sku_id != "UNMATCHED_TRIAGE_SKU").all()
-    return [
-        {
-            "id": str(p.id),
-            "sku_id": p.sku_id,
-            "brand": p.brand,
-            "category": p.category,
-            "pack_size": p.pack_size,
-            "base_price": float(p.base_price),
-            "stock_quantity": p.stock_quantity
-        }
-        for p in products
-    ]
+
+    query = db.query(Product).filter(
+        Product.tenant_id == tenant_id,
+        Product.sku_id != "UNMATCHED_TRIAGE_SKU",
+        Product.is_active == True
+    )
+
+    if search:
+        term = f"%{search.lower()}%"
+        query = query.filter(
+            Product.sku_id.ilike(term) |
+            Product.brand.ilike(term) |
+            Product.category.ilike(term)
+        )
+
+    _sort_col = {
+        "sku_id": Product.sku_id,
+        "brand": Product.brand,
+        "base_price": Product.base_price,
+        "category": Product.category,
+    }.get(sort_by, Product.sku_id)
+    query = query.order_by(_sort_col.desc() if sort_order == "desc" else _sort_col.asc())
+
+    total_count = query.count()
+    products = query.offset(skip).limit(limit).all()
+
+    return {
+        "items": [
+            {
+                "id": str(p.id),
+                "sku_id": p.sku_id,
+                "brand": p.brand,
+                "category": p.category,
+                "pack_size": p.pack_size,
+                "base_price": float(p.base_price),
+                "stock_quantity": p.stock_quantity
+            }
+            for p in products
+        ],
+        "total": total_count,
+        "skip": skip,
+        "limit": limit
+    }
+
+
+@router.delete("/{product_id}", status_code=status.HTTP_200_OK)
+def delete_product(
+    product_id: uuid.UUID,
+    tenant_id: uuid.UUID,
+    db: Session = Depends(get_db)
+):
+    """
+    Soft-deletes a product by marking it inactive. Historical order line items are preserved.
+    """
+    tenant_context.set(tenant_id)
+    product = db.query(Product).filter(
+        Product.id == product_id,
+        Product.tenant_id == tenant_id
+    ).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    if product.sku_id == "UNMATCHED_TRIAGE_SKU":
+        raise HTTPException(status_code=400, detail="Cannot delete system SKU placeholder")
+
+    product.is_active = False
+    db.commit()
+    return {"status": "success", "product_id": str(product_id), "message": "Product deactivated"}
+
+
+@router.patch("/{product_id}", status_code=status.HTTP_200_OK)
+def update_product(
+    product_id: uuid.UUID,
+    tenant_id: uuid.UUID,
+    base_price: float | None = None,
+    low_stock_threshold: int | None = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Updates product base_price and/or the low_stock_threshold on its inventory record.
+    """
+    tenant_context.set(tenant_id)
+    product = db.query(Product).filter(
+        Product.id == product_id,
+        Product.tenant_id == tenant_id,
+        Product.is_active == True
+    ).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    if base_price is not None:
+        if base_price < 0:
+            raise HTTPException(status_code=400, detail="base_price must be non-negative")
+        product.base_price = base_price
+
+    if low_stock_threshold is not None:
+        if low_stock_threshold < 0:
+            raise HTTPException(status_code=400, detail="low_stock_threshold must be non-negative")
+        inv = db.query(Inventory).filter(Inventory.sku_id == product.id).first()
+        if inv:
+            inv.low_stock_threshold = low_stock_threshold
+
+    db.commit()
+    return {
+        "status": "success",
+        "product_id": str(product.id),
+        "sku_id": product.sku_id,
+        "base_price": float(product.base_price)
+    }
 
 @router.get("/inventory", status_code=status.HTTP_200_OK)
 def get_inventory_items(
@@ -159,7 +260,11 @@ def get_inventory_items(
     Retrieves inventory levels for all products under the tenant.
     """
     tenant_context.set(tenant_id)
-    items = db.query(Product, Inventory).outerjoin(Inventory, Product.id == Inventory.sku_id).filter(Product.tenant_id == tenant_id, Product.sku_id != "UNMATCHED_TRIAGE_SKU").all()
+    items = db.query(Product, Inventory).outerjoin(Inventory, Product.id == Inventory.sku_id).filter(
+        Product.tenant_id == tenant_id,
+        Product.sku_id != "UNMATCHED_TRIAGE_SKU",
+        Product.is_active == True
+    ).all()
     return [
         {
             "id": str(p.id),

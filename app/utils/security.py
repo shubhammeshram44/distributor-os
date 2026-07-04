@@ -31,7 +31,11 @@ import json
 import hmac
 import time
 
-JWT_SECRET = "super-secret-key-distributor-os-2026"
+from app.config import settings
+
+# Read the JWT secret from configuration so it can be overridden via the
+# SECRET_KEY environment variable in production (the config default is dev-only).
+JWT_SECRET = settings.SECRET_KEY
 
 def base64url_encode(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).rstrip(b'=').decode('utf-8')

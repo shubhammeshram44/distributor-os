@@ -178,9 +178,14 @@ def get_dashboard_metrics(
         if hist_aov > 0:
             average_order_value_change = float((aov - hist_aov) / hist_aov * 100)
 
-    # 4. Outstanding Collections (Snapshot - Timeframe-Irrespective)
-    # Always run sum aggregation over the live, current ledger/invoice state tables
-    outstanding_stmt = select(func.sum(Invoice.total_amount)).where(Invoice.tenant_id == tenant_id)
+    # 4. Outstanding Collections — sum of (total - paid) for all non-fully-paid invoices
+    from app.models.invoice import Invoice as _Invoice
+    outstanding_stmt = (
+        select(func.sum(_Invoice.total_amount - _Invoice.amount_paid))
+        .where(
+            and_(_Invoice.tenant_id == tenant_id, _Invoice.payment_status != "PAID")
+        )
+    )
     outstanding = db.execute(outstanding_stmt).scalar() or 0.0
 
     # 5. Inventory counts (Low Stock, Out of Stock, Total SKUs, Inventory Value)
@@ -693,6 +698,78 @@ def get_order_details(
             "product_id": str(item.product_id) if item.product_id is not None else None
         })
     return details
+
+
+# SKUs the WhatsApp ingestion pipeline assigns to line items it could not resolve.
+UNMATCHED_SKUS = ("UNMATCHED_SKU", "UNMATCHED_TRIAGE_SKU")
+
+
+@router.get("/customer-whatsapp-thread/{customer_id}")
+def get_customer_whatsapp_thread(
+    customer_id: uuid.UUID,
+    tenant_id: str | None = None,
+    access_token: str | None = Cookie(None),
+    authorization: str | None = Header(None),
+    db: Session = Depends(get_db)
+):
+    """
+    Returns the most recent WhatsApp-sourced order for a customer along with its
+    line items. The Messages cockpit uses this to render the real AI-ingested
+    order (created by the WhatsApp webhook pipeline) instead of mock data.
+    """
+    tenant_id = resolve_tenant_id(tenant_id, access_token, authorization)
+    ensure_demo_data(db, tenant_id)
+    tenant_context.set(tenant_id)
+
+    order = (
+        db.query(Order)
+        .filter(
+            Order.tenant_id == tenant_id,
+            Order.customer_id == customer_id,
+            Order.source == "WhatsApp",
+        )
+        .order_by(Order.created_at.desc())
+        .first()
+    )
+
+    if not order:
+        return {"order": None, "items": [], "total": 0.0, "has_unmatched": False}
+
+    items = []
+    total = 0.0
+    has_unmatched = False
+    for item in db.query(OrderLineItem).filter_by(order_id=order.id).all():
+        prod = db.get(Product, item.product_id)
+        sku_id = prod.sku_id if prod else "UNKNOWN"
+        if sku_id in UNMATCHED_SKUS:
+            has_unmatched = True
+        line_total = float(item.quantity * item.unit_price)
+        total += line_total
+        items.append({
+            "id": str(item.id),
+            "sku_id": sku_id,
+            "product_name": (prod.brand if prod and prod.brand else sku_id),
+            "brand": prod.brand if prod else "",
+            "category": prod.category if prod else "",
+            "pack_size": prod.pack_size if prod else "",
+            "quantity": item.quantity,
+            "unit_price": float(item.unit_price),
+            "total_price": line_total,
+        })
+
+    return {
+        "order": {
+            "id": str(order.id),
+            "order_id": order.internal_order_id,
+            "status": order.current_status,
+            "source": order.source,
+            "created_on": order.created_at.strftime("%d %b, %I:%M %p"),
+            "invoice_type": order.invoice_type,
+        },
+        "items": items,
+        "total": total,
+        "has_unmatched": has_unmatched,
+    }
 
 
 @router.get("/collections-donut")

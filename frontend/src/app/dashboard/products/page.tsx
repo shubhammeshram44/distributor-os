@@ -4,7 +4,9 @@ import React, { useState, useEffect, useCallback } from "react";
 import Sidebar from "@/components/Sidebar";
 import DashboardHeader from "@/components/DashboardHeader";
 import CatalogIngestion from "@/components/CatalogIngestion";
-import { Search, Loader2, RefreshCw, AlertCircle, Layers, CheckCircle2, X } from "lucide-react";
+import Pagination from "@/components/ui/Pagination";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import { Search, Loader2, RefreshCw, AlertCircle, Layers, CheckCircle2, X, Trash2 } from "lucide-react";
 
 interface Product {
   id: string;
@@ -30,6 +32,11 @@ export default function ProductsPage() {
     base_price: ""
   });
   const [submitting, setSubmitting] = useState(false);
+  const [total, setTotal] = useState(0);
+  const [skip, setSkip] = useState(0);
+  const limit = 50;
+  const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [toast, setToast] = useState<{ show: boolean; message: string; type: "success" | "error" }>({
     show: false,
     message: "",
@@ -64,18 +71,23 @@ export default function ProductsPage() {
   };
 
   // Fetch product catalog for active tenant
-  const fetchProducts = useCallback(async (tenantId?: string) => {
+  const fetchProducts = useCallback(async (tenantId?: string, newSkip?: number) => {
     const targetTenant = tenantId || activeTenantId;
     if (!targetTenant) return;
     setLoading(true);
+    const currentSkip = newSkip !== undefined ? newSkip : skip;
     try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-      const resp = await fetch(`${apiBase}/api/v1/products?tenant_id=${targetTenant}`, {
-        credentials: "include"
-      });
+      const resp = await fetch(
+        `${apiBase}/api/v1/products?tenant_id=${targetTenant}&skip=${currentSkip}&limit=${limit}`,
+        { credentials: "include", headers: token ? { Authorization: `Bearer ${token}` } : {} }
+      );
       if (!resp.ok) throw new Error("Failed to fetch products");
       const data = await resp.json();
-      setProducts(data);
+      const items = data.items ?? data;
+      setProducts(items);
+      setTotal(data.total ?? items.length);
       setError(null);
     } catch (err: any) {
       console.error("Products load failed:", err);
@@ -88,26 +100,56 @@ export default function ProductsPage() {
   useEffect(() => {
     if (!activeTenantId) return;
     setProducts([]);
-    fetchProducts(activeTenantId);
-  }, [activeTenantId, fetchProducts]);
+    setSkip(0);
+    fetchProducts(activeTenantId, 0);
+  }, [activeTenantId]);
+
+  const handlePageChange = (newSkip: number) => {
+    setSkip(newSkip);
+    fetchProducts(activeTenantId, newSkip);
+  };
+
+  const handleDeleteProduct = async () => {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const resp = await fetch(
+        `${apiBase}/api/v1/products/${deleteTarget.id}?tenant_id=${activeTenantId}`,
+        { method: "DELETE", credentials: "include", headers: token ? { Authorization: `Bearer ${token}` } : {} }
+      );
+      if (!resp.ok) {
+        const d = await resp.json();
+        throw new Error(d.detail || "Failed to delete product");
+      }
+      showToast(`${deleteTarget.sku_id} removed from catalog.`, "success");
+      setDeleteTarget(null);
+      fetchProducts(activeTenantId, skip);
+    } catch (err: any) {
+      showToast(err.message || "Failed to delete product.", "error");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
 
   const handleManualSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const { sku_id, brand, category, pack_size, base_price } = formData;
-    
+
     // Validations
     if (!sku_id.trim() || !brand.trim() || !category.trim() || !pack_size.trim() || !base_price.trim()) {
       showToast("All fields are required.", "error");
       return;
     }
-    
+
     const priceFloat = parseFloat(base_price);
     if (isNaN(priceFloat) || priceFloat < 0) {
       showToast("Wholesale Price must be a positive number.", "error");
       return;
     }
-    
+
     setSubmitting(true);
     try {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
@@ -123,7 +165,7 @@ export default function ProductsPage() {
           base_price: priceFloat
         })
       });
-      
+
       const data = await resp.json();
       if (resp.ok) {
         showToast("Product added successfully!", "success");
@@ -149,7 +191,7 @@ export default function ProductsPage() {
   };
 
   // Handle live catalog filtering
-  const filteredProducts = products.filter(p => 
+  const filteredProducts = products.filter(p =>
     p.sku_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
     p.brand.toLowerCase().includes(searchQuery.toLowerCase()) ||
     p.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -176,7 +218,7 @@ export default function ProductsPage() {
       {/* Sidebar navigation panel */}
       <Sidebar
         activeTab="Products"
-        setActiveTab={() => {}}
+        setActiveTab={() => { }}
         tenantName={getTenantName()}
       />
 
@@ -234,7 +276,7 @@ export default function ProductsPage() {
                   <span className="text-xl">✍️</span>
                   <h3 className="font-semibold text-slate-800 text-lg">Add Product Manually</h3>
                 </div>
-                
+
                 <form onSubmit={handleManualSubmit} className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div>
@@ -247,7 +289,7 @@ export default function ProductsPage() {
                         className="w-full p-2 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-1 focus:ring-brand-blue bg-white"
                       />
                     </div>
-                    
+
                     <div>
                       <label className="block text-xs font-medium text-slate-500 mb-1">Brand</label>
                       <input
@@ -346,7 +388,7 @@ export default function ProductsPage() {
                 <div className="flex flex-col items-center justify-center py-24 gap-3 text-rose-600">
                   <AlertCircle className="w-8 h-8" />
                   <span className="text-sm font-semibold">{error}</span>
-                  <button 
+                  <button
                     onClick={() => {
                       if (activeTenantId) {
                         fetchProducts(activeTenantId);
@@ -372,6 +414,7 @@ export default function ProductsPage() {
                       <th className="py-3 px-6">Category</th>
                       <th className="py-3 px-6">Pack Size</th>
                       <th className="py-3 px-6 text-right">Wholesale Price</th>
+                      <th className="py-3 px-6 text-center">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -394,15 +437,45 @@ export default function ProductsPage() {
                         <td className="py-4 px-6 text-right font-extrabold text-slate-800">
                           {formatCurrency(p.base_price)}
                         </td>
+                        <td className="py-4 px-6 text-center">
+                          <button
+                            onClick={() => setDeleteTarget(p)}
+                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all cursor-pointer"
+                            title="Delete product"
+                            aria-label={`Delete ${p.sku_id}`}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               )}
             </div>
+
+            {/* Pagination */}
+            {!loading && !error && total > limit && (
+              <div className="p-4 border-t border-dashboard-border">
+                <Pagination total={total} skip={skip} limit={limit} onPageChange={handlePageChange} />
+              </div>
+            )}
           </div>
         </main>
       </div>
+
+      {/* Delete Confirmation */}
+      <ConfirmDialog
+        isOpen={!!deleteTarget}
+        title="Delete Product"
+        message={`Remove "${deleteTarget?.sku_id}" from the catalog? This cannot be undone.`}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        variant="danger"
+        loading={isDeleting}
+        onConfirm={handleDeleteProduct}
+        onCancel={() => setDeleteTarget(null)}
+      />
 
       {/* Sleek Floating Toast Notification */}
       {toast.show && (
@@ -420,7 +493,7 @@ export default function ProductsPage() {
             <p className="text-xs font-bold text-slate-800">{toast.type === "success" ? "Success" : "Error"}</p>
             <p className="text-[11px] text-slate-500 font-semibold mt-0.5 break-words">{toast.message}</p>
           </div>
-          <button 
+          <button
             onClick={() => setToast(prev => ({ ...prev, show: false }))}
             className="text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-50 transition-all shrink-0"
           >

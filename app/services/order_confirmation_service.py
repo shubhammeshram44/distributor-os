@@ -39,6 +39,16 @@ def confirm_order(db: Session, order: Order, updated_by: str) -> Invoice:
         OrderLineItem.order_id == order.id
     ).all()
 
+    # Reject if any line item is still unmatched (must go through triage first)
+    _unmatched_skus = {"UNMATCHED_SKU", "UNMATCHED_TRIAGE_SKU"}
+    for item in items:
+        prod_check = db.query(Product).filter(Product.id == item.product_id).first()
+        if prod_check and prod_check.sku_id in _unmatched_skus:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot confirm order with unmatched SKUs. Resolve all items in triage first."
+            )
+
     # Resolve product metadata
     for item in items:
         prod = db.query(Product).filter(Product.id == item.product_id).first()

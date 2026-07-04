@@ -3,10 +3,11 @@ import io
 import logging
 import typing
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Cookie, Header
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import func, and_, select as sa_select, update as sa_update
+from sqlalchemy.orm import Session, aliased, joinedload
 from app.database import get_db, tenant_context
 from app.models.order import Order, OrderLineItem, OrderStateLedger
 from app.models.product import Product
@@ -16,6 +17,9 @@ from app.models.ledger import CustomerLedger
 from app.models.invoice import Invoice
 from app.models.inventory import Inventory
 from app.models.demand_gap import DemandGap
+from app.services.tenant_service import resolve_tenant_id
+from app.services.demo_service import ensure_demo_data
+from app.services.payment_service import reconcile_payments_and_invoices
 
 logger = logging.getLogger(__name__)
 
@@ -87,42 +91,85 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
-from fastapi import Cookie, Header
 
-@router.get("", status_code=status.HTTP_200_OK, response_model=list[OrderResponse])
+@router.get("", status_code=status.HTTP_200_OK)
 def list_orders(
     tenant_id: uuid.UUID | None = None,
+    skip: int = 0,
+    limit: int = 50,
+    search: str | None = None,
+    sort_by: str = "created_at",
+    sort_order: str = "desc",
+    status_filter: str | None = None,
     access_token: str | None = Cookie(None),
     authorization: str | None = Header(None),
     db: Session = Depends(get_db)
 ):
     """
-    Returns all orders for a tenant.
+    Returns paginated orders for a tenant with optional search and sorting.
     """
-    from app.services.tenant_service import resolve_tenant_id
-    from app.services.demo_service import ensure_demo_data
     resolved_tenant_id = resolve_tenant_id(tenant_id, access_token, authorization)
     if str(resolved_tenant_id) == "d3b07384-d113-4956-a5d2-64be7357c11d":
         ensure_demo_data(db, resolved_tenant_id)
     tenant_context.set(resolved_tenant_id)
-    from sqlalchemy import select
+
+    # Base filter
+    filters = [Order.tenant_id == resolved_tenant_id]
+
+    # Server-side search: filter by customer name or order ID prefix
+    if search:
+        search_term = f"%{search.lower()}%"
+        customer_ids_matching = db.execute(
+            sa_select(Customer.id).where(
+                and_(
+                    Customer.tenant_id == resolved_tenant_id,
+                    func.lower(Customer.retailer_name).like(search_term)
+                )
+            )
+        ).scalars().all()
+        filters.append(
+            (func.lower(Order.internal_order_id).like(search_term)) |
+            (Order.customer_id.in_(customer_ids_matching))
+        )
+
+    # Sorting
+    _sort_col = {
+        "created_at": Order.created_at,
+        "amount": None,  # computed, handled below
+    }.get(sort_by, Order.created_at)
+
+    order_clause = _sort_col.desc() if sort_order == "desc" else _sort_col.asc()
+
+    # Count total before pagination
+    total_count = db.execute(
+        sa_select(func.count(Order.id)).where(and_(*filters))
+    ).scalar() or 0
 
     query = (
-        select(Order, Invoice)
+        sa_select(Order, Invoice)
         .outerjoin(Invoice, Invoice.order_id == Order.id)
         .options(
             joinedload(Order.customer),
             joinedload(Order.line_items).joinedload(OrderLineItem.product)
         )
-        .filter(Order.tenant_id == resolved_tenant_id)
-        .order_by(Order.created_at.desc())
-        .limit(100)
+        .where(and_(*filters))
+        .order_by(order_clause)
+        .offset(skip)
+        .limit(limit)
     )
     orders_invoices = db.execute(query).unique().all()
+    # Pre-fetch all customers in one query to avoid N+1
+    _cust_ids = list({o.customer_id for o, inv in orders_invoices})
+    _custs_map = (
+        {c.id: c for c in db.query(Customer).filter(Customer.id.in_(_cust_ids)).all()}
+        if _cust_ids else {}
+    )
+
     results = []
-    
+
     for o, inv in orders_invoices:
-        cust_name = o.customer.retailer_name if o.customer else "Unknown Retailer"
+        customer = _custs_map.get(o.customer_id)
+        cust_name = customer.retailer_name if customer else "Unknown Retailer"
 
         # Calculate total amount
         amount_sum = sum(
@@ -175,7 +222,7 @@ def list_orders(
             "invoice_id": str(inv.id) if inv else None
         })
 
-    return results
+    return {"items": results, "total": total_count, "skip": skip, "limit": limit}
 
 
 def process_order_self_learning(db: Session, order_id: uuid.UUID, tenant_id: uuid.UUID):
@@ -215,6 +262,157 @@ def process_order_self_learning(db: Session, order_id: uuid.UUID, tenant_id: uui
 class StatusUpdatePayload(BaseModel):
     to_status: str
 
+
+@router.post("/{order_id}/cancel", status_code=status.HTTP_200_OK)
+def cancel_order(
+    order_id: uuid.UUID,
+    db: Session = Depends(get_db)
+):
+    """
+    Cancels a Draft or Confirmed order. Reverses inventory reservation and
+    customer outstanding balance if cancelling from Confirmed.
+    """
+    order = db.get(Order, order_id)
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    tenant_context.set(order.tenant_id)
+    current = order.current_status
+
+    if current not in ("Draft", "Pending", "Confirmed", "Needs Review"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot cancel order with status '{current}'. Only Draft/Confirmed orders can be cancelled."
+        )
+
+    try:
+        items = db.query(OrderLineItem).filter(OrderLineItem.order_id == order_id).all()
+
+        # If Confirmed, reverse inventory and customer balance
+        if current == "Confirmed":
+            customer = db.get(Customer, order.customer_id)
+            order_total = sum(float(i.quantity * i.unit_price) for i in items)
+
+            # Restore inventory
+            for item in items:
+                db.execute(
+                    sa_update(Inventory)
+                    .where(
+                        and_(
+                            Inventory.tenant_id == order.tenant_id,
+                            Inventory.sku_id == item.product_id
+                        )
+                    )
+                    .values(quantity_on_hand=Inventory.quantity_on_hand + item.quantity)
+                )
+
+            # Reverse customer outstanding balance
+            if customer:
+                customer.outstanding_balance = max(
+                    0.0, float(customer.outstanding_balance) - order_total
+                )
+
+            # Mark invoice as cancelled if it exists
+            invoice = db.query(Invoice).filter(Invoice.order_id == order.id).first()
+            if invoice:
+                invoice.payment_status = "CANCELLED"
+
+        db.add(OrderStateLedger(
+            tenant_id=order.tenant_id,
+            order_id=order.id,
+            from_status=current,
+            to_status="Cancelled",
+            updated_by="system_cancel_request"
+        ))
+
+        db.commit()
+        return {"status": "success", "order_id": str(order.id), "new_status": "Cancelled"}
+
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Cancellation failed: {str(e)}")
+
+
+import csv as csv_module
+
+
+@router.get("/export", status_code=status.HTTP_200_OK)
+def export_orders_csv(
+    tenant_id: uuid.UUID | None = None,
+    search: str | None = None,
+    status_filter: str | None = None,
+    access_token: str | None = Cookie(None),
+    authorization: str | None = Header(None),
+    db: Session = Depends(get_db)
+):
+    """
+    Streams all orders as a CSV file for the active tenant.
+    """
+    resolved_tenant_id = resolve_tenant_id(tenant_id, access_token, authorization)
+    tenant_context.set(resolved_tenant_id)
+
+    filters = [Order.tenant_id == resolved_tenant_id]
+    if search:
+        search_term = f"%{search.lower()}%"
+        customer_ids = db.execute(
+            sa_select(Customer.id).where(
+                and_(
+                    Customer.tenant_id == resolved_tenant_id,
+                    func.lower(Customer.retailer_name).like(search_term)
+                )
+            )
+        ).scalars().all()
+        filters.append(
+            (func.lower(Order.internal_order_id).like(search_term)) |
+            (Order.customer_id.in_(customer_ids))
+        )
+
+    orders = (
+        db.execute(
+            sa_select(Order)
+            .options(joinedload(Order.line_items).joinedload(OrderLineItem.product))
+            .where(and_(*filters))
+            .order_by(Order.created_at.desc())
+        )
+        .unique()
+        .scalars()
+        .all()
+    )
+
+    cust_ids = list({o.customer_id for o in orders})
+    custs = {c.id: c for c in db.query(Customer).filter(Customer.id.in_(cust_ids)).all()} if cust_ids else {}
+
+    output = io.StringIO()
+    writer = csv_module.writer(output)
+    writer.writerow([
+        "Order ID", "Customer", "Channel", "Amount (₹)", "Status",
+        "Payment Status", "Amount Paid (₹)", "Invoice Type", "Created At"
+    ])
+    for o in orders:
+        cust = custs.get(o.customer_id)
+        amount = sum(float(i.quantity * i.unit_price) for i in o.line_items)
+        writer.writerow([
+            o.internal_order_id,
+            cust.retailer_name if cust else "Unknown",
+            o.source,
+            f"{amount:.2f}",
+            o.current_status,
+            o.payment_status,
+            "",
+            o.invoice_type,
+            o.created_at.strftime("%Y-%m-%d %H:%M")
+        ])
+
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=orders_export.csv"}
+    )
+
 @router.put("/{order_id}/status", status_code=status.HTTP_200_OK)
 def update_order_status(
     order_id: uuid.UUID,
@@ -234,6 +432,21 @@ def update_order_status(
 
     # Set tenant isolation context
     tenant_context.set(order.tenant_id)
+
+    _VALID_TRANSITIONS: dict[str, set[str]] = {
+        "Draft": {"Confirmed"},
+        "NEEDS_REVIEW": set(),  # Must resolve via triage first
+        "Confirmed": {"Dispatched"},
+        "Dispatched": {"Delivered"},
+        "Delivered": set(),
+    }
+    current_from_status = order.current_status
+    allowed = _VALID_TRANSITIONS.get(current_from_status, set())
+    if payload.to_status not in allowed:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid transition '{current_from_status}' → '{payload.to_status}'. Allowed: {sorted(allowed) or 'none (terminal or triage state)'}"
+        )
 
     try:
         # Fetch Child Line Items
@@ -1110,7 +1323,7 @@ def create_order_generic(payload: IngestionOrderPayload, db: Session = Depends(g
             customer_id="CUST-101",
             retailer_name="Kaveri Provision Store",
             address_text="Bengaluru",
-            gstin="29AAAAA1111A1Z1",
+            gstin="UNREGISTERED",
             tax_group="GST-18",
             payment_terms="0-15 Days"
         )
@@ -1179,7 +1392,7 @@ def confirm_order_post(order_id: uuid.UUID, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Order not found")
 
     tenant_context.set(order.tenant_id)
-    
+
     from app.services.order_confirmation_service import confirm_order
     confirm_order(db, order, updated_by="API")
     db.commit()

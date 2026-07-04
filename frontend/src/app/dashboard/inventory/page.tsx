@@ -73,12 +73,12 @@ export default function InventoryPage() {
     setLoading(true);
     try {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-      const resp = await fetch(`${apiBase}/api/v1/products/inventory?tenant_id=${targetTenant}`, {
+      const resp = await fetch(`${apiBase}/api/v1/products/inventory?tenant_id=${targetTenant}&limit=200`, {
         credentials: "include"
       });
       if (!resp.ok) throw new Error("Failed to fetch inventory levels");
       const data = await resp.json();
-      setInventoryItems(data);
+      setInventoryItems(data.items ?? data);
       setError(null);
     } catch (err: any) {
       console.error("Inventory load failed:", err);
@@ -99,7 +99,7 @@ export default function InventoryPage() {
       });
       if (resp.ok) {
         const data = await resp.json();
-        setSkuList(data.map((p: any) => p.sku_id));
+        setSkuList((data.items ?? data).map((p: any) => p.sku_id));
       }
     } catch (err) {
       console.error("Failed to load SKUs:", err);
@@ -118,18 +118,18 @@ export default function InventoryPage() {
   const handleInwardSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const { sku_id, quantity_received } = formData;
-    
+
     if (!sku_id) {
       showToast("Please select a valid SKU.", "error");
       return;
     }
-    
+
     const qtyInt = parseInt(quantity_received);
     if (isNaN(qtyInt) || qtyInt <= 0) {
       showToast("Quantity received must be a positive number.", "error");
       return;
     }
-    
+
     setSubmitting(true);
     try {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
@@ -142,12 +142,12 @@ export default function InventoryPage() {
           quantity_received: qtyInt
         })
       });
-      
+
       const responseData = await response.json();
       if (response.ok) {
         showToast(`Successfully replenished ${qtyInt} units of SKU ${sku_id}!`, "success");
         setFormData({ sku_id: "", quantity_received: "" });
-        
+
         // Force the table state to instantly include or update the modified item
         setInventoryItems(prevItems => {
           const exists = prevItems.some(item => item.sku === responseData.sku);
@@ -172,7 +172,7 @@ export default function InventoryPage() {
   };
 
   // Handle live catalog filtering
-  const filteredInventory = inventoryItems.filter(item => 
+  const filteredInventory = inventoryItems.filter(item =>
     item.sku_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
     item.product_name.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -196,7 +196,7 @@ export default function InventoryPage() {
       {/* Sidebar navigation panel */}
       <Sidebar
         activeTab="Inventory"
-        setActiveTab={() => {}}
+        setActiveTab={() => { }}
         tenantName={getTenantName()}
       />
 
@@ -256,9 +256,8 @@ export default function InventoryPage() {
                     {lowStockCount}
                   </h3>
                 </div>
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center border shadow-sm ${
-                  lowStockCount > 0 ? "bg-amber-50 text-amber-600 border-amber-100 animate-pulse" : "bg-slate-50 text-slate-400 border-slate-100"
-                }`}>
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center border shadow-sm ${lowStockCount > 0 ? "bg-amber-50 text-amber-600 border-amber-100 animate-pulse" : "bg-slate-50 text-slate-400 border-slate-100"
+                  }`}>
                   <AlertTriangle className="w-5 h-5" />
                 </div>
               </div>
@@ -270,9 +269,8 @@ export default function InventoryPage() {
                     {outOfStockCount}
                   </h3>
                 </div>
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center border shadow-sm ${
-                  outOfStockCount > 0 ? "bg-rose-50 text-rose-600 border-rose-100 animate-pulse" : "bg-slate-50 text-slate-400 border-slate-100"
-                }`}>
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center border shadow-sm ${outOfStockCount > 0 ? "bg-rose-50 text-rose-600 border-rose-100 animate-pulse" : "bg-slate-50 text-slate-400 border-slate-100"
+                  }`}>
                   <AlertCircle className="w-5 h-5" />
                 </div>
               </div>
@@ -365,7 +363,7 @@ export default function InventoryPage() {
                 <div className="flex flex-col items-center justify-center py-24 gap-3 text-rose-600">
                   <AlertCircle className="w-8 h-8" />
                   <span className="text-sm font-semibold">{error}</span>
-                  <button 
+                  <button
                     onClick={() => {
                       if (activeTenantId) {
                         fetchInventory(activeTenantId);
@@ -401,17 +399,17 @@ export default function InventoryPage() {
                     {filteredInventory.map((item) => {
                       const threshold = item.low_stock_threshold ?? 10;
                       const status = getStockStatus(item.stock_quantity, threshold);
-                      
+
                       const isOutOfStock = item.stock_quantity === 0;
                       const isLowStock = item.stock_quantity > 0 && item.stock_quantity < threshold;
-                      
+
                       let statusBadge = (
                         <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold border ${status.style} ${isOutOfStock || isLowStock ? "animate-pulse" : ""}`}>
                           {status.label}
                         </span>
                       );
                       let qtyClass = "text-slate-800 font-extrabold";
-                      
+
                       if (isOutOfStock) {
                         qtyClass = "text-rose-600 font-black animate-pulse";
                       } else if (isLowStock) {
@@ -459,7 +457,7 @@ export default function InventoryPage() {
             <p className="text-xs font-bold text-slate-800">{toast.type === "success" ? "Success" : "Error"}</p>
             <p className="text-[11px] text-slate-500 font-semibold mt-0.5 break-words">{toast.message}</p>
           </div>
-          <button 
+          <button
             onClick={() => setToast(prev => ({ ...prev, show: false }))}
             className="text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-50 transition-all shrink-0"
           >

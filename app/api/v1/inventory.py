@@ -23,9 +23,8 @@ def inward_stock(payload: InwardPayload, db: Session = Depends(get_db)):
     # Look up product by sku_id
     product = db.query(Product).filter_by(sku_id=payload.sku_id).first()
     if not product:
-        # Use payload.sku_id as ID directly to support SQLite tests comparing Inventory.sku_id == "SKU..."
         product = Product(
-            id=payload.sku_id,
+            id=uuid.uuid4(),
             tenant_id=tenant_id,
             sku_id=payload.sku_id,
             brand="Generic",

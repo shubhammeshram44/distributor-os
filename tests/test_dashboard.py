@@ -71,6 +71,41 @@ def test_dashboard_api_endpoints(db_session, client, seed_demo_data):
     assert "ORD-2505-1482" in activity[0]["message"]
 
 
+def test_customer_whatsapp_thread(db_session, client, seed_demo_data):
+    demo_tenant_id = uuid.UUID("d3b07384-d113-4956-a5d2-64be7357c11d")
+    kaveri_id = "c1010000-0000-0000-0000-000000000001"   # has a WhatsApp order
+    maruthi_id = "c1010000-0000-0000-0000-000000000002"  # only a Portal order
+
+    # Trigger the seeder.
+    client.get(f"/api/v1/dashboard/metrics?tenant_id={demo_tenant_id}")
+
+    # Customer with a WhatsApp-sourced order returns the real order + line items.
+    resp = client.get(
+        f"/api/v1/dashboard/customer-whatsapp-thread/{kaveri_id}?tenant_id={demo_tenant_id}"
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["order"] is not None
+    assert data["order"]["order_id"] == "ORD-2505-1482"
+    assert data["order"]["source"] == "WhatsApp"
+    assert data["order"]["status"] == "Confirmed"
+    assert data["has_unmatched"] is False
+    assert data["total"] == 23650.00
+    assert len(data["items"]) == 1
+    assert data["items"][0]["sku_id"] == "PROD-HUL-SOAP"
+    assert data["items"][0]["total_price"] == 23650.00
+
+    # Customer with no WhatsApp order returns an empty thread (not the Portal order).
+    resp_empty = client.get(
+        f"/api/v1/dashboard/customer-whatsapp-thread/{maruthi_id}?tenant_id={demo_tenant_id}"
+    )
+    assert resp_empty.status_code == 200
+    empty = resp_empty.json()
+    assert empty["order"] is None
+    assert empty["items"] == []
+    assert empty["total"] == 0.0
+
+
 def test_dashboard_metrics_date_filtering(db_session, client, seed_demo_data):
     demo_tenant_id = uuid.UUID("d3b07384-d113-4956-a5d2-64be7357c11d")
     

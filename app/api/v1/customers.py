@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db, tenant_context
 from app.models.customer import Customer, CustomerAlias
 from app.models.ledger import CustomerLedger
+from app.models.payment import Payment
 
 router = APIRouter(prefix="/customers", tags=["Customers"])
 
@@ -110,17 +111,37 @@ def onboard_customer(
 @router.get("", status_code=status.HTTP_200_OK)
 def list_customers(
     tenant_id: uuid.UUID,
+    skip: int = 0,
+    limit: int = 50,
+    search: str | None = None,
+    sort_by: str = "retailer_name",
+    sort_order: str = "asc",
     db: Session = Depends(get_db)
 ):
     """
-    Fetches real customer profiles synchronized strictly from active database rows,
-    completely decoupled from historical demo-data generation overrides.
+    Returns paginated customer profiles with optional search and sorting.
     """
     tenant_context.set(tenant_id)
-    
-    # CLEAN SELECT: Stripped out ensure_demo_data to prevent mock side effects
-    records = db.query(Customer).filter(Customer.tenant_id == tenant_id).all()
-    
+
+    query = db.query(Customer).filter(Customer.tenant_id == tenant_id)
+
+    if search:
+        term = f"%{search.lower()}%"
+        query = query.filter(
+            Customer.retailer_name.ilike(term) |
+            Customer.phone_number.ilike(term)
+        )
+
+    _sort_col = {
+        "retailer_name": Customer.retailer_name,
+        "outstanding_balance": Customer.outstanding_balance,
+        "credit_limit": Customer.credit_limit,
+    }.get(sort_by, Customer.retailer_name)
+    query = query.order_by(_sort_col.desc() if sort_order == "desc" else _sort_col.asc())
+
+    total_count = query.count()
+    records = query.offset(skip).limit(limit).all()
+
     response_payload = []
     for customer in records:
         response_payload.append({
@@ -136,8 +157,8 @@ def list_customers(
             "phone": customer.phone_number if customer.phone_number else (customer.aliases[0].alias_value if customer.aliases else "N/A"),
             "whatsapp_notifications_enabled": customer.whatsapp_notifications_enabled
         })
-        
-    return response_payload
+
+    return {"items": response_payload, "total": total_count, "skip": skip, "limit": limit}
 
 
 @router.get("/{customer_id}/statement")
@@ -187,6 +208,60 @@ def get_customer_statement(
     }
 
 
+@router.get("/{customer_id}/payments", status_code=status.HTTP_200_OK)
+def get_customer_payments(
+    customer_id: uuid.UUID,
+    tenant_id: uuid.UUID,
+    skip: int = 0,
+    limit: int = 50,
+    db: Session = Depends(get_db)
+):
+    """
+    Returns paginated payment history for a specific customer.
+    """
+    tenant_context.set(tenant_id)
+
+    customer = db.get(Customer, customer_id)
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+
+    total_count = db.query(Payment).filter(
+        Payment.customer_id == customer_id,
+        Payment.tenant_id == tenant_id
+    ).count()
+
+    payments = (
+        db.query(Payment)
+        .filter(Payment.customer_id == customer_id, Payment.tenant_id == tenant_id)
+        .order_by(Payment.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+
+    items = [
+        {
+            "id": str(p.id),
+            "payment_code": f"PAY-REC-{str(p.id)[:8].upper()}",
+            "amount": float(p.amount),
+            "method": p.method,
+            "reference_number": p.reference_number,
+            "status": p.status,
+            "created_at": p.created_at.isoformat()
+        }
+        for p in payments
+    ]
+
+    return {
+        "customer_id": str(customer_id),
+        "retailer_name": customer.retailer_name,
+        "items": items,
+        "total": total_count,
+        "skip": skip,
+        "limit": limit
+    }
+
+
 class CustomerNotificationPrefPayload(BaseModel):
     whatsapp_notifications_enabled: bool
 
@@ -202,11 +277,11 @@ def update_customer_notification_prefs(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Customer not found"
         )
-    
+
     tenant_context.set(customer.tenant_id)
     customer.whatsapp_notifications_enabled = payload.whatsapp_notifications_enabled
     db.commit()
-    
+
     return {
         "status": "success",
         "customer_id": str(customer.id),
