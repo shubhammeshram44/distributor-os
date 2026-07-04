@@ -211,7 +211,7 @@ export default function MarketingPage() {
 
   return (
 
-<div style={{fontFamily: '\'Inter\', -apple-system, sans-serif', color: '#0f172a', background: '#ffffff', width: '100%', overflowX: 'hidden', overflowY: 'auto', minHeight: '100vh'}}>
+<div style={{fontFamily: '\'Inter\', -apple-system, sans-serif', color: '#0f172a', background: '#ffffff', width: '100%', overflowX: 'hidden', minHeight: '100vh'}}>
 
   {/* NAV */}
   <div style={{position: 'sticky', top: 0, zIndex: 100, background: 'rgba(15,23,42,0.97)', backdropFilter: 'blur(8px)', borderBottom: '1px solid rgba(255,255,255,0.08)'}}>
