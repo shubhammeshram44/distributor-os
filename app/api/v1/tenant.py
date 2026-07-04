@@ -260,23 +260,24 @@ def connect_razorpay(
         )
         
     # 2. Validate keys by making a real Razorpay API call
-    import razorpay
-    from app.utils.encryption import encrypt_secret
     try:
+        import razorpay
         client = razorpay.Client(auth=(key_id, key_secret))
-        account = client.account.fetch()
-        account_name = account.get("profile", {}).get("name", "")
-    except Exception:
-        try:
-            client = razorpay.Client(auth=(key_id, key_secret))
-            client.payment_link.all({"count": 1})
-            account_name = "Razorpay Merchant"
-        except Exception:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid Razorpay credentials"
-            )
-            
+        # Use orders API — available on all Razorpay accounts including test mode
+        client.order.all({"count": 1})
+        account_name = "Razorpay Merchant"
+    except razorpay.errors.BadRequestError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid Razorpay credentials. Please check your Key ID and Secret."
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Could not validate Razorpay credentials: {str(e)}"
+        )
+    
+    from app.utils.encryption import encrypt_secret
     # 3. Encrypt and save keys
     tenant.razorpay_key_id = key_id
     tenant.razorpay_key_secret_enc = encrypt_secret(key_secret)
