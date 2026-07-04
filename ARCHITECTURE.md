@@ -28,7 +28,7 @@ DistributorOS is a WhatsApp-first B2B order management and payment collection pl
 
 ## 3. Core Data Models
 
-- **DistributorTenant (`distributor_tenants`):** Represents the distributor business entity. Stores WhatsApp credentials (`whatsapp_phone_id`, `whatsapp_access_token`), plan metrics, and notification configuration preferences (`notification_prefs` JSONB).
+- **DistributorTenant (`distributor_tenants`):** Represents the distributor business entity. Stores WhatsApp credentials (`whatsapp_phone_id`, `whatsapp_access_token`), plan metrics, and notification configuration preferences (`notification_prefs` JSONB). Also stores per-tenant Razorpay credentials: `razorpay_key_id`, `razorpay_key_secret_enc` (AES-256 encrypted), `razorpay_account_name`, and `razorpay_mode` (test/live auto-detected from key prefix).
 - **Customer (`customers`):** B2B buyer profiles. Tracks `credit_limit`, `outstanding_balance`, payment terms (e.g. Net 15), addresses, and notification options.
 - **CustomerAlias (`customer_aliases`):** Maps alternative names or WhatsApp phone numbers to a unique registered customer profile.
 - **Product (`products`):** The distributor's stock catalog. Tracks price, SKU, brand, and pack size details.
@@ -97,7 +97,7 @@ erDiagram
 3. **Webhook Reconciliation:** Razorpay callback to `/api/v1/payments/razorpay-webhook` triggers verification. If signature is verified, it registers the payment, decrements `outstanding_balance` on the `Customer`, and flushes.
 4. **FIFO Allocation:** Automatically cascades payment amounts down unpaid or partially paid invoices starting with the oldest unpaid invoice first (unless a `preferred_invoice_id` is supplied to pay that specific invoice first).
 5. **Payment Reminder Sweep:** The background scheduler or a POST to `/api/v1/payments/trigger-reminder-sweep` iterates active tenants:
-   - Matches unpaid customer balances to aging tiers: `upcoming` (pre-due), `just_overdue` (0-15 days overdue), `moderately_overdue` (16-30 days overdue), or `severely_overdue` (31+ days overdue).
+    - Matches unpaid customer balances to aging tiers: `upcoming` (pre-due), `just_overdue` (0-7 days), `moderately_overdue` (8-21 days), or `severely_overdue` (22+ days).
    - Generates/fetches active Razorpay payment links for the most overdue invoice, and a consolidated payment link representing the customer's total outstanding balance.
    - Dispatches tiered WhatsApp reminders with payment checkout links (respecting the 3-day frequency cap).
 
@@ -133,6 +133,9 @@ erDiagram
 - `PATCH /integrations/whatsapp`: Updates WhatsApp instance settings and phone IDs.
 - `GET /notification-prefs`: Retrieves active notification preference flags.
 - `PATCH /notification-prefs`: Saves updated operational/financial notification flags.
+- `GET /razorpay-status`: Returns Razorpay connection status and masked key ID.
+- `POST /razorpay-connect`: Validates and saves encrypted Razorpay credentials.
+- `DELETE /razorpay-disconnect`: Clears Razorpay credentials.
 
 ### `/api/v1/customers` (Customer Directory)
 - `GET /`: Lists all customer profiles.
@@ -200,8 +203,9 @@ erDiagram
 - `GEMINI_API_KEY`: API key for Google Gemini model.
 - `EVOLUTION_API_URL`: Root URL of Evolution API instance (GCP VM).
 - `EVOLUTION_API_KEY`: Evolution API instance master key.
-- `RAZORPAY_KEY_ID`: Razorpay credentials key identifier.
-- `RAZORPAY_KEY_SECRET`: Razorpay credentials private key.
+- `RAZORPAY_KEY_ID`: Razorpay credentials key identifier. *(Deprecated — replaced by per-tenant credentials stored in DB)*
+- `RAZORPAY_KEY_SECRET`: Razorpay credentials private key. *(Deprecated — replaced by per-tenant credentials stored in DB)*
+- `ENCRYPTION_KEY`: Fernet AES-256 key for encrypting per-tenant Razorpay secrets.
 - `RAZORPAY_WEBHOOK_SECRET`: Secret token verifying Razorpay webhook callbacks.
 - `ALLOWED_ORIGINS`: Allowed origins list for CORS headers.
 - `FIREBASE_CREDENTIALS_JSON` / `FIREBASE_CREDENTIALS_PATH`: Paths to credentials JSON mapping for user authentication.
@@ -230,3 +234,4 @@ erDiagram
 - **Razorpay Session State Consistency:** If a Razorpay payment link expires, there is no direct hook to immediately restore/update link statuses in the database; link state is verified and resolved during webhook ingestion or subsequent sweeps.
 - **No Order Rejection Inventory Hook:** Cancelling a confirmed order does not automatically run `restore_inventory_for_order()`, requiring manual stock adjustments to revert the committed inventory count.
 - **Evolution API Network Retries:** Evolution API webhooks are dispatched asynchronously; network delays on Render sleep states may lead to ingestion delays or message deduplication retries.
+- **Zero-value invoices:** Orders confirmed with 0 allocated units still create invoices with `total_amount = 0.00`. These are excluded from payment reminder sweeps via `total_amount > 0` filter but remain in the DB.

@@ -260,18 +260,22 @@ def connect_razorpay(
         )
         
     # 2. Validate keys by making a real Razorpay API call
+    import logging
+    logger = logging.getLogger("uvicorn.error")
     try:
         import razorpay
         client = razorpay.Client(auth=(key_id, key_secret))
         # Use orders API — available on all Razorpay accounts including test mode
         client.order.all({"count": 1})
         account_name = "Razorpay Merchant"
-    except razorpay.errors.BadRequestError:
+    except razorpay.errors.BadRequestError as e:
+        logger.warning("Razorpay BadRequestError: %s", str(e))
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid Razorpay credentials. Please check your Key ID and Secret."
         )
     except Exception as e:
+        logger.warning("Razorpay validation failed: %s", str(e))
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Could not validate Razorpay credentials: {str(e)}"
