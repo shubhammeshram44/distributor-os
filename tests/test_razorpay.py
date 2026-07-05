@@ -344,6 +344,7 @@ def test_preferred_invoice_paid_first(db_session):
     from app.models.invoice import Invoice
     from app.models.tenant import DistributorTenant
     from app.models.customer import Customer
+    from app.models.order import Order
     from datetime import datetime, timedelta
 
     # 1. Setup Tenant and Customer
@@ -360,10 +361,28 @@ def test_preferred_invoice_paid_first(db_session):
     db_session.add(customer)
     db_session.flush()
 
+    # Invoices reference real orders (order_id is a foreign key to orders.id)
+    order_older = Order(
+        tenant_id=tenant.id,
+        customer_id=customer.id,
+        internal_order_id="ORD-PREF-OLDER",
+        source="Test",
+        status="Confirmed"
+    )
+    order_newer = Order(
+        tenant_id=tenant.id,
+        customer_id=customer.id,
+        internal_order_id="ORD-PREF-NEWER",
+        source="Test",
+        status="Confirmed"
+    )
+    db_session.add_all([order_older, order_newer])
+    db_session.flush()
+
     # 2. Create two unpaid invoices (older one 500, newer one 1000)
     invoice_older = Invoice(
         tenant_id=tenant.id,
-        order_id=uuid.uuid4(),
+        order_id=order_older.id,
         gstin="29AAAAA1111A1Z1",
         total_amount=500.0,
         irn_status="Cleared",
@@ -377,7 +396,7 @@ def test_preferred_invoice_paid_first(db_session):
 
     invoice_newer = Invoice(
         tenant_id=tenant.id,
-        order_id=uuid.uuid4(),
+        order_id=order_newer.id,
         gstin="29AAAAA1111A1Z1",
         total_amount=1000.0,
         irn_status="Cleared",

@@ -3,6 +3,7 @@ import uuid
 from fastapi.testclient import TestClient
 from app.main import app
 from app.models.order import Order
+from app.models.product import Product
 from app.models.inventory import Inventory
 from app.models.ledger import CustomerLedger
 from app.models.shipment import Shipment

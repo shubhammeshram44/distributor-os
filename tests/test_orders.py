@@ -1007,7 +1007,8 @@ def test_order_risk_assessment(db_session, client):
 
     tenant = DistributorTenant(id=uuid.uuid4(), name="Risk Test Tenant")
     db_session.add(tenant)
-    
+    db_session.flush()
+
     customer = Customer(
         id=uuid.uuid4(),
         tenant_id=tenant.id,

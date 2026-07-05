@@ -84,6 +84,8 @@ def test_whatsapp_triage_resolution_self_learning_loop(db_session, client):
         base_price=50.0
     )
     from app.models.inventory import Inventory
+    db_session.add(product)
+    db_session.flush()
     inv = Inventory(
         id=uuid.uuid4(),
         tenant_id=tenant.id,
@@ -92,7 +94,6 @@ def test_whatsapp_triage_resolution_self_learning_loop(db_session, client):
         location="Bin A1",
         low_stock_threshold=10
     )
-    db_session.add(product)
     db_session.add(inv)
     db_session.commit()
 
