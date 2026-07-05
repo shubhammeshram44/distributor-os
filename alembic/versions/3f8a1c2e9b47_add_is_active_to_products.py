@@ -25,7 +25,7 @@ def upgrade() -> None:
     if not column_exists(bind, 'products', 'is_active'):
         with op.batch_alter_table('products') as batch_op:
             batch_op.add_column(
-                sa.Column('is_active', sa.Boolean(), nullable=False, server_default=sa.text('1'))
+                sa.Column('is_active', sa.Boolean(), nullable=False, server_default=sa.text('true'))
             )
 
 
