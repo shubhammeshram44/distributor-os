@@ -12,6 +12,11 @@ class DistributorTenant(Base):
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     category: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # Distributor's own GSTIN, required on a legally valid GST Tax Invoice
+    # (CGST Rules 2017, Rule 46(b)). Nullable because some small distributors
+    # are unregistered dealers; PDFs must reflect that honestly rather than
+    # printing a fabricated number.
+    gstin: Mapped[str | None] = mapped_column(String(15), nullable=True, default=None)
     whatsapp_order_phone: Mapped[str | None] = mapped_column(String(50), nullable=True, default=None)
     whatsapp_phone_id: Mapped[str | None] = mapped_column(String(255), nullable=True, default=None)
     whatsapp_access_token: Mapped[str | None] = mapped_column(String(500), nullable=True, default=None)

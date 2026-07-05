@@ -686,6 +686,9 @@ def generate_invoice_pdf_bytes(order: Order, db: Session) -> bytes:
     order_date = order.created_at.strftime("%Y-%m-%d")
     
     header_left = f"<b>{tenant_name}</b><br/>B2B Distributor Services<br/>Email: billing@{tenant_name.lower().replace(' ', '').replace('.', '')}.com"
+    seller_gstin = getattr(tenant, "gstin", None) if tenant else None
+    if is_gst:
+        header_left += f"<br/>GSTIN: {seller_gstin}" if seller_gstin else "<br/>Unregistered Dealer (no GSTIN on file)"
     header_title = "TAX INVOICE" if is_gst else "RETAIL INVOICE"
     header_right = f"<b>{header_title}</b><br/>Invoice ID: {invoice_id}<br/>Date: {order_date}<br/>Status: <b>Confirmed</b>"
 

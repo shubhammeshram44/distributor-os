@@ -38,6 +38,12 @@ export default function IntegrationsPage() {
   const [qrCodeBase64, setQrCodeBase64] = useState("");
   const [evolutionError, setEvolutionError] = useState("");
 
+  // Business profile (GSTIN) state
+  const [businessGstin, setBusinessGstin] = useState("");
+  const [businessName, setBusinessName] = useState("");
+  const [businessCategory, setBusinessCategory] = useState("");
+  const [savingProfile, setSavingProfile] = useState(false);
+
 
 
   // Connection status polling
@@ -191,6 +197,64 @@ export default function IntegrationsPage() {
     fetchSettings();
   }, [activeTenantId]);
 
+  // Fetch tenant business profile (name, category, GSTIN)
+  useEffect(() => {
+    if (!activeTenantId) return;
+
+    const fetchProfile = async () => {
+      try {
+        const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+        const resp = await fetch(`${apiBase}/api/v1/tenant/profile?tenant_id=${activeTenantId}`, {
+          credentials: "include"
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          setBusinessName(data.tenant?.name || "");
+          setBusinessCategory(data.tenant?.category || "");
+          setBusinessGstin(data.tenant?.gstin || "");
+        }
+      } catch (err) {
+        console.error("Failed to load business profile:", err);
+      }
+    };
+
+    fetchProfile();
+  }, [activeTenantId]);
+
+  const handleSaveBusinessProfile = async () => {
+    const trimmedGstin = businessGstin.trim().toUpperCase();
+    if (trimmedGstin && !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(trimmedGstin)) {
+      showToast("That doesn't look like a valid 15-character GSTIN.", "error");
+      return;
+    }
+
+    setSavingProfile(true);
+    try {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const resp = await fetch(`${apiBase}/api/v1/tenant/profile`, {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json", "X-Tenant-ID": activeTenantId },
+        body: JSON.stringify({
+          name: businessName.trim() || "Untitled Business",
+          category: businessCategory.trim() || "FMCG",
+          gstin: trimmedGstin || null,
+        }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        throw new Error(data.detail || "Failed to update business profile.");
+      }
+      setBusinessGstin(data.tenant?.gstin || "");
+      showToast("Business profile updated successfully.", "success");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to update business profile.";
+      showToast(message, "error");
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
   const handleTenantChange = (id: string) => {
     setActiveTenantId(id);
     localStorage.setItem("tenant_id", id);
@@ -305,6 +369,57 @@ export default function IntegrationsPage() {
             </div>
           ) : (
             <div className="space-y-6">
+              {/* Business Profile / GSTIN — required for a legally correct Tax Invoice */}
+              <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <div className="p-6 border-b border-slate-100">
+                  <h3 className="font-extrabold text-slate-800 text-base">Business Profile</h3>
+                  <p className="text-xs text-slate-400 font-semibold mt-0.5">
+                    Shown on your customers&apos; Tax Invoices.
+                  </p>
+                </div>
+                <div className="p-6 space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-500 mb-2 uppercase tracking-wider">
+                        Business Name
+                      </label>
+                      <input
+                        type="text"
+                        value={businessName}
+                        onChange={(e) => setBusinessName(e.target.value)}
+                        className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-slate-50/20 text-slate-700"
+                        disabled={savingProfile}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-500 mb-2 uppercase tracking-wider">
+                        GSTIN <span className="normal-case font-medium text-slate-400">(optional)</span>
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. 29AAAAA1111A1Z1"
+                        value={businessGstin}
+                        onChange={(e) => setBusinessGstin(e.target.value.toUpperCase())}
+                        maxLength={15}
+                        className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-slate-50/20 text-slate-700 uppercase"
+                        disabled={savingProfile}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-end pt-2 border-t border-slate-100 mt-2">
+                    <button
+                      type="button"
+                      onClick={handleSaveBusinessProfile}
+                      disabled={savingProfile}
+                      className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer"
+                    >
+                      {savingProfile ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                      <span>Save Business Profile</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
               {/* // LEGACY_META_CODE_START */}
               {/* 
               <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">

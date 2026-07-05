@@ -11,6 +11,7 @@ router = APIRouter(prefix="/tenant", tags=["Tenant"])
 class TenantProfileUpdate(BaseModel):
     name: str = Field(..., min_length=1)
     category: str = Field(..., min_length=1)
+    gstin: str | None = Field(None, max_length=15)
 
 @router.put("/profile", status_code=status.HTTP_200_OK)
 def update_tenant_profile(
@@ -69,6 +70,8 @@ def update_tenant_profile(
         
     tenant.name = payload.name
     tenant.category = payload.category
+    if payload.gstin is not None:
+        tenant.gstin = payload.gstin.strip().upper() or None
     db.commit()
     
     # Invalidate cache for the tenant
@@ -81,7 +84,35 @@ def update_tenant_profile(
         "tenant": {
             "id": str(tenant.id),
             "name": tenant.name,
-            "category": tenant.category
+            "category": tenant.category,
+            "gstin": tenant.gstin
+        }
+    }
+
+@router.get("/profile", status_code=status.HTTP_200_OK)
+def get_tenant_profile(
+    tenant_id: uuid.UUID | None = None,
+    access_token: str | None = Cookie(None),
+    authorization: str | None = Header(None),
+    db: Session = Depends(get_db)
+):
+    from app.services.tenant_service import resolve_tenant_id
+    resolved_tenant_id = resolve_tenant_id(tenant_id, access_token, authorization)
+
+    tenant = db.get(DistributorTenant, resolved_tenant_id)
+    if not tenant:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Tenant not found."
+        )
+
+    return {
+        "status": "success",
+        "tenant": {
+            "id": str(tenant.id),
+            "name": tenant.name,
+            "category": tenant.category,
+            "gstin": tenant.gstin
         }
     }
 

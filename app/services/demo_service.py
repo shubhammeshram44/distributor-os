@@ -190,8 +190,10 @@ def _seed_demo_data(db: Session):
             order_id=order.id,
             gstin="29AAAAA1111A1Z1",
             total_amount=o["amount"],
-            irn_status="Cleared",
-            qr_code_status="Generated",
+            # Demo data — no real IRP integration exists; keep consistent with
+            # production behavior so demo mode doesn't imply a capability we don't have.
+            irn_status="NOT_APPLICABLE",
+            qr_code_status="NOT_APPLICABLE",
             customer_id=order.customer_id,
             payment_status="UNPAID",
             amount_paid=0.0,

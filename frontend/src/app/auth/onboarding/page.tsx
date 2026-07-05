@@ -9,6 +9,7 @@ export default function OnboardingPage() {
   const [step, setStep] = useState<1 | 2>(1);
   const [businessName, setBusinessName] = useState("");
   const [category, setCategory] = useState("FMCG");
+  const [gstin, setGstin] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -29,6 +30,11 @@ export default function OnboardingPage() {
     e.preventDefault();
     if (!businessName.trim()) {
       setError("Please enter your Business Name.");
+      return;
+    }
+    const trimmedGstin = gstin.trim().toUpperCase();
+    if (trimmedGstin && !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(trimmedGstin)) {
+      setError("That doesn't look like a valid 15-character GSTIN. Leave it blank if you're not GST-registered.");
       return;
     }
     if (!signupToken) {
@@ -81,6 +87,7 @@ export default function OnboardingPage() {
         body: JSON.stringify({
           name: businessName.trim(),
           category: category,
+          gstin: trimmedGstin || null,
         }),
       });
 
@@ -189,6 +196,24 @@ export default function OnboardingPage() {
                     <ChevronDownIcon />
                   </div>
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-500 mb-2 uppercase tracking-wider">
+                  GSTIN <span className="normal-case font-medium text-slate-400">(optional — leave blank if unregistered)</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. 29AAAAA1111A1Z1"
+                  value={gstin}
+                  onChange={(e) => setGstin(e.target.value.toUpperCase())}
+                  maxLength={15}
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-slate-50/20 text-slate-700 transition-all placeholder:text-slate-300 uppercase"
+                  disabled={loading}
+                />
+                <p className="mt-1.5 text-[11px] text-slate-400">
+                  Shown on your customers&apos; Tax Invoices. You can add this later from Settings.
+                </p>
               </div>
 
               {error && (

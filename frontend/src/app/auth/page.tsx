@@ -48,12 +48,15 @@ export default function AuthPage() {
   const [otpCode, setOtpCode] = useState("");
   const [step, setStep] = useState<1 | 2>(1);
   const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const confirmationRef = useRef<ConfirmationResult | null>(null);
   const recaptchaRef = useRef<RecaptchaVerifier | null>(null);
 
   const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+  const RESEND_COOLDOWN_SECONDS = 30;
 
   useEffect(() => {
     return () => {
@@ -61,6 +64,15 @@ export default function AuthPage() {
       recaptchaRef.current = null;
     };
   }, []);
+
+  // Countdown ticker for the resend cooldown.
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setResendCooldown((prev) => Math.max(0, prev - 1));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [resendCooldown]);
 
   const getRecaptchaVerifier = () => {
     if (!auth) {
@@ -73,6 +85,21 @@ export default function AuthPage() {
       size: "invisible",
     });
     return recaptchaRef.current;
+  };
+
+  // Shared core used by both the initial "Send OTP" submit and "Resend OTP".
+  // A fresh RecaptchaVerifier is required for resend since each verifier
+  // instance is single-use once a signInWithPhoneNumber call resolves/fails.
+  const sendOtp = async (e164: string) => {
+    if (!auth) {
+      throw new Error(
+        "Phone authentication is not configured on this deployment. Please contact support."
+      );
+    }
+    recaptchaRef.current?.clear();
+    recaptchaRef.current = null;
+    const verifier = getRecaptchaVerifier();
+    confirmationRef.current = await signInWithPhoneNumber(auth, e164, verifier);
   };
 
   const handleRequestOtp = async (e: React.FormEvent) => {
@@ -88,21 +115,43 @@ export default function AuthPage() {
 
     setLoading(true);
     try {
-      if (!auth) {
-        throw new Error(
-          "Phone authentication is not configured on this deployment. Please contact support."
-        );
-      }
-      const verifier = getRecaptchaVerifier();
-      confirmationRef.current = await signInWithPhoneNumber(auth, e164, verifier);
+      await sendOtp(e164);
       setSuccessMessage("Verification code sent to your phone.");
       setStep(2);
+      setResendCooldown(RESEND_COOLDOWN_SECONDS);
     } catch (err: unknown) {
       recaptchaRef.current?.clear();
       recaptchaRef.current = null;
       setError(getFirebaseErrorMessage(err));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    if (resendCooldown > 0 || resending || loading) return;
+
+    const e164 = cleanAndNormalizePhone(mobileNumber);
+    if (!e164) {
+      setError("Please enter a valid mobile number (e.g. 98765 43210 or +91 98765 43210).");
+      setStep(1);
+      return;
+    }
+
+    setError(null);
+    setSuccessMessage(null);
+    setResending(true);
+    try {
+      await sendOtp(e164);
+      setOtpCode("");
+      setSuccessMessage("A new verification code has been sent to your phone.");
+      setResendCooldown(RESEND_COOLDOWN_SECONDS);
+    } catch (err: unknown) {
+      recaptchaRef.current?.clear();
+      recaptchaRef.current = null;
+      setError(getFirebaseErrorMessage(err));
+    } finally {
+      setResending(false);
     }
   };
 
@@ -176,6 +225,7 @@ export default function AuthPage() {
     recaptchaRef.current?.clear();
     recaptchaRef.current = null;
     setOtpCode("");
+    setResendCooldown(0);
     setStep(1);
   };
 
@@ -300,6 +350,24 @@ export default function AuthPage() {
                     <span>Verify Code & Launch</span>
                     <ArrowRight className="w-4 h-4" />
                   </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleResendOtp}
+                className="w-full py-2 bg-transparent text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-xl text-xs font-bold transition-all cursor-pointer disabled:text-slate-400 disabled:hover:bg-transparent disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                disabled={loading || resending || resendCooldown > 0}
+              >
+                {resending ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Resending...</span>
+                  </>
+                ) : resendCooldown > 0 ? (
+                  <span>Resend OTP in {resendCooldown}s</span>
+                ) : (
+                  <span>Didn't get the code? Resend OTP</span>
                 )}
               </button>
 

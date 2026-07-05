@@ -9,11 +9,14 @@ class Customer(Base, TenantMixin):
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     customer_id: Mapped[str] = mapped_column(String(100), nullable=False, default=lambda: f"CUST-{uuid.uuid4().hex[:6].upper()}")
-    retailer_name: Mapped[str] = mapped_column(String(255), nullable=False, default="Mock Retailer Store")
+    retailer_name: Mapped[str] = mapped_column(String(255), nullable=False, default="Unnamed Customer")
     address_text: Mapped[str] = mapped_column(String(512), nullable=False, default="Bengaluru")
     latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
-    gstin: Mapped[str] = mapped_column(String(15), nullable=False, default="29AAAAA1111A1Z1")
+    # GSTIN defaults to "PENDING" (not a fabricated government ID) until the
+    # customer's real GSTIN is collected. A legal Tax Invoice must never print
+    # a fake-but-real-looking GSTIN for a customer we don't actually have one for.
+    gstin: Mapped[str] = mapped_column(String(15), nullable=False, default="PENDING")
     tax_group: Mapped[str] = mapped_column(String(100), nullable=False, default="GST-18")
     payment_terms: Mapped[str] = mapped_column(String(255), nullable=False, default="0-15 Days")
     credit_limit: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False, default=100000.0)
@@ -30,12 +33,12 @@ class Customer(Base, TenantMixin):
 
     @property
     def name(self) -> str:
-        return self.retailer_name or "Mock Retailer Store"
+        return self.retailer_name or "Unnamed Customer"
 
     @name.setter
     def name(self, value: str):
         if not value or not isinstance(value, str):
-            self.retailer_name = "Mock Retailer Store"
+            self.retailer_name = "Unnamed Customer"
         else:
             self.retailer_name = value
 

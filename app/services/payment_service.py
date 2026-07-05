@@ -84,10 +84,12 @@ def reconcile_payments_and_invoices(db: Session, tenant_id: uuid.UUID, customer_
                 invoice = Invoice(
                     tenant_id=tenant_id,
                     order_id=order.id,
-                    gstin=customer.gstin if (customer and customer.gstin) else "29AAAAA1111A1Z1",
+                    gstin=customer.gstin if (customer and customer.gstin) else "PENDING",
                     total_amount=amount_sum,
-                    irn_status="Cleared",
-                    qr_code_status="Generated",
+                    # No real IRP integration exists yet — do not claim a
+                    # government e-invoice was actually cleared/generated.
+                    irn_status="NOT_APPLICABLE",
+                    qr_code_status="NOT_APPLICABLE",
                     customer_id=order.customer_id,
                     payment_status="UNPAID",
                     amount_paid=0.0,
