@@ -42,6 +42,14 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt pypdf
 
+      - name: Wait for Postgres
+        run: |
+          for i in $(seq 1 30); do
+            pg_isready -h localhost -p 5432 -U postgres && break
+            echo "Waiting for postgres..."
+            sleep 1
+          done
+
       - name: Run Alembic Migrations
         env:
           DATABASE_URL: postgresql://postgres:password@localhost:5432/test_db
