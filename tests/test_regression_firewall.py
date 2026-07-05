@@ -146,7 +146,8 @@ def test_inventory_stock_inward_addition(db_session, setup_test_catalog):
     response = client.post("/api/v1/inventory/inward", json=inward_payload)
     assert response.status_code == 200
     
-    inv = db_session.query(Inventory).filter(Inventory.sku_id == "SKU-AASHIRVAAD-AATA").first()
+    product = db_session.query(Product).filter_by(sku_id="SKU-AASHIRVAAD-AATA").first()
+    inv = db_session.query(Inventory).filter(Inventory.sku_id == product.id).first()
     assert inv.physical_stock >= 50
 
 

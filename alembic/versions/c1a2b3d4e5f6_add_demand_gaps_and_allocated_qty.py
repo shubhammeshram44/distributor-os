@@ -15,6 +15,8 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql  # Import PostgreSQL dialect features
 
+from app.utils.migration_helpers import column_exists, table_exists, index_exists
+
 
 # revision identifiers, used by Alembic.
 revision: str = "c1a2b3d4e5f6"
@@ -24,73 +26,80 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    bind = op.get_bind()
+
     # ------------------------------------------------------------------
     # 1. Add allocated_quantity to order_line_items
     # ------------------------------------------------------------------
-    op.add_column(
-        "order_line_items",
-        sa.Column("allocated_quantity", sa.Integer(), nullable=True),
-    )
+    if not column_exists(bind, "order_line_items", "allocated_quantity"):
+        op.add_column(
+            "order_line_items",
+            sa.Column("allocated_quantity", sa.Integer(), nullable=True),
+        )
     # No backfill — existing rows get NULL which the ORM treats as "= quantity"
     # for backward-compatible billing (see Order.total_amount property).
 
     # ------------------------------------------------------------------
     # 2. Create demand_gaps table
     # ------------------------------------------------------------------
-    op.create_table(
-        "demand_gaps",
-        sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("tenant_id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("order_id", postgresql.UUID(as_uuid=True), nullable=True),
-        sa.Column("customer_id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("product_id", postgresql.UUID(as_uuid=True), nullable=True),
-        sa.Column("reason_code", sa.String(50), nullable=False),
-        sa.Column("status", sa.String(20), nullable=False, server_default="OPEN"),
-        sa.Column("resolved_at", sa.DateTime(), nullable=True),
-        sa.Column("requested_qty", sa.Integer(), nullable=True),
-        sa.Column("allocated_qty", sa.Integer(), nullable=True),
-        sa.Column("gap_qty", sa.Integer(), nullable=True),
-        sa.Column("unit_price", sa.Numeric(10, 2), nullable=True),
-        sa.Column("revenue_at_risk", sa.Numeric(10, 2), nullable=False),
-        sa.Column(
-            "created_at",
-            sa.DateTime(),
-            nullable=False,
-            server_default=sa.text("CURRENT_TIMESTAMP"),
-        ),
-        sa.ForeignKeyConstraint(["customer_id"], ["customers.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["order_id"], ["orders.id"], ondelete="SET NULL"),
-        sa.ForeignKeyConstraint(["product_id"], ["products.id"], ondelete="SET NULL"),
-        sa.ForeignKeyConstraint(
-            ["tenant_id"], ["distributor_tenants.id"], ondelete="CASCADE"
-        ),
-        sa.PrimaryKeyConstraint("id"),
-    )
+    if not table_exists(bind, "demand_gaps"):
+        op.create_table(
+            "demand_gaps",
+            sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
+            sa.Column("tenant_id", postgresql.UUID(as_uuid=True), nullable=False),
+            sa.Column("order_id", postgresql.UUID(as_uuid=True), nullable=True),
+            sa.Column("customer_id", postgresql.UUID(as_uuid=True), nullable=False),
+            sa.Column("product_id", postgresql.UUID(as_uuid=True), nullable=True),
+            sa.Column("reason_code", sa.String(50), nullable=False),
+            sa.Column("status", sa.String(20), nullable=False, server_default="OPEN"),
+            sa.Column("resolved_at", sa.DateTime(), nullable=True),
+            sa.Column("requested_qty", sa.Integer(), nullable=True),
+            sa.Column("allocated_qty", sa.Integer(), nullable=True),
+            sa.Column("gap_qty", sa.Integer(), nullable=True),
+            sa.Column("unit_price", sa.Numeric(10, 2), nullable=True),
+            sa.Column("revenue_at_risk", sa.Numeric(10, 2), nullable=False),
+            sa.Column(
+                "created_at",
+                sa.DateTime(),
+                nullable=False,
+                server_default=sa.text("CURRENT_TIMESTAMP"),
+            ),
+            sa.ForeignKeyConstraint(["customer_id"], ["customers.id"], ondelete="CASCADE"),
+            sa.ForeignKeyConstraint(["order_id"], ["orders.id"], ondelete="SET NULL"),
+            sa.ForeignKeyConstraint(["product_id"], ["products.id"], ondelete="SET NULL"),
+            sa.ForeignKeyConstraint(
+                ["tenant_id"], ["distributor_tenants.id"], ondelete="CASCADE"
+            ),
+            sa.PrimaryKeyConstraint("id"),
+        )
 
     # ------------------------------------------------------------------
     # 3. Indexes on demand_gaps
     # ------------------------------------------------------------------
     # Primary time-window query: latest gaps for a tenant
-    op.create_index(
-        "ix_demand_gaps_tenant_created",
-        "demand_gaps",
-        ["tenant_id", "created_at"],
-        unique=False,
-    )
+    if not index_exists(bind, "demand_gaps", "ix_demand_gaps_tenant_created"):
+        op.create_index(
+            "ix_demand_gaps_tenant_created",
+            "demand_gaps",
+            ["tenant_id", "created_at"],
+            unique=False,
+        )
     # Reason-code + time-window breakdown (rollup endpoint)
-    op.create_index(
-        "ix_demand_gaps_reason",
-        "demand_gaps",
-        ["tenant_id", "reason_code", "created_at"],
-        unique=False,
-    )
+    if not index_exists(bind, "demand_gaps", "ix_demand_gaps_reason"):
+        op.create_index(
+            "ix_demand_gaps_reason",
+            "demand_gaps",
+            ["tenant_id", "reason_code", "created_at"],
+            unique=False,
+        )
     # Per-customer drill-down (future use)
-    op.create_index(
-        "ix_demand_gaps_tenant_customer",
-        "demand_gaps",
-        ["tenant_id", "customer_id"],
-        unique=False,
-    )
+    if not index_exists(bind, "demand_gaps", "ix_demand_gaps_tenant_customer"):
+        op.create_index(
+            "ix_demand_gaps_tenant_customer",
+            "demand_gaps",
+            ["tenant_id", "customer_id"],
+            unique=False,
+        )
 
 
 def downgrade() -> None:

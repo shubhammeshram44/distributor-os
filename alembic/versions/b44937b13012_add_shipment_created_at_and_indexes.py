@@ -10,6 +10,8 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 
+from app.utils.migration_helpers import column_exists, index_exists
+
 
 # revision identifiers, used by Alembic.
 revision: str = 'b44937b13012'
@@ -19,25 +21,29 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    bind = op.get_bind()
     # Add created_at column with default CURRENT_TIMESTAMP
-    op.add_column(
-        'shipments',
-        sa.Column('created_at', sa.DateTime(), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False)
-    )
+    if not column_exists(bind, 'shipments', 'created_at'):
+        op.add_column(
+            'shipments',
+            sa.Column('created_at', sa.DateTime(), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False)
+        )
     # Create index on (tenant_id, order_id)
-    op.create_index(
-        'ix_shipments_tenant_order',
-        'shipments',
-        ['tenant_id', 'order_id'],
-        unique=False
-    )
+    if not index_exists(bind, 'shipments', 'ix_shipments_tenant_order'):
+        op.create_index(
+            'ix_shipments_tenant_order',
+            'shipments',
+            ['tenant_id', 'order_id'],
+            unique=False
+        )
     # Create index on (created_at)
-    op.create_index(
-        'ix_shipments_created_at',
-        'shipments',
-        ['created_at'],
-        unique=False
-    )
+    if not index_exists(bind, 'shipments', 'ix_shipments_created_at'):
+        op.create_index(
+            'ix_shipments_created_at',
+            'shipments',
+            ['created_at'],
+            unique=False
+        )
 
 
 def downgrade() -> None:

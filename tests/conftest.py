@@ -22,6 +22,18 @@ def fixture_db_engine():
     database_url = os.environ.get("DATABASE_URL")
     if database_url:
         engine = create_engine(database_url)
+        # Make sure the schema exists (usually already applied via Alembic in
+        # CI, but this is a harmless no-op in that case) and reset all data
+        # before each test. Without this, tests share state through the same
+        # real database and fail/pass depending on run order (unlike the
+        # sqlite:///:memory: branch below, which gets a brand-new empty
+        # engine per test automatically).
+        Base.metadata.create_all(bind=engine, checkfirst=True)
+        with engine.begin() as connection:
+            table_names = [t.name for t in reversed(Base.metadata.sorted_tables)]
+            if table_names:
+                quoted = ", ".join(f'"{name}"' for name in table_names)
+                connection.exec_driver_sql(f"TRUNCATE TABLE {quoted} RESTART IDENTITY CASCADE")
         yield engine
     else:
         engine = create_engine(
@@ -107,7 +119,7 @@ def setup_test_catalog(db_session):
 
     # Create Product with SKU matching "SKU-AASHIRVAAD-AATA"
     prod = Product(
-        id="SKU-AASHIRVAAD-AATA",
+        id=uuid.uuid4(),
         tenant_id=tenant.id,
         sku_id="SKU-AASHIRVAAD-AATA",
         brand="Generic",
@@ -146,7 +158,7 @@ def setup_pending_order(db_session):
     prod = db_session.query(Product).filter_by(sku_id="SKU-AASHIRVAAD-AATA").first()
     if not prod:
         prod = Product(
-            id="SKU-AASHIRVAAD-AATA",
+            id=uuid.uuid4(),
             tenant_id=tenant.id,
             sku_id="SKU-AASHIRVAAD-AATA",
             brand="Generic",
@@ -249,7 +261,7 @@ def setup_empty_catalog_item(db_session):
         db_session.flush()
 
     prod = Product(
-        id="ZERO_STOCK_SKU",
+        id=uuid.uuid4(),
         tenant_id=tenant.id,
         sku_id="ZERO_STOCK_SKU",
         brand="Generic",
@@ -295,7 +307,7 @@ def setup_unpaid_orders(db_session):
     db_session.flush()
 
     prod = Product(
-        id="SKU-FIFO-ITEM",
+        id=uuid.uuid4(),
         tenant_id=tenant.id,
         sku_id="SKU-FIFO-ITEM",
         brand="Generic",
