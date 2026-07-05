@@ -547,7 +547,7 @@ class IngestionService:
                         result = rapidfuzz.process.extractOne(token, choices)
                         if result:
                             matched_text, score, index = result
-                            if score >= 82.0:
+                            if score >= 90.0:
                                 product = candidates[matched_text]
                                 logger.info("IngestionService: Fuzzy match success '%s' -> '%s' (score %.2f) (SKU: %s)", token, matched_text, score, product.sku_id)
                 except Exception as fuzzy_exc:
