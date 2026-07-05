@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Phone, KeyRound, Loader2, ArrowRight, ShieldCheck, AlertCircle } from "lucide-react";
 import { RecaptchaVerifier, signInWithPhoneNumber, ConfirmationResult } from "firebase/auth";
-import { auth } from "@/lib/firebase";
+import { auth, isFirebaseConfigured } from "@/lib/firebase";
 
 function cleanAndNormalizePhone(input: string): string | null {
   const trimmed = input.trim();
@@ -63,6 +63,11 @@ export default function AuthPage() {
   }, []);
 
   const getRecaptchaVerifier = () => {
+    if (!auth) {
+      throw new Error(
+        "Phone authentication is not configured on this deployment. Please contact support."
+      );
+    }
     if (recaptchaRef.current) return recaptchaRef.current;
     recaptchaRef.current = new RecaptchaVerifier(auth, "recaptcha-container", {
       size: "invisible",
@@ -83,6 +88,11 @@ export default function AuthPage() {
 
     setLoading(true);
     try {
+      if (!auth) {
+        throw new Error(
+          "Phone authentication is not configured on this deployment. Please contact support."
+        );
+      }
       const verifier = getRecaptchaVerifier();
       confirmationRef.current = await signInWithPhoneNumber(auth, e164, verifier);
       setSuccessMessage("Verification code sent to your phone.");
@@ -183,6 +193,16 @@ export default function AuthPage() {
             Secure workspace authentication & verification portal
           </p>
         </div>
+
+        {!isFirebaseConfigured && (
+          <div className="flex items-center gap-2 p-3.5 mb-5 bg-amber-50 border border-amber-200 rounded-xl text-amber-700 text-xs font-semibold">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>
+              Phone sign-in is temporarily unavailable (authentication service is not configured).
+              Please contact support.
+            </span>
+          </div>
+        )}
 
         {step === 1 ? (
           <form onSubmit={handleRequestOtp} className="space-y-5">

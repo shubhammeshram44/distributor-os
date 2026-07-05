@@ -1189,6 +1189,21 @@ def create_order(
             db.add(product)
             db.flush()
 
+            # Without a matching Inventory row, order_confirmation_service
+            # treats this SKU as having 0 stock and zeroes the line item
+            # out entirely. Seed it with the ordered quantity so this
+            # ad-hoc/fallback product is immediately billable.
+            db.add(Inventory(
+                id=uuid.uuid4(),
+                tenant_id=payload.tenant_id,
+                sku_id=product.id,
+                location="Aisle-A1",
+                quantity_on_hand=item.quantity,
+                quantity_committed=0,
+                low_stock_threshold=10
+            ))
+            db.flush()
+
         db.add(OrderLineItem(
             id=uuid.uuid4(),
             tenant_id=payload.tenant_id,
@@ -1349,9 +1364,11 @@ def create_order_generic(payload: IngestionOrderPayload, db: Session = Depends(g
         # Check if product exists
         product = db.query(Product).filter_by(sku_id=item.sku_id).first()
         if not product:
-            # We use item.sku_id as the primary key ID directly in SQLite to support tests querying by Inventory.sku_id == "SKU..."
+            # NOTE: id must be a real UUID (Product.id is a UUID column).
+            # Using item.sku_id (a business SKU string) directly here
+            # crashes with a Postgres DataError on any non-UUID SKU.
             product = Product(
-                id=item.sku_id,
+                id=uuid.uuid4(),
                 tenant_id=tenant_id,
                 sku_id=item.sku_id,
                 brand="Generic",
@@ -1360,6 +1377,21 @@ def create_order_generic(payload: IngestionOrderPayload, db: Session = Depends(g
                 base_price=item.price
             )
             db.add(product)
+            db.flush()
+
+            # Without a matching Inventory row, order_confirmation_service
+            # treats this SKU as having 0 stock and zeroes the line item
+            # out entirely. Seed it with the ordered quantity so this
+            # ad-hoc/fallback product is immediately billable.
+            db.add(Inventory(
+                id=uuid.uuid4(),
+                tenant_id=tenant_id,
+                sku_id=product.id,
+                location="Aisle-A1",
+                quantity_on_hand=item.quantity,
+                quantity_committed=0,
+                low_stock_threshold=10
+            ))
             db.flush()
 
         db.add(OrderLineItem(

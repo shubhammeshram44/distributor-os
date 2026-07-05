@@ -99,6 +99,66 @@ def test_order_addition_and_creation(db_session, setup_test_catalog):
     assert order.total_amount == 4500.00
 
 
+def test_manually_created_product_gets_inventory_row_and_is_billable(db_session):
+    """
+    REGRESSION GUARD (payment-blocking bug): products created via
+    POST /products (manual "Add Product" form) or CSV bulk import must
+    get a matching Inventory row. Without it, order_confirmation_service
+    treats the SKU as having 0 stock, silently allocating 0 units and
+    zeroing the invoice for any order placed against it.
+    """
+    tenant = DistributorTenant(name="Inventory Regression Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+
+    payload = {
+        "sku_id": "SKU-NEW-PRODUCT-001",
+        "brand": "TestBrand",
+        "category": "Snacks",
+        "pack_size": "200g",
+        "base_price": 99.0
+    }
+    response = client.post(f"/api/v1/products?tenant_id={tenant.id}", json=payload)
+    assert response.status_code == 201
+
+    product = db_session.query(Product).filter_by(sku_id="SKU-NEW-PRODUCT-001").first()
+    assert product is not None
+
+    inv = db_session.query(Inventory).filter(Inventory.sku_id == product.id).first()
+    assert inv is not None, "Product created via POST /products must get a matching Inventory row"
+    assert inv.quantity_on_hand == 100  # matches Product.stock_quantity default
+
+
+def test_order_create_fallback_product_gets_valid_uuid_and_inventory(db_session, setup_test_catalog):
+    """
+    REGRESSION GUARD: the /orders/create fallback path (for SKUs with no
+    existing Product row) must generate a real UUID for Product.id, not
+    reuse the raw SKU string (which crashes on Postgres, a UUID column),
+    and must create a matching Inventory row so the order is billable.
+    """
+    order_payload = {
+        "customer_id": 1,
+        "items": [
+            {"sku_id": "SKU-BRAND-NEW-UNMAPPED", "quantity": 3, "price": 150.00}
+        ]
+    }
+    response = client.post("/api/v1/orders/create", json=order_payload)
+    assert response.status_code == 201
+
+    order_id = response.json().get("order_id")
+    order = db_session.query(Order).get(order_id)
+    assert order is not None
+    assert order.total_amount == 450.00
+
+    product = db_session.query(Product).filter_by(sku_id="SKU-BRAND-NEW-UNMAPPED").first()
+    assert product is not None
+    assert isinstance(product.id, uuid.UUID)
+
+    inv = db_session.query(Inventory).filter(Inventory.sku_id == product.id).first()
+    assert inv is not None
+    assert inv.quantity_on_hand >= 3
+
+
 def test_order_confirmation_workflow(db_session, setup_pending_order):
     """
     Verifies transitioning an order from 'Pending' to 'Confirmed', ensuring

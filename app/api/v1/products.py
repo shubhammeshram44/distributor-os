@@ -66,7 +66,22 @@ def create_product(
         alias_name=friendly_name
     )
     db.add(alias_friendly)
-    
+
+    # Create the matching Inventory row so this product is immediately
+    # orderable/billable. Without this, order confirmation treats the
+    # product as having 0 stock (see order_confirmation_service.py),
+    # which silently zeroes out the invoice for this SKU.
+    inv = Inventory(
+        id=uuid.uuid4(),
+        tenant_id=tenant_id,
+        sku_id=new_product.id,
+        location="Aisle-A1",
+        quantity_on_hand=new_product.stock_quantity,
+        quantity_committed=0,
+        low_stock_threshold=10
+    )
+    db.add(inv)
+
     db.commit()
     return {
         "status": "success",
@@ -387,6 +402,19 @@ def import_products_csv(
                     )
                     db.add(alias_friendly)
                     db.flush()
+
+                    # Same as create_product: create the matching Inventory
+                    # row so bulk-imported SKUs are immediately orderable.
+                    inv = Inventory(
+                        id=uuid.uuid4(),
+                        tenant_id=tenant_id,
+                        sku_id=new_product.id,
+                        location="Aisle-A1",
+                        quantity_on_hand=0,
+                        quantity_committed=0,
+                        low_stock_threshold=10
+                    )
+                    db.add(inv)
                     inserted_skus.append(sku_id)
 
                 success_count += 1
