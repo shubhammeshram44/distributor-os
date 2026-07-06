@@ -209,3 +209,115 @@ def test_whatsapp_triage_resolution_self_learning_loop(db_session, client):
     aliases = db_session.query(ProductAlias).filter_by(tenant_id=tenant.id, product_id=product.id).all()
     assert len(aliases) == 1
 
+
+def test_whatsapp_hybrid_matching_lux_patanjali(db_session, client, monkeypatch):
+    # Mock Gemini parser to parse the custom test string
+    from app.services.gemini_service import GeminiService, AntigravityParsedOrder, ParsedOrderItem
+    monkeypatch.setattr(
+        GeminiService,
+        "parse_order_text",
+        lambda self, text: AntigravityParsedOrder(
+            items=[
+                ParsedOrderItem(raw_product_name="lux soapp", quantity=10),
+                ParsedOrderItem(raw_product_name="patanjalli", quantity=5),
+            ],
+            extracted_invoice_preference="UNSPECIFIED",
+        ),
+    )
+
+    # 1. Setup Tenant
+    tenant = DistributorTenant(name="Hybrid Match Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+    tenant_context.set(tenant.id)
+
+    # 2. Setup Customer & Alias
+    customer = Customer(
+        retailer_name="Lux Patanjali Retailer",
+        customer_id="CUST-LP-101",
+        address_text="Bengaluru",
+        gstin="29AAAAA1111A1Z1",
+        tax_group="GST-18",
+        payment_terms="0-15 Days"
+    )
+    db_session.add(customer)
+    db_session.flush()
+
+    cust_alias = CustomerAlias(customer_id=customer.id, alias_value="+919999888877")
+    db_session.add(cust_alias)
+
+    # 3. Setup Products, Aliases and Inventory
+    from app.models.product import ProductAlias
+    p1 = Product(
+        id=uuid.uuid4(),
+        tenant_id=tenant.id,
+        sku_id="LUX-101",
+        brand="Lux",
+        category="Soap",
+        pack_size="100g",
+        base_price=30.0
+    )
+    p2 = Product(
+        id=uuid.uuid4(),
+        tenant_id=tenant.id,
+        sku_id="PAT-101",
+        brand="Patanjali",
+        category="Personal Care",
+        pack_size="100g",
+        base_price=50.0
+    )
+    db_session.add_all([p1, p2])
+    db_session.flush()
+
+    alias_p1 = ProductAlias(id=uuid.uuid4(), tenant_id=tenant.id, product_id=p1.id, alias_name="Lux Soap")
+    alias_p2 = ProductAlias(id=uuid.uuid4(), tenant_id=tenant.id, product_id=p2.id, alias_name="Patanjali")
+    db_session.add_all([alias_p1, alias_p2])
+
+    from app.models.inventory import Inventory
+    inv1 = Inventory(
+        id=uuid.uuid4(),
+        tenant_id=tenant.id,
+        sku_id=p1.id,
+        quantity_on_hand=100,
+        location="Bin A1",
+        low_stock_threshold=10
+    )
+    inv2 = Inventory(
+        id=uuid.uuid4(),
+        tenant_id=tenant.id,
+        sku_id=p2.id,
+        quantity_on_hand=100,
+        location="Bin B1",
+        low_stock_threshold=10
+    )
+    db_session.add_all([inv1, inv2])
+    db_session.commit()
+
+    # 4. Post to WhatsApp webhook with the custom message
+    response = client.post("/api/v1/whatsapp/webhook", json={
+        "tenant_id": str(tenant.id),
+        "phone_number": "+919999888877",
+        "message_text": "10 unit lux soapp and 5 patanjalli"
+    })
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["failed_rows"] == 0
+
+    # 5. Verify Order was created in database and both line items are matched
+    order = db_session.query(Order).filter(Order.internal_order_id == data["order_id"]).first()
+    assert order is not None
+    assert order.current_status == "Draft"  # All matched successfully!
+
+    from app.models.order import OrderLineItem
+    line_items = db_session.query(OrderLineItem).filter(OrderLineItem.order_id == order.id).all()
+    assert len(line_items) == 2
+
+    # Map line items by matched product_id
+    item_map = {item.product_id: item for item in line_items}
+    assert p1.id in item_map
+    assert p2.id in item_map
+
+    assert item_map[p1.id].quantity == 10
+    assert item_map[p2.id].quantity == 5
+

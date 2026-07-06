@@ -620,8 +620,7 @@ class IngestionService:
                             id=uuid.uuid4(),
                             tenant_id=tenant_id,
                             product_id=product.id,
-                            alias_name=token_lower,
-                            created_at=datetime.utcnow()
+                            alias_name=token_lower
                         ))
                         db.flush()
                         logger.info(
@@ -630,6 +629,7 @@ class IngestionService:
                         )
                     except Exception as alias_err:
                         logger.warning("IngestionService: Alias self-learning failed: %s", str(alias_err))
+                        db.rollback()
 
             if product:
                 logger.info("IngestionService: Product matched: %s -> SKU %s", token, product.sku_id)
