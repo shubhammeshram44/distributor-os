@@ -480,10 +480,22 @@ class IngestionService:
                     return p
             return matches[0]
 
+        # Load once before the token loop
+        all_tenant_aliases = db.query(ProductAlias).filter(
+            ProductAlias.tenant_id == tenant_id
+        ).all()
+
+        all_tenant_products = db.query(Product).filter(
+            Product.tenant_id == tenant_id,
+            Product.is_active == True
+        ).all()
+
         for token_entry in raw_tokens:
             token = token_entry["text_token"]
             qty = token_entry["qty"]
             product = None
+            matched_in_phase2 = False
+            matched_in_phase3 = False
 
             # Phase 1: Exact Match (Case-insensitive) against active tenant's aliases and product SKUs
             product = get_best_product_for_alias_query(
@@ -500,58 +512,124 @@ class IngestionService:
                     )
                 )
 
-            # Phase 2: Token Partial Match
+            # Phase 2: Word overlap scoring
+            token_lower = token.lower()
+            token_words = []
             if not product:
                 import re
-                token_lower = token.lower()
+
+                # Extract meaningful words from token (ignore words ≤ 2 chars like "of", "and", "a")
+                token_words = [w for w in re.split(r'[\s\-_\./]+', token_lower) 
+                               if w and len(w) > 2]
                 
-                # Check aliases for substring matches within tokens
-                tenant_aliases = db.query(ProductAlias).filter(ProductAlias.tenant_id == tenant_id).all()
-                for alias in tenant_aliases:
-                    sub_tokens = re.split(r'[\s\-_\.]+', alias.alias_name.lower())
-                    if any(token_lower in tok for tok in sub_tokens if tok):
-                        p = db.query(Product).filter_by(id=alias.product_id).first()
+                if token_words:
+                    best_product = None
+                    best_score = 0.0
+
+                    # Build candidate pool: aliases + product searchable fields
+                    # Each candidate maps a searchable string → Product
+                    candidates: list[tuple[str, Product]] = []
+                    
+                    for alias in all_tenant_aliases:
+                        p = next((prod for prod in all_tenant_products if prod.id == alias.product_id), None)
+                        if not p:
+                            p = db.query(Product).filter_by(id=alias.product_id).first()
                         if p and "MOCK" not in p.sku_id:
-                            product = p
-                            break
-                            
-                # Check product SKUs for substring matches within tokens
-                if not product:
-                    tenant_products = db.query(Product).filter(Product.tenant_id == tenant_id).all()
-                    for p in tenant_products:
-                        sub_tokens = re.split(r'[\s\-_\.]+', p.sku_id.lower())
-                        if any(token_lower in tok for tok in sub_tokens if tok):
-                            if "MOCK" not in p.sku_id:
-                                product = p
-                                break
+                            candidates.append((alias.alias_name.lower(), p))
+                    
+                    for p in all_tenant_products:
+                        if "MOCK" not in p.sku_id:
+                            # Combine brand + sku_id + category into one searchable string
+                            searchable = " ".join(filter(None, [
+                                p.brand or "",
+                                p.sku_id or "",
+                                p.category or ""
+                            ])).lower()
+                            candidates.append((searchable, p))
+
+                    for candidate_text, candidate_product in candidates:
+                        matching_words = [w for w in token_words if w in candidate_text]
+                        
+                        if not matching_words:
+                            continue
+                        
+                        # Require at least 2 matching words for multi-word tokens
+                        # For single-word tokens, 1 match is sufficient
+                        min_required = 2 if len(token_words) >= 2 else 1
+                        if len(matching_words) < min_required:
+                            continue
+                        
+                        # Score = ratio of token words matched (0.0 to 1.0)
+                        score = len(matching_words) / len(token_words)
+                        
+                        if score > best_score:
+                            best_score = score
+                            best_product = candidate_product
+
+                    # Accept match only if majority of token words matched (>=0.5)
+                    if best_score >= 0.5 and best_product:
+                        product = best_product
+                        matched_in_phase2 = True
+                        logger.info(
+                            "IngestionService: Phase 2 word-overlap match '%s' -> '%s' (score %.2f)",
+                            token, best_product.sku_id, best_score
+                        )
 
             # Phase 3: Fuzzy Match Fallback
             if not product:
                 try:
                     import rapidfuzz
-                    candidates = {}
-                    
-                    tenant_aliases = db.query(ProductAlias).filter(ProductAlias.tenant_id == tenant_id).all()
-                    for alias in tenant_aliases:
-                        p = db.query(Product).filter_by(id=alias.product_id).first()
-                        if p and "MOCK" not in p.sku_id:
-                            candidates[alias.alias_name] = p
-                            
-                    tenant_products = db.query(Product).filter(Product.tenant_id == tenant_id).all()
-                    for p in tenant_products:
-                        if "MOCK" not in p.sku_id:
-                            candidates[p.sku_id] = p
-                            
+                    # Build candidates if Phase 2 was skipped (empty token_words)
+                    if not token_words:
+                        candidates = []
+                        for alias in all_tenant_aliases:
+                            p = next((prod for prod in all_tenant_products if prod.id == alias.product_id), None)
+                            if not p:
+                                p = db.query(Product).filter_by(id=alias.product_id).first()
+                            if p and "MOCK" not in p.sku_id:
+                                candidates.append((alias.alias_name, p))
+                        for p in all_tenant_products:
+                            if "MOCK" not in p.sku_id:
+                                candidates.append((p.sku_id, p))
+
                     if candidates:
-                        choices = list(candidates.keys())
+                        choices = [c[0] for c in candidates]
+                        candidate_map = {c[0]: c[1] for c in candidates}
                         result = rapidfuzz.process.extractOne(token, choices)
                         if result:
                             matched_text, score, index = result
-                            if score >= 90.0:
-                                product = candidates[matched_text]
-                                logger.info("IngestionService: Fuzzy match success '%s' -> '%s' (score %.2f) (SKU: %s)", token, matched_text, score, product.sku_id)
+                            if score >= 82.0:
+                                product = candidate_map[matched_text]
+                                matched_in_phase3 = True
+                                logger.info(
+                                    "IngestionService: Phase 3 fuzzy match '%s' -> '%s' (score %.2f)",
+                                    token, matched_text, score
+                                )
                 except Exception as fuzzy_exc:
                     logger.error("IngestionService: Fuzzy matching error: %s", str(fuzzy_exc))
+
+            # Phase 4 — Self-learning alias registration
+            if product and (matched_in_phase2 or matched_in_phase3):
+                if token_lower not in [a.alias_name.lower() for a in 
+                    db.query(ProductAlias).filter(
+                        ProductAlias.tenant_id == tenant_id,
+                        ProductAlias.product_id == product.id
+                    ).all()]:
+                    try:
+                        db.add(ProductAlias(
+                            id=uuid.uuid4(),
+                            tenant_id=tenant_id,
+                            product_id=product.id,
+                            alias_name=token_lower,
+                            created_at=datetime.utcnow()
+                        ))
+                        db.flush()
+                        logger.info(
+                            "IngestionService: Self-learned alias '%s' -> SKU %s",
+                            token_lower, product.sku_id
+                        )
+                    except Exception as alias_err:
+                        logger.warning("IngestionService: Alias self-learning failed: %s", str(alias_err))
 
             if product:
                 logger.info("IngestionService: Product matched: %s -> SKU %s", token, product.sku_id)
