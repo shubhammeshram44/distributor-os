@@ -282,6 +282,19 @@ async def handle_whatsapp_webhook(
                                     if f"dist-{short_id}" in instance_name or short_id in instance_name:
                                         tenant = t
                                         break
+
+                            # ADD THIS NEW FALLBACK — match by owner phone number:
+                            if not tenant and owner_phone:
+                                from app.utils.phone import normalize_phone_number
+                                normalized = normalize_phone_number(owner_phone)
+                                tenant = new_db.query(DistributorTenant).filter(
+                                    DistributorTenant.whatsapp_order_phone == normalized
+                                ).first()
+                                if not tenant:
+                                    tenant = new_db.query(DistributorTenant).filter(
+                                        DistributorTenant.whatsapp_order_phone == owner_phone
+                                    ).first()
+
                             if not tenant:
                                 if new_db.query(DistributorTenant).count() == 1:
                                     tenant = new_db.query(DistributorTenant).first()
