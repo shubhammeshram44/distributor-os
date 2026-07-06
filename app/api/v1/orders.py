@@ -866,6 +866,62 @@ def get_order_invoice(
     )
 
 
+@router.get("/export/tally")
+def export_orders_to_tally(
+    tenant_id: str | None = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    access_token: str | None = Cookie(None),
+    authorization: str | None = Header(None),
+    db: Session = Depends(get_db)
+):
+    """
+    Exports Confirmed/Dispatched/Delivered orders in a date range as a
+    Tally-importable XML (Sales Vouchers). Lets distributors keep using
+    Tally for their CA/GST filing while DistributorOS handles WhatsApp
+    order capture and collections — no manual re-typing required.
+
+    Import in Tally via Gateway of Tally > Import Data > Vouchers, pointing
+    at the downloaded .xml file.
+    """
+    resolved_tenant_id = resolve_tenant_id(tenant_id, access_token, authorization)
+    tenant_context.set(resolved_tenant_id)
+
+    start_dt = None
+    end_dt = None
+    if start_date:
+        try:
+            start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid start_date format: '{start_date}'. Expected YYYY-MM-DD.")
+    if end_date:
+        try:
+            # Include the entire end date (up to 23:59:59.999999)
+            end_dt = datetime.strptime(end_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59, microsecond=999999)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid end_date format: '{end_date}'. Expected YYYY-MM-DD.")
+
+    from app.services.tally_export_service import build_tally_sales_xml
+    xml_bytes, voucher_count = build_tally_sales_xml(db, resolved_tenant_id, start_dt, end_dt)
+
+    if voucher_count == 0:
+        raise HTTPException(
+            status_code=404,
+            detail="No confirmed orders found in the selected date range to export."
+        )
+
+    buffer = io.BytesIO(xml_bytes)
+    filename_suffix = f"{start_date or 'all'}_to_{end_date or 'all'}"
+    return StreamingResponse(
+        buffer,
+        media_type="application/xml",
+        headers={
+            "Content-Disposition": f"attachment; filename=tally_export_{filename_suffix}.xml",
+            "X-Voucher-Count": str(voucher_count)
+        }
+    )
+
+
 # =====================================================================
 # Bulk Action Engine (Async Worker & Polling Endpoints)
 # =====================================================================

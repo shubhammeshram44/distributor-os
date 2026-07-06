@@ -248,6 +248,50 @@ export default function OrdersPage() {
     window.open(url, "_blank");
   };
 
+  // Tally export — lets distributors keep using Tally for their CA/GST
+  // filing while DistributorOS handles WhatsApp order capture, instead of
+  // manually re-typing every confirmed order into Tally.
+  const [showTallyExportModal, setShowTallyExportModal] = useState(false);
+  const [tallyExportError, setTallyExportError] = useState<string | null>(null);
+  const [tallyStartDate, setTallyStartDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 30);
+    return d.toISOString().split("T")[0];
+  });
+  const [tallyEndDate, setTallyEndDate] = useState(() => new Date().toISOString().split("T")[0]);
+
+  const handleExportTally = async () => {
+    setTallyExportError(null);
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+    const params = new URLSearchParams({
+      tenant_id: activeTenantId,
+      start_date: tallyStartDate,
+      end_date: tallyEndDate,
+    });
+    try {
+      const resp = await fetch(`${apiBase}/api/v1/orders/export/tally?${params.toString()}`, {
+        credentials: "include",
+      });
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => ({}));
+        throw new Error(data.detail || "No confirmed orders found in the selected date range.");
+      }
+      const blob = await resp.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = downloadUrl;
+      a.download = `tally_export_${tallyStartDate}_to_${tallyEndDate}.xml`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(downloadUrl);
+      setShowTallyExportModal(false);
+      showToast("Tally export downloaded. Import it via Gateway of Tally \u2192 Import Data \u2192 Vouchers.", "success");
+    } catch (err: any) {
+      setTallyExportError(err.message || "Failed to export to Tally.");
+    }
+  };
+
 
   useEffect(() => {
     if (!selectedOrderId) {
@@ -614,6 +658,15 @@ export default function OrdersPage() {
               >
                 <Download className="w-3.5 h-3.5 text-slate-400" />
                 <span>Export CSV</span>
+              </button>
+
+              <button
+                onClick={() => setShowTallyExportModal(true)}
+                className="flex items-center gap-1.5 px-3 py-2 border border-dashboard-border bg-white rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-all shadow-sm cursor-pointer"
+                title="Export confirmed orders as a Tally-importable XML"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-slate-400" />
+                <span>Export to Tally</span>
               </button>
 
               <button
@@ -1253,6 +1306,67 @@ export default function OrdersPage() {
         onConfirm={handleCancelOrder}
         onCancel={() => setIsCancelDialogOpen(false)}
       />
+
+      {/* Tally Export Date Range Modal */}
+      {showTallyExportModal && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 animate-fade-in">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold text-slate-800">Export to Tally</h3>
+              <button
+                onClick={() => setShowTallyExportModal(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-50 transition-all"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-xs text-slate-500 font-semibold mb-4">
+              Downloads Confirmed/Dispatched/Delivered orders in this range as a Tally-importable
+              XML (Sales Vouchers). Import via Gateway of Tally &rarr; Import Data &rarr; Vouchers.
+            </p>
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">From</label>
+                <input
+                  type="date"
+                  value={tallyStartDate}
+                  onChange={(e) => setTallyStartDate(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">To</label>
+                <input
+                  type="date"
+                  value={tallyEndDate}
+                  onChange={(e) => setTallyEndDate(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                />
+              </div>
+            </div>
+            {tallyExportError && (
+              <div className="flex items-center gap-2 p-3 bg-rose-50 border border-rose-100 rounded-lg text-rose-600 text-xs font-semibold mb-4">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{tallyExportError}</span>
+              </div>
+            )}
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setShowTallyExportModal(false)}
+                className="px-4 py-2 text-xs font-bold text-slate-500 hover:text-slate-700 hover:bg-slate-50 rounded-lg transition-all cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleExportTally}
+                className="px-4 py-2 bg-brand-blue hover:bg-brand-blueHover text-white rounded-lg text-xs font-bold transition-all cursor-pointer"
+              >
+                Download XML
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Bulk Action Sticky Progress Tracker Footer */}
       {bulkJobId && (
