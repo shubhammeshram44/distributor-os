@@ -2,6 +2,9 @@
 
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import Link from "next/link";
+import { Figtree } from 'next/font/google';
+
+const figtree = Figtree({ subsets: ['latin'] });
 
 export default function MarketingPage() {
   const [isMobile, setIsMobile] = useState(false);
@@ -201,7 +204,7 @@ export default function MarketingPage() {
 
   return (
 
-<div style={{fontFamily: '\'Inter\', -apple-system, sans-serif', color: '#0f172a', background: '#ffffff', width: '100%', overflowX: 'hidden', minHeight: '100vh'}}>
+<div className={figtree.className} style={{fontFamily: '\'Figtree\', \'Inter\', -apple-system, sans-serif', color: '#0f172a', background: '#ffffff', width: '100%', overflowX: 'hidden', minHeight: '100vh'}}>
 
   {/* NAV */}
   <div style={{position: 'sticky', top: 0, zIndex: 100, background: 'rgba(15,23,42,0.97)', backdropFilter: 'blur(8px)', borderBottom: '1px solid rgba(255,255,255,0.08)'}}>
