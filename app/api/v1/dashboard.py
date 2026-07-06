@@ -1078,7 +1078,7 @@ def get_onboarding_status(
     has_product = db.query(Product.id).filter(Product.tenant_id == resolved_tenant_id).first() is not None
     has_customer = db.query(Customer.id).filter(Customer.tenant_id == resolved_tenant_id).first() is not None
     has_order = db.query(Order.id).filter(Order.tenant_id == resolved_tenant_id).first() is not None
-    has_whatsapp = bool(tenant and tenant.whatsapp_phone_id and tenant.whatsapp_access_token)
+    has_whatsapp = bool(tenant and tenant.whatsapp_phone_id)
     has_razorpay = bool(tenant and tenant.razorpay_key_id and tenant.razorpay_key_secret_enc)
 
     steps = [
