@@ -358,3 +358,20 @@ def disconnect_razorpay(
     }
 
 
+@router.get("/connection-status")
+def get_connection_status(
+    tenant_id: uuid.UUID = Query(...),
+    db: Session = Depends(get_db)
+):
+    tenant = db.get(DistributorTenant, tenant_id)
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    return {
+        "whatsapp_connected": tenant.whatsapp_connection_status == "connected",
+        "connection_status": tenant.whatsapp_connection_status or "unknown",
+        "disconnected_at": tenant.whatsapp_disconnected_at.isoformat() if tenant.whatsapp_disconnected_at else None,
+        "disconnect_reason": tenant.whatsapp_disconnect_reason,
+        "has_whatsapp": bool(tenant.whatsapp_phone_id)
+    }
+
+

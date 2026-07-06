@@ -24,6 +24,15 @@ class DistributorTenant(Base):
     razorpay_key_secret_enc: Mapped[str | None] = mapped_column(String(500), nullable=True, default=None)
     razorpay_account_name: Mapped[str | None] = mapped_column(String(200), nullable=True, default=None)
     razorpay_mode: Mapped[str] = mapped_column(String(10), nullable=False, default="test")
+    whatsapp_connection_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default="unknown"
+    )  # "connected" | "disconnected" | "unknown"
+    whatsapp_disconnected_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True, default=None
+    )
+    whatsapp_disconnect_reason: Mapped[str | None] = mapped_column(
+        String(50), nullable=True, default=None
+    )  # "logged_out" | "timeout" | "conflict" | "unknown"
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     plan_type: Mapped[str] = mapped_column(String(50), nullable=False, default="FREE")
     monthly_order_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

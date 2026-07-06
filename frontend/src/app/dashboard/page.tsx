@@ -22,6 +22,13 @@ export default function DashboardPage() {
   const [tenantId, setTenantId] = useState("");
   const [userProfile, setUserProfile] = useState<any>(null);
   const [isHydrating, setIsHydrating] = useState(true);
+  const [waStatus, setWaStatus] = useState<{
+    whatsapp_connected: boolean;
+    has_whatsapp: boolean;
+    disconnected_at: string | null;
+    disconnect_reason: string | null;
+  } | null>(null);
+  const [waBannerDismissed, setWaBannerDismissed] = useState(false);
 
   // Sync profile and tenant from backend / localStorage
   useEffect(() => {
@@ -148,6 +155,26 @@ export default function DashboardPage() {
     error
   } = useDashboardData(isHydrating ? "" : tenantId, startDate, endDate);
 
+  // Poll connection status every 60 seconds
+  useEffect(() => {
+    if (!tenantId) return;
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+    const check = async () => {
+      try {
+        const res = await fetch(
+          `${apiBase}/api/v1/tenant/connection-status?tenant_id=${tenantId}`
+        );
+        const data = await res.json();
+        setWaStatus(data);
+        // Reset dismissed state if reconnected
+        if (data.whatsapp_connected) setWaBannerDismissed(false);
+      } catch (e) {}
+    };
+    check();
+    const interval = setInterval(check, 60000);
+    return () => clearInterval(interval);
+  }, [tenantId]);
+
   if (!tenantId || tenantId === "") {
     return (
       <div className="flex items-center justify-center min-h-screen bg-slate-50">
@@ -260,6 +287,41 @@ export default function DashboardPage() {
                   message={`Dashboard data could not be loaded: ${error}`}
                   onRetry={() => refreshAll()}
                 />
+              )}
+
+              {/* WhatsApp Disconnection Banner */}
+              {waStatus && 
+               waStatus.has_whatsapp && 
+               !waStatus.whatsapp_connected && 
+               !waBannerDismissed && (
+                  <div className="mx-6 mt-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                          <span className="text-lg">🔴</span>
+                          <div>
+                              <span className="text-red-700 font-semibold text-sm">
+                                  WhatsApp Disconnected
+                              </span>
+                              <span className="text-red-600 text-xs ml-2">
+                                  Orders are not being received
+                              </span>
+                          </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                          <a
+                              href="/dashboard/settings/integrations"
+                              className="px-3 py-1.5 bg-red-600 text-white text-xs font-semibold rounded-lg hover:bg-red-700"
+                          >
+                              Reconnect Now →
+                          </a>
+                          <button
+                              onClick={() => setWaBannerDismissed(true)}
+                              className="text-red-400 hover:text-red-600 text-lg leading-none"
+                              title="Dismiss"
+                          >
+                              ×
+                          </button>
+                      </div>
+                  </div>
               )}
 
               {/* Getting Started checklist — only renders for a brand-new,

@@ -301,6 +301,9 @@ async def handle_whatsapp_webhook(
                             if tenant:
                                 tenant.whatsapp_order_phone = normalized_phone
                                 tenant.whatsapp_phone_id = instance_name
+                                tenant.whatsapp_connection_status = "connected"
+                                tenant.whatsapp_disconnected_at = None
+                                tenant.whatsapp_disconnect_reason = None
                                 new_db.commit()
                                 from app.services.ingestion_service import IngestionService
                                 IngestionService.invalidate_tenant_cache(tenant.id)
@@ -320,6 +323,30 @@ async def handle_whatsapp_webhook(
                             new_db.close()
             except Exception as e:
                 logger.error("Failed to auto-sync distributor phone: %s", str(e), exc_info=True)
+                
+        elif state in ("close", "closed") and instance_name:
+            status_reason = data.get("statusReason") or data.get("reason") or "unknown"
+            reason_map = {"401": "logged_out", "408": "timeout", "428": "conflict"}
+            disconnect_reason = reason_map.get(str(status_reason), "unknown")
+            
+            try:
+                new_db = SessionLocal()
+                try:
+                    tenant = new_db.query(DistributorTenant).filter(
+                        DistributorTenant.whatsapp_phone_id == instance_name
+                    ).first()
+                    
+                    if tenant and tenant.whatsapp_phone_id:
+                        tenant.whatsapp_connection_status = "disconnected"
+                        tenant.whatsapp_disconnected_at = datetime.utcnow()
+                        tenant.whatsapp_disconnect_reason = disconnect_reason
+                        new_db.commit()
+                        logger.info("Tenant %s marked disconnected (reason: %s)", 
+                                   tenant.id, disconnect_reason)
+                finally:
+                    new_db.close()
+            except Exception as e:
+                logger.error("Failed to handle disconnect: %s", str(e))
                 
         return {"status": "SUCCESS", "message": "Handshake verified"}
         
