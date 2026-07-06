@@ -2027,19 +2027,12 @@ def get_order_risk_assessment(
     score = 0
     signals = []
 
-    if credit_limit > 0:
-        if credit_utilisation > 90:
-            score += 40
-            signals.append(f"Credit {credit_utilisation:.0f}% utilised (₹{outstanding:,.0f} of ₹{credit_limit:,.0f})")
-        elif credit_utilisation > 70:
-            score += 25
-            signals.append(f"Credit {credit_utilisation:.0f}% utilised")
-        elif credit_utilisation > 50:
-            score += 10
-            signals.append(f"Credit {credit_utilisation:.0f}% utilised")
-
-    if overdue_days > 30:
-        score += 30
+    # Signal 1 — Days overdue (strongest signal)
+    if overdue_days > 45:
+        score += 50
+        signals.append(f"Critically overdue — {overdue_days} days past due date")
+    elif overdue_days > 30:
+        score += 35
         signals.append(f"Overdue {overdue_days} days")
     elif overdue_days > 15:
         score += 20
@@ -2048,23 +2041,49 @@ def get_order_risk_assessment(
         score += 10
         signals.append(f"Overdue {overdue_days} days")
 
+    # Signal 2 — Credit utilisation
+    if credit_limit > 0:
+        if credit_utilisation > 90:
+            score += 30
+            signals.append(f"Credit {credit_utilisation:.0f}% utilised (₹{outstanding:,.0f} of ₹{credit_limit:,.0f})")
+        elif credit_utilisation > 70:
+            score += 20
+            signals.append(f"Credit {credit_utilisation:.0f}% utilised")
+        elif credit_utilisation > 50:
+            score += 10
+            signals.append(f"Credit {credit_utilisation:.0f}% utilised")
+        elif credit_utilisation > 30:
+            score += 5
+            signals.append(f"Credit {credit_utilisation:.0f}% utilised")
+
+    # Signal 3 — Days since last payment
+    if days_since_last_payment:
+        if days_since_last_payment > 60:
+            score += 20
+            signals.append(f"No payment received in {days_since_last_payment} days")
+        elif days_since_last_payment > 30:
+            score += 10
+            signals.append(f"No payment received in {days_since_last_payment} days")
+
+    # Signal 4 — Order frequency drop
     if frequency_drop_pct > 40:
         score += 10
         signals.append(f"Orders dropped {frequency_drop_pct:.0f}% this month")
 
-    if days_since_last_payment and days_since_last_payment > 45:
-        score += 10
-        signals.append(f"No payment in {days_since_last_payment} days")
-
-    if score >= 70:
+    # Hard overrides — non-negotiable regardless of score
+    if overdue_days > 45:
         level = "high_risk"
-    elif score >= 40:
+    elif score >= 60:
+        level = "high_risk"
+    elif score >= 25:
         level = "caution"
     else:
         level = "clear"
 
-    if level == "high_risk" and overdue_days > 30:
-        recommendation = f"Collect ₹{min(current_order_total, outstanding * 0.5):,.0f} advance before confirming this order."
+    if level == "high_risk" and overdue_days > 45:
+        recommendation = f"URGENT: {overdue_days} days overdue on ₹{outstanding:,.0f}. Collect advance payment before confirming or call customer directly."
+    elif level == "high_risk" and overdue_days > 30:
+        recommendation = f"Overdue {overdue_days} days. Recommend collecting ₹{min(current_order_total, outstanding * 0.5):,.0f} advance before confirming this order."
     elif level == "high_risk" and credit_utilisation > 90:
         recommendation = f"Credit limit nearly exhausted. Request partial payment of ₹{outstanding * 0.3:,.0f} before confirming."
     elif level == "high_risk":
@@ -2072,9 +2091,12 @@ def get_order_risk_assessment(
     elif level == "caution" and overdue_days > 7:
         recommendation = f"Payment overdue {overdue_days} days. Follow up on outstanding ₹{outstanding:,.0f} before confirming."
     elif level == "caution":
-        recommendation = "Monitor this customer. Consider requesting UPI payment before dispatch."
+        recommendation = "Monitor this customer. Consider requesting payment before dispatch."
     else:
-        recommendation = "Customer is in good standing. Safe to confirm."
+        if overdue_days > 0:
+            recommendation = f"Customer has {overdue_days} days overdue but overall standing is acceptable."
+        else:
+            recommendation = "Customer is in good standing. Safe to confirm."
 
     return {
         "order_id": str(order_id),
