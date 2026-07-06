@@ -1056,3 +1056,43 @@ def get_demand_gap_summary(
         "distinct_customers_affected": distinct_customers,
         "by_reason": by_reason,
     }
+
+
+@router.get("/onboarding-status")
+def get_onboarding_status(
+    tenant_id: str | None = None,
+    access_token: str | None = Cookie(None),
+    authorization: str | None = Header(None),
+    db: Session = Depends(get_db)
+):
+    """
+    Returns real setup-completion state for the "Getting Started" onboarding
+    checklist shown on an empty dashboard. Every flag reflects an actual
+    database/config check — nothing here is hardcoded or simulated.
+    """
+    resolved_tenant_id = resolve_tenant_id(tenant_id, access_token, authorization)
+    tenant_context.set(resolved_tenant_id)
+
+    tenant = db.get(DistributorTenant, resolved_tenant_id)
+
+    has_product = db.query(Product.id).filter(Product.tenant_id == resolved_tenant_id).first() is not None
+    has_customer = db.query(Customer.id).filter(Customer.tenant_id == resolved_tenant_id).first() is not None
+    has_order = db.query(Order.id).filter(Order.tenant_id == resolved_tenant_id).first() is not None
+    has_whatsapp = bool(tenant and tenant.whatsapp_phone_id and tenant.whatsapp_access_token)
+    has_razorpay = bool(tenant and tenant.razorpay_key_id and tenant.razorpay_key_secret_enc)
+
+    steps = [
+        {"key": "add_product", "label": "Add your first product", "done": has_product},
+        {"key": "add_customer", "label": "Add your first customer", "done": has_customer},
+        {"key": "connect_whatsapp", "label": "Connect WhatsApp", "done": has_whatsapp},
+        {"key": "connect_razorpay", "label": "Connect Razorpay", "done": has_razorpay},
+        {"key": "first_order", "label": "Take your first order", "done": has_order},
+    ]
+    completed_count = sum(1 for s in steps if s["done"])
+
+    return {
+        "is_new_workspace": completed_count == 0,
+        "completed_count": completed_count,
+        "total_count": len(steps),
+        "steps": steps,
+    }

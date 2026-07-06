@@ -11,6 +11,7 @@ import CollectionsDonut from "@/components/CollectionsDonut";
 import InventorySummary from "@/components/InventorySummary";
 import DemandGapCard from "@/components/DemandGapCard";
 import ActivityFeed from "@/components/ActivityFeed";
+import OnboardingChecklist from "@/components/OnboardingChecklist";
 import { useDashboardData } from "@/hooks/useDashboardData";
 import ErrorBanner from "@/components/ui/ErrorBanner";
 import { ChevronDown, SlidersHorizontal, RefreshCw, CheckCircle2, AlertCircle, X } from "lucide-react";
@@ -260,6 +261,10 @@ export default function DashboardPage() {
                   onRetry={() => refreshAll()}
                 />
               )}
+
+              {/* Getting Started checklist — only renders for a brand-new,
+                  unfinished workspace; disappears once dismissed or complete. */}
+              <OnboardingChecklist activeTenantId={tenantId} />
 
               {/* A. Core Operational Metrics Row */}
               <MetricCards metrics={metrics} />
