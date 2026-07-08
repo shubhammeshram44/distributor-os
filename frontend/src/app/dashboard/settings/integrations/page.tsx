@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Sidebar from "@/components/Sidebar";
 import DashboardHeader from "@/components/DashboardHeader";
 import {
@@ -14,6 +14,8 @@ import {
   Loader2,
   Lock
 } from "lucide-react";
+
+const WA_STATUS_KEY = "wa_provisioning_status";
 
 export default function IntegrationsPage() {
   const [activeTenantId, setActiveTenantId] = useState("");
@@ -36,21 +38,42 @@ export default function IntegrationsPage() {
   // Pre-fill instanceName with slugified tenant ID
   useEffect(() => {
     if (activeTenantId) {
-      setInstanceName(`inst-${activeTenantId.substring(0, 8)}`);
+      setInstanceName(`dist-${activeTenantId.substring(0, 8)}`);
     } else {
-      setInstanceName("default-bot");
+      setInstanceName("");
     }
   }, [activeTenantId]);
 
-  // Connection status polling
+  // Restore provisioning state when navigating back to this page
+  useEffect(() => {
+    const saved = sessionStorage.getItem(WA_STATUS_KEY);
+    if (saved === "connecting") {
+      setProvisioningStatus("connecting");
+    }
+  }, []);
+
+  // Persist provisioning state so navigation away doesn't lose progress
+  useEffect(() => {
+    if (provisioningStatus === "connecting") {
+      sessionStorage.setItem(WA_STATUS_KEY, provisioningStatus);
+    } else {
+      sessionStorage.removeItem(WA_STATUS_KEY);
+    }
+  }, [provisioningStatus]);
+
+  // Stable ref so visibility handler always sees current instanceName
+  const instanceNameRef = useRef(instanceName);
+  useEffect(() => { instanceNameRef.current = instanceName; }, [instanceName]);
+
+  // Connection status polling + QR auto-refresh + visibility recovery
   useEffect(() => {
     if (provisioningStatus !== "connecting" || !instanceName) return;
 
     const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-    
-    const checkStatus = async () => {
+
+    const checkStatus = async (name: string) => {
       try {
-        const resp = await fetch(`${apiBase}/api/v1/evolution/status?instance_name=${instanceName}`);
+        const resp = await fetch(`${apiBase}/api/v1/evolution/status?instance_name=${name}`);
         if (resp.ok) {
           const data = await resp.json();
           if (data.status === "open") {
@@ -63,8 +86,48 @@ export default function IntegrationsPage() {
       }
     };
 
-    const interval = setInterval(checkStatus, 3000);
-    return () => clearInterval(interval);
+    // Refresh QR code — Baileys regenerates it every ~30s; fetch a fresh one to stay in sync
+    const refreshQr = async (name: string) => {
+      try {
+        const resp = await fetch(`${apiBase}/api/v1/evolution/qr?instance_name=${name}`);
+        if (resp.ok) {
+          const data = await resp.json();
+          if (data.status === "open") {
+            setProvisioningStatus("connected");
+            showToast("WhatsApp Instance successfully connected!", "success");
+          } else if (data.qr_code) {
+            const qr = data.qr_code as string;
+            setQrCodeBase64(qr.startsWith("data:") ? qr : `data:image/png;base64,${qr}`);
+          }
+        }
+      } catch (err) {
+        console.error("Error refreshing QR code:", err);
+      }
+    };
+
+    // Immediately check on enter — critical when remounting after navigation or tab switch
+    checkStatus(instanceName);
+    refreshQr(instanceName);
+
+    const statusInterval = setInterval(() => checkStatus(instanceName), 3000);
+    // Refresh QR at 25s — slightly before Baileys' ~30s expiry
+    const qrInterval = setInterval(() => refreshQr(instanceName), 25000);
+
+    // Recover immediately when the browser tab regains focus
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        checkStatus(instanceNameRef.current);
+        refreshQr(instanceNameRef.current);
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      clearInterval(statusInterval);
+      clearInterval(qrInterval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [provisioningStatus, instanceName]);
 
   const handleProvisionEvolution = async (e: React.FormEvent) => {
@@ -442,16 +505,25 @@ export default function IntegrationsPage() {
                       </div>
                     </div>
 
-                    {qrCodeBase64 && (provisioningStatus === "connecting" || provisioningStatus === "provisioning") && (
+                    {(provisioningStatus === "connecting" || provisioningStatus === "provisioning") && (
                       <div className="flex flex-col items-center justify-center p-6 bg-slate-50 border border-dashed border-slate-200 rounded-xl space-y-4">
-                        <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Scan this QR code with WhatsApp</p>
-                        <div className="bg-white p-4 rounded-xl shadow-md border border-slate-100">
-                          <img src={qrCodeBase64} alt="WhatsApp QR Code" className="w-48 h-48" />
-                        </div>
-                        <p className="text-[10px] text-slate-400 font-semibold animate-pulse flex items-center gap-1.5">
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          <span>Waiting for scan authorization...</span>
-                        </p>
+                        {qrCodeBase64 ? (
+                          <>
+                            <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Scan this QR code with WhatsApp</p>
+                            <div className="bg-white p-4 rounded-xl shadow-md border border-slate-100">
+                              <img src={qrCodeBase64} alt="WhatsApp QR Code" className="w-48 h-48" />
+                            </div>
+                            <p className="text-[10px] text-slate-400 font-semibold animate-pulse flex items-center gap-1.5">
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              <span>Waiting for scan authorization...</span>
+                            </p>
+                          </>
+                        ) : (
+                          <>
+                            <Loader2 className="w-8 h-8 text-brand-blue animate-spin" />
+                            <p className="text-xs font-semibold text-slate-500">Loading QR code...</p>
+                          </>
+                        )}
                       </div>
                     )}
 

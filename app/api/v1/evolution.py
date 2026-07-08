@@ -84,3 +84,16 @@ async def get_instance_status(instance_name: str = Query(..., alias="instance_na
             status_code=500,
             detail=f"Failed to fetch connection status: {str(e)}"
         )
+
+@router.get("/qr", status_code=status.HTTP_200_OK)
+async def get_instance_qr(instance_name: str = Query(..., alias="instance_name")):
+    """Fetch the current QR code without reprovisioning. Used for periodic QR refresh."""
+    service = EvolutionGatewayService()
+    try:
+        result = await service.get_current_qr(instance_name)
+        if result == "ALREADY_CONNECTED":
+            return {"status": "open", "qr_code": None}
+        return {"status": "connecting", "qr_code": result}
+    except Exception as e:
+        logger.error("Failed to fetch QR: %s", str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to fetch QR: {str(e)}")

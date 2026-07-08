@@ -162,7 +162,12 @@ def process_whatsapp_webhook_payload(
             if not resolved_tenant_id:
                 resolved_tenant_id = canonical_msg.tenant_id
                 if not resolved_tenant_id and receiver_phone:
-                    tenant = db.query(DistributorTenant).filter(DistributorTenant.whatsapp_order_phone == receiver_phone).first()
+                    extra = getattr(payload, "model_extra", None) or {}
+                    instance_name = extra.get("instance") or extra.get("instance_name")
+                    q = db.query(DistributorTenant).filter(DistributorTenant.whatsapp_order_phone == receiver_phone)
+                    if instance_name:
+                        q = q.filter(DistributorTenant.whatsapp_phone_id == instance_name)
+                    tenant = q.first()
                     if tenant:
                         resolved_tenant_id = tenant.id
 

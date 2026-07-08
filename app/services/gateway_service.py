@@ -229,6 +229,24 @@ class EvolutionGatewayService:
 
         return None
 
+    async def get_current_qr(self, instance_name: str) -> Optional[str]:
+        """Single GET to /instance/connect to fetch the current QR without re-triggering socket."""
+        url = f"{self.base_url}/instance/connect/{instance_name}"
+        client = self._get_client()
+        try:
+            response = await client.get(url, headers=self._get_headers())
+            if response.status_code != 200:
+                return None
+            data = response.json()
+            if data.get("state") == "open" or (data.get("instance", {}) or {}).get("state") == "open":
+                return "ALREADY_CONNECTED"
+            return self._extract_base64(data, response.text)
+        except Exception:
+            return None
+        finally:
+            if self._client is None:
+                await client.aclose()
+
     async def get_connection_status(self, instance_name: str) -> str:
         """GET /instance/connectionState/:instanceName"""
         url = f"{self.base_url}/instance/connectionState/{instance_name}"
