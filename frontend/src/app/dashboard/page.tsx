@@ -390,7 +390,7 @@ export default function DashboardPage() {
                 </div>
 
                 {/* Right Col: Collections Donut Chart (40% width) */}
-                <div className="lg:col-span-2 min-h-[380px] space-y-6">
+                <div className="lg:col-span-2 flex flex-col gap-4">
                   <CollectionsDonut
                     data={donutData}
                     viewReportHref="/dashboard/collections"
