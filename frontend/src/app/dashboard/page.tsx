@@ -400,39 +400,102 @@ export default function DashboardPage() {
                   {/* Credit Risk Alerts */}
                   {creditRisk && creditRisk.alerts.length > 0 && (
                       <div className="bg-white rounded-xl border border-slate-200 p-5">
+                          {/* Header */}
                           <div className="flex items-center justify-between mb-4">
                               <div>
-                                  <h3 className="text-sm font-semibold text-slate-800">Credit Risk Alerts</h3>
+                                  <h3 className="text-sm font-semibold text-slate-800">
+                                      ⚠️ Credit Risk Alerts
+                                  </h3>
                                   <p className="text-xs text-slate-500 mt-0.5">
-                                      {creditRisk.total_at_risk_count} customers · ₹{(creditRisk.total_at_risk_amount / 100000).toFixed(1)}L at risk
+                                      {creditRisk.total_at_risk_count} customers · 
+                                      ₹{creditRisk.total_at_risk_amount.toLocaleString("en-IN")} at risk
                                   </p>
                               </div>
-                              <a href="/dashboard/customers" className="text-xs text-emerald-600 font-medium hover:underline">
+                              <a href="/dashboard/customers" 
+                                 className="text-xs text-emerald-600 font-medium hover:underline">
                                   View All →
                               </a>
                           </div>
 
-                          <div className="space-y-3">
+                          {/* Risk summary bar */}
+                          <div className="flex gap-3 mb-4 p-3 bg-slate-50 rounded-lg">
+                              <div className="flex-1 text-center">
+                                  <div className="text-lg font-bold text-red-600">
+                                      {creditRisk.alerts.filter(a => a.risk_level === "high_risk").length}
+                                  </div>
+                                  <div className="text-xs text-slate-500">🔴 High Risk</div>
+                              </div>
+                              <div className="w-px bg-slate-200" />
+                              <div className="flex-1 text-center">
+                                  <div className="text-lg font-bold text-amber-500">
+                                      {creditRisk.alerts.filter(a => a.risk_level === "caution").length}
+                                  </div>
+                                  <div className="text-xs text-slate-500">🟡 Caution</div>
+                              </div>
+                              <div className="w-px bg-slate-200" />
+                              <div className="flex-1 text-center">
+                                  <div className="text-lg font-bold text-slate-700">
+                                      ₹{(creditRisk.total_at_risk_amount / 1000).toFixed(1)}K
+                                  </div>
+                                  <div className="text-xs text-slate-500">Total Due</div>
+                              </div>
+                          </div>
+
+                          {/* Customer list */}
+                          <div className="space-y-2">
                               {creditRisk.alerts.map((alert) => (
-                                  <div key={alert.customer_id} className="flex items-center justify-between py-2 border-b border-slate-50 last:border-0">
-                                      <div className="flex items-center gap-2">
-                                          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                                              alert.risk_level === "high_risk" ? "bg-red-500" : "bg-amber-400"
-                                          }`} />
-                                          <div>
-                                              <p className="text-xs font-medium text-slate-800">{alert.customer_name}</p>
-                                              <p className="text-xs text-slate-400">
-                                                  ₹{alert.outstanding.toLocaleString("en-IN")} · {alert.overdue_days}d overdue
-                                              </p>
+                                  <div 
+                                      key={alert.customer_id}
+                                      className={`flex items-center gap-3 p-3 rounded-lg border-l-4 ${
+                                          alert.risk_level === "high_risk"
+                                              ? "bg-red-50 border-red-400"
+                                              : "bg-amber-50 border-amber-400"
+                                      }`}
+                                  >
+                                      {/* Risk icon */}
+                                      <span className="text-base flex-shrink-0">
+                                          {alert.risk_level === "high_risk" ? "🔴" : "🟡"}
+                                      </span>
+
+                                      {/* Customer info */}
+                                      <div className="flex-1 min-w-0">
+                                          <p className="text-xs font-semibold text-slate-800 truncate">
+                                              {alert.customer_name}
+                                          </p>
+                                          
+                                          {/* Overdue bar */}
+                                          <div className="flex items-center gap-2 mt-1">
+                                              <div className="flex-1 bg-slate-200 rounded-full h-1.5">
+                                                  <div 
+                                                      className={`h-1.5 rounded-full ${
+                                                          alert.risk_level === "high_risk" 
+                                                              ? "bg-red-400" 
+                                                              : "bg-amber-400"
+                                                      }`}
+                                                      style={{ 
+                                                          width: `${Math.min(100, (alert.overdue_days / 90) * 100)}%` 
+                                                      }}
+                                                  />
+                                              </div>
+                                              <span className="text-xs text-slate-500 flex-shrink-0">
+                                                  {alert.overdue_days}d overdue
+                                              </span>
                                           </div>
                                       </div>
-                                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                                          alert.risk_level === "high_risk"
-                                              ? "bg-red-50 text-red-600"
-                                              : "bg-amber-50 text-amber-600"
-                                      }`}>
-                                          {alert.risk_level === "high_risk" ? "High Risk" : "Caution"}
-                                      </span>
+
+                                      {/* Amount */}
+                                      <div className="text-right flex-shrink-0">
+                                          <p className={`text-xs font-bold ${
+                                              alert.risk_level === "high_risk" 
+                                                  ? "text-red-600" 
+                                                  : "text-amber-600"
+                                          }`}>
+                                              ₹{alert.outstanding.toLocaleString("en-IN")}
+                                          </p>
+                                          <p className="text-xs text-slate-400">
+                                              {alert.credit_utilisation_pct}% used
+                                          </p>
+                                      </div>
                                   </div>
                               ))}
                           </div>
