@@ -14,6 +14,7 @@ import ActivityFeed from "@/components/ActivityFeed";
 import OnboardingChecklist from "@/components/OnboardingChecklist";
 import { useDashboardData, DashboardMetrics } from "@/hooks/useDashboardData";
 import ErrorBanner from "@/components/ui/ErrorBanner";
+import { formatDateTime } from "@/utils/datetime";
 import { ChevronDown, SlidersHorizontal, RefreshCw, CheckCircle2, AlertCircle, X, TrendingUp, TrendingDown, IndianRupee, ShoppingBag, BarChart, CreditCard } from "lucide-react";
 import WhatsAppSimulator from "@/components/WhatsAppSimulator";
 

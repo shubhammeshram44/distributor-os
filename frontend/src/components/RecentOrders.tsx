@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { MessageSquare, Globe, X, FileSpreadsheet, Loader2, ArrowRight, AlertCircle, ShoppingBag } from "lucide-react";
 import { RecentOrder, OrderDetail } from "@/hooks/useDashboardData";
 import Link from "next/link";
+import { formatDateTime } from "@/utils/datetime";
 
 interface RecentOrdersProps {
   orders: RecentOrder[];
@@ -216,10 +217,10 @@ export default function RecentOrders({
                       })()}
                     </td>
                     <td className="py-3.5 px-4 text-xs font-semibold text-slate-500">
-                      {order.created_on || order.eta}
+                      {formatDateTime(order.created_on, "datetime")}
                     </td>
                     <td className="py-3.5 px-4 text-xs font-semibold text-slate-500">
-                      {order.eta}
+                      {formatDateTime(order.eta, "datetime")}
                     </td>
                   </tr>
                 ))}

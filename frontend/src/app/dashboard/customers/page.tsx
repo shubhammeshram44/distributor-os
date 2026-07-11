@@ -5,6 +5,7 @@ import Sidebar from "@/components/Sidebar";
 import DashboardHeader from "@/components/DashboardHeader";
 import { useSearchParams } from "next/navigation";
 import Pagination from "@/components/ui/Pagination";
+import { formatDateTime } from "@/utils/datetime";
 import {
   Search,
   Loader2,
@@ -658,7 +659,7 @@ function CustomersContent() {
                     </div>
                     <div className="flex items-center justify-between text-[11px] text-slate-500">
                       <span>{p.method || p.payment_method || "—"}</span>
-                      <span>{p.created_at ? new Date(p.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "—"}</span>
+                      <span>{p.created_at ? formatDateTime(p.created_at, "date") : "—"}</span>
                     </div>
                     {p.reference_number && <p className="text-[10px] text-slate-400 font-mono truncate">Ref: {p.reference_number}</p>}
                   </div>
@@ -956,13 +957,7 @@ function CustomersContent() {
                         {activeStatementRows.map((row) => (
                           <tr key={row.id} className="hover:bg-slate-50/50">
                             <td className="py-3 px-4 text-slate-500 text-[10px] whitespace-nowrap">
-                              {new Date(row.created_at).toLocaleDateString("en-IN", {
-                                day: "2-digit",
-                                month: "short",
-                                year: "numeric",
-                                hour: "2-digit",
-                                minute: "2-digit"
-                              })}
+                              {formatDateTime(row.created_at, "datetime")}
                             </td>
                             <td className="py-3 px-4 text-slate-800 text-[11px] font-bold">
                               {row.reference_id.startsWith("ORD-") ? `Invoice #${row.reference_id}` : `Payment ${row.reference_id}`}

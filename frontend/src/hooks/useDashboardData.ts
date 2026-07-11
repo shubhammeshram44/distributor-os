@@ -53,6 +53,7 @@ export interface DonutSegment {
 export interface ActivityEvent {
   message: string;
   time: string;
+  timestamp?: string;
   category: string;
 }
 

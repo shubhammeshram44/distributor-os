@@ -5,6 +5,7 @@ import Sidebar from "@/components/Sidebar";
 import DashboardHeader from "@/components/DashboardHeader";
 import { InvoiceTypes, InvoiceType } from "@/types/order";
 import Pagination from "@/components/ui/Pagination";
+import { formatDateTime } from "@/utils/datetime";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import {
   Search,
@@ -891,7 +892,7 @@ export default function OrdersPage() {
                           {renderInvoiceTypeBadge(order.invoice_type)}
                         </td>
                         <td className="py-4 px-6 text-xs font-semibold text-slate-500">
-                          {order.created_on}
+                          {formatDateTime(order.created_on, "datetime")}
                         </td>
                         <td className="py-4 px-6 text-right">
                           <button
