@@ -16,6 +16,11 @@ export default function MarketingPage() {
   const [statDistributors, setStatDistributors] = useState(0);
   const [statCrores, setStatCrores] = useState(0);
 
+  // Set document title
+  useEffect(() => {
+    document.title = "DistributorOS — WhatsApp Order Management for Distributors";
+  }, []);
+
   const demoMessage = 'bhaiya 50 units rin soap bhejo 🙏';
 
   // Refs for scroll observation
@@ -368,25 +373,13 @@ export default function MarketingPage() {
   {/* SOCIAL PROOF */}
   <div id="proof" ref={ refProof } style={{padding: 'clamp(56px,8vw,100px) 24px', background: '#f8fafc'}}>
     <div style={{maxWidth: 1100, margin: '0 auto'}}>
-      <div style={{textAlign: 'center', marginBottom: 52}}>
-        <div style={{fontSize: 'clamp(24px,3.2vw,36px)', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.02em'}}>
-          Join <span style={{color: '#10b981'}}>{ statDistributors }+</span> distributors managing <span style={{color: '#10b981'}}>₹{ statCrores } Cr+</span> in monthly orders
-        </div>
-      </div>
-      <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 22}}>
-        {testimonials && testimonials.map((item, i) => (<React.Fragment key={i}>
-          <div style={ item.style }>
-            <div style={{color: '#f59e0b', fontSize: 14, marginBottom: 14}}>★★★★★</div>
-            <div style={{fontSize: 15, color: '#334155', lineHeight: 1.6, marginBottom: 20}}>"{ item.quote }"</div>
-            <div style={{display: 'flex', alignItems: 'center', gap: 12}}>
-              <div style={{width: 40, height: 40, borderRadius: '50%', background: '#0f172a', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 15}}>{ item.initial }</div>
-              <div>
-                <div style={{fontSize: 14, fontWeight: 700, color: '#0f172a'}}>{ item.name }</div>
-                <div style={{fontSize: 13, color: '#94a3b8'}}>{ item.city }</div>
-              </div>
-            </div>
-          </div>
-        </React.Fragment>))}
+      <div className="text-center py-8">
+          <p className="text-slate-500 text-sm font-medium">
+              🚀 Early Access — Currently onboarding first distributors
+          </p>
+          <p className="text-slate-400 text-xs mt-1">
+              Be among the first to automate your distribution business
+          </p>
       </div>
     </div>
   </div>
@@ -502,9 +495,9 @@ export default function MarketingPage() {
           <div>
             <div style={{color: '#ffffff', fontSize: 13, fontWeight: 700, marginBottom: 14}}>Company</div>
             <div style={{display: 'flex', flexDirection: 'column', gap: 10}}>
-              <a href="#" style={{color: '#94a3b8', textDecoration: 'none', fontSize: 14}}>Privacy</a>
-              <a href="#" style={{color: '#94a3b8', textDecoration: 'none', fontSize: 14}}>Terms</a>
-              <Link href="/auth" style={{color: '#94a3b8', fontSize: 14, cursor: 'pointer', textDecoration: 'none'}}>Contact</Link>
+              <a href="/privacy" style={{color: '#94a3b8', textDecoration: 'none', fontSize: 14}}>Privacy Policy</a>
+              <a href="/terms" style={{color: '#94a3b8', textDecoration: 'none', fontSize: 14}}>Terms of Service</a>
+              <a href="mailto:contact@distroos.in" style={{color: '#94a3b8', textDecoration: 'none', fontSize: 14}}>Contact</a>
             </div>
           </div>
         </div>
