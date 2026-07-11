@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Sidebar from "@/components/Sidebar";
 import DashboardHeader from "@/components/DashboardHeader";
 // MetricCards inlined locally to format change percentages to 1 decimal place
@@ -29,6 +29,18 @@ export default function DashboardPage() {
     disconnect_reason: string | null;
   } | null>(null);
   const [waBannerDismissed, setWaBannerDismissed] = useState(false);
+  const [creditRisk, setCreditRisk] = useState<{
+    alerts: Array<{
+        customer_id: string;
+        customer_name: string;
+        outstanding: number;
+        credit_utilisation_pct: number;
+        overdue_days: number;
+        risk_level: "high_risk" | "caution";
+    }>;
+    total_at_risk_count: number;
+    total_at_risk_amount: number;
+  } | null>(null);
 
   // Sync profile and tenant from backend / localStorage
   useEffect(() => {
@@ -151,9 +163,32 @@ export default function DashboardPage() {
     loadingDetails,
     fetchOrderDetails,
     closeDetails,
-    refreshAll,
+    refreshAll: originalRefreshAll,
     error
   } = useDashboardData(isHydrating ? "" : tenantId, startDate, endDate);
+
+  const fetchCreditRisk = useCallback(async () => {
+    if (!tenantId) return;
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+    try {
+      const creditRes = await fetch(
+        `${apiBase}/api/v1/dashboard/credit-risk-alerts?tenant_id=${tenantId}`
+      );
+      const creditData = await creditRes.json();
+      setCreditRisk(creditData);
+    } catch (e) {
+      console.error("Failed to fetch credit risk alerts:", e);
+    }
+  }, [tenantId]);
+
+  useEffect(() => {
+    fetchCreditRisk();
+  }, [fetchCreditRisk]);
+
+  const refreshAll = () => {
+    originalRefreshAll();
+    fetchCreditRisk();
+  };
 
   // Poll connection status every 60 seconds
   useEffect(() => {
@@ -355,12 +390,60 @@ export default function DashboardPage() {
                 </div>
 
                 {/* Right Col: Collections Donut Chart (40% width) */}
-                <div className="lg:col-span-2 min-h-[380px]">
+                <div className="lg:col-span-2 min-h-[380px] space-y-6">
                   <CollectionsDonut
                     data={donutData}
                     viewReportHref="/dashboard/collections"
                     overdue60Count={metrics?.overdue_60_count}
                   />
+
+                  {/* Credit Risk Alerts */}
+                  {creditRisk && creditRisk.alerts.length > 0 && (
+                      <div className="bg-white rounded-xl border border-slate-200 p-5">
+                          <div className="flex items-center justify-between mb-4">
+                              <div>
+                                  <h3 className="text-sm font-semibold text-slate-800">Credit Risk Alerts</h3>
+                                  <p className="text-xs text-slate-500 mt-0.5">
+                                      {creditRisk.total_at_risk_count} customers · ₹{(creditRisk.total_at_risk_amount / 100000).toFixed(1)}L at risk
+                                  </p>
+                              </div>
+                              <a href="/dashboard/customers" className="text-xs text-emerald-600 font-medium hover:underline">
+                                  View All →
+                              </a>
+                          </div>
+
+                          <div className="space-y-3">
+                              {creditRisk.alerts.map((alert) => (
+                                  <div key={alert.customer_id} className="flex items-center justify-between py-2 border-b border-slate-50 last:border-0">
+                                      <div className="flex items-center gap-2">
+                                          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                                              alert.risk_level === "high_risk" ? "bg-red-500" : "bg-amber-400"
+                                          }`} />
+                                          <div>
+                                              <p className="text-xs font-medium text-slate-800">{alert.customer_name}</p>
+                                              <p className="text-xs text-slate-400">
+                                                  ₹{alert.outstanding.toLocaleString("en-IN")} · {alert.overdue_days}d overdue
+                                              </p>
+                                          </div>
+                                      </div>
+                                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                                          alert.risk_level === "high_risk"
+                                              ? "bg-red-50 text-red-600"
+                                              : "bg-amber-50 text-amber-600"
+                                      }`}>
+                                          {alert.risk_level === "high_risk" ? "High Risk" : "Caution"}
+                                      </span>
+                                  </div>
+                              ))}
+                          </div>
+
+                          {creditRisk.total_at_risk_count > 5 && (
+                              <p className="text-xs text-slate-400 mt-3 text-center">
+                                  +{creditRisk.total_at_risk_count - 5} more customers need attention
+                              </p>
+                          )}
+                      </div>
+                  )}
                 </div>
               </div>
 

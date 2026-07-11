@@ -169,3 +169,16 @@ def test_dashboard_overview_endpoint(db_session, client, seed_demo_data):
     assert next(item for item in donut if item["name"] == "0-15 Days")["percentage"] == 39
 
 
+def test_dashboard_credit_risk_alerts(db_session, client, seed_demo_data):
+    demo_tenant_id = uuid.UUID("d3b07384-d113-4956-a5d2-64be7357c11d")
+
+    # Call credit-risk-alerts endpoint
+    resp = client.get(f"/api/v1/dashboard/credit-risk-alerts?tenant_id={demo_tenant_id}")
+    assert resp.status_code == 200
+    data = resp.json()
+
+    assert "alerts" in data
+    assert "total_at_risk_count" in data
+    assert "total_at_risk_amount" in data
+
+

@@ -1096,3 +1096,76 @@ def get_onboarding_status(
         "total_count": len(steps),
         "steps": steps,
     }
+
+
+@router.get("/credit-risk-alerts")
+def get_credit_risk_alerts(
+    tenant_id: uuid.UUID,
+    db: Session = Depends(get_db)
+):
+    """
+    Returns top customers by credit risk for dashboard widget.
+    Shows max 5 customers, ordered by risk level then overdue days.
+    """
+    from app.models.customer import Customer
+    from app.models.ledger import CustomerLedger
+    from datetime import datetime, timedelta
+
+    customers = db.query(Customer).filter(
+        Customer.tenant_id == tenant_id,
+        Customer.outstanding_balance > 0
+    ).all()
+
+    results = []
+    for customer in customers:
+        outstanding = float(customer.outstanding_balance)
+        credit_limit = float(customer.credit_limit) if customer.credit_limit else 0
+        credit_utilisation = (outstanding / credit_limit * 100) if credit_limit > 0 else 0
+
+        # Calculate overdue days from oldest unpaid invoice
+        from app.models.invoice import Invoice
+        oldest_unpaid = db.query(func.min(Invoice.created_at)).filter(
+            Invoice.customer_id == customer.id,
+            Invoice.payment_status.in_(["UNPAID", "PARTIALLY_PAID"]),
+            Invoice.total_amount > 0
+        ).scalar()
+
+        if not oldest_unpaid:
+            continue
+
+        payment_terms_days = int(customer.payment_terms.replace("Net ", "")) if customer.payment_terms and "Net" in customer.payment_terms else 30
+        due_date = oldest_unpaid + timedelta(days=payment_terms_days)
+        overdue_days = max(0, (datetime.utcnow() - due_date).days)
+
+        # Determine risk level
+        if overdue_days > 45:
+            risk_level = "high_risk"
+        elif overdue_days > 15 or credit_utilisation > 70:
+            risk_level = "caution"
+        else:
+            risk_level = "clear"
+
+        if risk_level == "clear":
+            continue  # Only show customers needing attention
+
+        results.append({
+            "customer_id": str(customer.id),
+            "customer_name": customer.retailer_name,
+            "outstanding": outstanding,
+            "credit_limit": credit_limit,
+            "credit_utilisation_pct": round(credit_utilisation, 1),
+            "overdue_days": overdue_days,
+            "risk_level": risk_level
+        })
+
+    # Sort: high_risk first, then by overdue days desc
+    results.sort(key=lambda x: (
+        0 if x["risk_level"] == "high_risk" else 1,
+        -x["overdue_days"]
+    ))
+
+    return {
+        "alerts": results[:5],  # max 5
+        "total_at_risk_count": len(results),
+        "total_at_risk_amount": sum(r["outstanding"] for r in results)
+    }
