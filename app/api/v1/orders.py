@@ -306,16 +306,23 @@ def cancel_order(
                     .values(quantity_on_hand=Inventory.quantity_on_hand + item.quantity)
                 )
 
-            # Reverse customer outstanding balance
-            if customer:
-                customer.outstanding_balance = max(
-                    0.0, float(customer.outstanding_balance) - order_total
-                )
-
-            # Mark invoice as cancelled if it exists
+            # Reverse customer outstanding balance via ledger service.
+            # Use invoice.total_amount (actual billed amount at confirmation),
+            # not order_total which may differ due to partial inventory allocation.
             invoice = db.query(Invoice).filter(Invoice.order_id == order.id).first()
             if invoice:
                 invoice.payment_status = "CANCELLED"
+                if float(invoice.total_amount) > 0:
+                    from app.services.ledger_service import record_transaction
+                    record_transaction(
+                        db=db,
+                        tenant_id=order.tenant_id,
+                        customer_id=order.customer_id,
+                        type="CREDIT",
+                        amount=float(invoice.total_amount),
+                        reference_id=f"CANCEL-{order.internal_order_id}",
+                        description=f"Order {order.internal_order_id} cancelled — charge reversed"
+                    )
 
         db.add(OrderStateLedger(
             tenant_id=order.tenant_id,

@@ -408,7 +408,30 @@ def test_preferred_invoice_paid_first(db_session):
     )
     db_session.add(invoice_newer)
     
-    # Update customer outstanding balance to match invoice sum
+    # Seed DEBIT ledger entries to back the 1500 outstanding_balance.
+    # record_transaction() recomputes outstanding_balance from the full ledger,
+    # so test data must have corresponding DEBIT entries — a raw field
+    # assignment alone is overwritten by the recompute.
+    from app.models.ledger import CustomerLedger
+    import uuid as _uuid
+    db_session.add(CustomerLedger(
+        id=_uuid.uuid4(),
+        tenant_id=tenant.id,
+        customer_id=customer.id,
+        type="DEBIT",
+        amount=500.0,
+        reference_id="ORD-PREF-OLDER",
+        description="Older order confirmed (test seed)"
+    ))
+    db_session.add(CustomerLedger(
+        id=_uuid.uuid4(),
+        tenant_id=tenant.id,
+        customer_id=customer.id,
+        type="DEBIT",
+        amount=1000.0,
+        reference_id="ORD-PREF-NEWER",
+        description="Newer order confirmed (test seed)"
+    ))
     customer.outstanding_balance = 1500.0
     db_session.commit()
 

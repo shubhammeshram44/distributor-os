@@ -4,7 +4,6 @@ from sqlalchemy.orm import Session
 from app.database import tenant_context, with_db_retry
 from app.models.payment import Payment, PaymentInvoiceLink
 from app.models.customer import Customer
-from app.models.ledger import CustomerLedger
 from app.models.invoice import Invoice
 
 def allocate_payment_fifo(db: Session, customer_id: uuid.UUID, payment_id: uuid.UUID, total_amount: float, tenant_id: uuid.UUID):
@@ -175,22 +174,20 @@ def process_payment(
         db.add(payment)
         db.flush()
 
-        # 2. Log Credit in CustomerLedger
+        # 2. Log CREDIT in CustomerLedger and recompute outstanding_balance atomically.
+        # record_transaction writes the ledger entry then recomputes from full ledger,
+        # preventing balance/ledger sync drift.
+        from app.services.ledger_service import record_transaction
         ledger_ref = reference_number or f"PAY-{str(payment.id)[:8].upper()}"
-        ledger_entry = CustomerLedger(
-            id=uuid.uuid4(),
+        record_transaction(
+            db=db,
             tenant_id=tenant_id,
             customer_id=customer_id,
             type="CREDIT",
             amount=amount,
-            reference_id=ledger_ref
+            reference_id=ledger_ref,
+            description=f"Payment received via {method}"
         )
-        db.add(ledger_entry)
-
-        # 3. Decrement Customer Outstanding Balance
-        customer.outstanding_balance = float(customer.outstanding_balance) - amount
-        
-        db.flush()
 
         # ── PREFERRED INVOICE ALLOCATION ──
         amount_remaining = amount

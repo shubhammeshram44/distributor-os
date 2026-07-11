@@ -57,6 +57,21 @@ def test_create_collection_voucher_success(db_session, client):
         amount_paid=0.0,
     )
     db_session.add(backing_invoice)
+
+    # Seed the matching DEBIT ledger entry so the ledger is consistent with
+    # the 25,000 outstanding_balance set on the customer above.
+    # record_transaction() recomputes outstanding_balance from the ledger,
+    # so test data must be truthful: the ₹25,000 balance must exist as a
+    # DEBIT ledger entry, not only as a raw field on the customer row.
+    db_session.add(CustomerLedger(
+        id=uuid.uuid4(),
+        tenant_id=tenant.id,
+        customer_id=customer.id,
+        type="DEBIT",
+        amount=25000.0,
+        reference_id="ORD-VOUCHER-BACKING",
+        description="Backing order confirmed (test seed)"
+    ))
     db_session.commit()
 
     # 3. Call endpoint to create a payment voucher

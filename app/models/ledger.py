@@ -12,6 +12,7 @@ class CustomerLedger(Base, TenantMixin):
     type: Mapped[str] = mapped_column(String(10), nullable=False) # "DEBIT" or "CREDIT"
     amount: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
     reference_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    description: Mapped[str | None] = mapped_column(String(200), nullable=True, default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     @property

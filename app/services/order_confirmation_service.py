@@ -6,7 +6,6 @@ from sqlalchemy.orm import Session
 
 from app.models.order import Order, OrderLineItem, OrderStateLedger
 from app.models.customer import Customer
-from app.models.ledger import CustomerLedger
 from app.models.invoice import Invoice
 from app.models.inventory import Inventory
 from app.models.demand_gap import DemandGap
@@ -147,18 +146,19 @@ def confirm_order(db: Session, order: Order, updated_by: str) -> Invoice:
             detail=f"Credit limit exceeded. Combined balance: ₹{combined:,.2f}, Limit: ₹{float(customer.credit_limit):,.2f}"
         )
 
-    # ── 6. Update customer outstanding balance ─────────────────────────────────
-    customer.outstanding_balance = float(customer.outstanding_balance) + billing_total
-
-    # ── 7. Ledger entry ────────────────────────────────────────────────────────
-    db.add(CustomerLedger(
-        id=uuid.uuid4(),
+    # ── 6. Record DEBIT transaction via ledger service ─────────────────────────
+    # This atomically writes the ledger entry AND recomputes outstanding_balance
+    # from the full ledger — preventing balance/ledger sync drift.
+    from app.services.ledger_service import record_transaction
+    record_transaction(
+        db=db,
         tenant_id=order.tenant_id,
         customer_id=order.customer_id,
         type="DEBIT",
         amount=billing_total,
-        reference_id=order.internal_order_id
-    ))
+        reference_id=order.internal_order_id,
+        description=f"Order {order.internal_order_id} confirmed"
+    )
 
     # ── 8. Create Invoice ──────────────────────────────────────────────────────
     invoice = Invoice(
