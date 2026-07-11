@@ -28,7 +28,8 @@ async def provision_instance(
     except Exception:
         resolved_tenant_id = None
         
-    instance_name = payload.instance_name or (f"dist-{str(resolved_tenant_id)[:8]}" if resolved_tenant_id else "default-bot")
+    # Generate unique instance name per tenant
+    instance_name = payload.instance_name if payload.instance_name else f"dist-{str(resolved_tenant_id)[:8]}"
     service = EvolutionGatewayService()
     try:
         # Step 1: Force Purge
