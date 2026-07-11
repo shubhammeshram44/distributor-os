@@ -1197,3 +1197,212 @@ def get_credit_risk_alerts(
         "total_at_risk_count": len(results),
         "total_at_risk_amount": sum(r["outstanding"] for r in results)
     }
+
+
+@router.get("/decision-focus")
+def get_decision_focus(
+    tenant_id: str | None = None,
+    access_token: str | None = Cookie(None),
+    authorization: str | None = Header(None),
+    db: Session = Depends(get_db)
+):
+    """
+    Returns actionable business intelligence for the Decision Focus card.
+    Single endpoint, single DB pass — all data computed together.
+    Each item has: type, headline, detail, amount_at_stake, action_url, priority
+    """
+    from app.models.whatsapp_message_log import WhatsappMessageLog
+    import re
+
+    resolved_tenant_id = resolve_tenant_id(tenant_id, access_token, authorization)
+
+    decisions = []
+
+    # ── 1. BATCH LOAD all data upfront (no N+1) ──────────────────────────────
+
+    # Pending orders with line items pre-loaded
+    pending_orders = db.query(Order).options(
+        joinedload(Order.line_items).joinedload(OrderLineItem.product),
+        joinedload(Order.customer)
+    ).filter(
+        Order.tenant_id == resolved_tenant_id,
+        Order.status.in_(["Draft", "Pending"])
+    ).all()
+
+    # Orders needing review
+    review_orders = db.query(Order).filter(
+        Order.tenant_id == resolved_tenant_id,
+        Order.status.in_(["pending_review", "NEEDS_REVIEW"])
+    ).all()
+
+    # Unpaid invoices
+    unpaid_invoices = db.query(Invoice).filter(
+        Invoice.tenant_id == resolved_tenant_id,
+        Invoice.payment_status.in_(["UNPAID", "PARTIALLY_PAID"]),
+        Invoice.total_amount > 0
+    ).all()
+
+    # All customers — batch loaded once into a dict
+    customers = {
+        c.id: c for c in db.query(Customer).filter(
+            Customer.tenant_id == resolved_tenant_id
+        ).all()
+    }
+
+    # All active products — batch loaded once into a dict
+    products = {
+        p.id: p for p in db.query(Product).filter(
+            Product.tenant_id == resolved_tenant_id,
+            Product.is_active == True
+        ).all()
+    }
+
+    # Inventory items joined to products
+    inventory_items = db.query(Inventory).join(
+        Product, Inventory.sku_id == Product.id
+    ).filter(
+        Inventory.tenant_id == resolved_tenant_id,
+        Product.is_active == True
+    ).all()
+
+    # Pending order quantities per product — computed from pre-loaded line items
+    pending_product_qty: dict = {}
+    for order in pending_orders:
+        for item in order.line_items:
+            if item.product_id:
+                pending_product_qty[item.product_id] = (
+                    pending_product_qty.get(item.product_id, 0) + item.quantity
+                )
+
+    # Last payment reminder per customer — batch loaded, no loop queries
+    last_reminders: dict = {}
+    reminder_logs = db.query(WhatsappMessageLog).filter(
+        WhatsappMessageLog.tenant_id == resolved_tenant_id,
+        WhatsappMessageLog.event == "payment_reminder"
+    ).order_by(WhatsappMessageLog.created_at.desc()).all()
+    for log in reminder_logs:
+        if log.customer_id not in last_reminders:
+            last_reminders[log.customer_id] = log.created_at
+
+    # ── 2. COMPUTE DECISIONS (pure in-memory, zero extra DB calls) ────────────
+
+    # Decision A — Pending orders blocking revenue
+    if pending_orders:
+        total_blocked = sum(
+            sum(
+                float((item.allocated_quantity or item.quantity) * item.unit_price)
+                for item in order.line_items
+            )
+            for order in pending_orders
+        )
+        oldest = min(o.created_at for o in pending_orders)
+        oldest_pending_hours = int((datetime.utcnow() - oldest).total_seconds() / 3600)
+        decisions.append({
+            "type": "pending_orders",
+            "priority": 1,
+            "icon": "📦",
+            "headline": f"₹{total_blocked:,.0f} revenue waiting",
+            "detail": f"{len(pending_orders)} orders pending confirmation. Oldest: {oldest_pending_hours}h ago.",
+            "amount_at_stake": total_blocked,
+            "action_label": "Confirm Now",
+            "action_url": "/dashboard/orders?status=Pending"
+        })
+
+    # Decision B — Orders needing review
+    if review_orders:
+        decisions.append({
+            "type": "needs_review",
+            "priority": 2,
+            "icon": "💬",
+            "headline": f"{len(review_orders)} order{'s' if len(review_orders) > 1 else ''} need your input",
+            "detail": "Items couldn't be matched automatically. Review to confirm or reject.",
+            "amount_at_stake": 0,
+            "action_label": "Review",
+            "action_url": "/dashboard/orders?status=Needs+Review"
+        })
+
+    # Decision C — Overdue collections
+    now = datetime.utcnow()
+    overdue_customers = []
+    for invoice in unpaid_invoices:
+        customer = customers.get(invoice.customer_id)
+        if not customer:
+            continue
+        pt = customer.payment_terms or "Net 30"
+        days = 30
+        if "Net" in pt:
+            try:
+                days = int(''.join(filter(str.isdigit, pt.split("Net")[1][:5])))
+            except Exception:
+                days = 30
+        due_date = invoice.created_at + timedelta(days=days)
+        overdue_days = (now - due_date).days
+        if overdue_days > 0:
+            last_reminder = last_reminders.get(invoice.customer_id)
+            days_since_reminder = (now - last_reminder).days if last_reminder else 999
+            overdue_customers.append({
+                "customer_id": str(invoice.customer_id),
+                "name": customer.retailer_name,
+                "outstanding": float(customer.outstanding_balance),
+                "overdue_days": overdue_days,
+                "days_since_reminder": days_since_reminder
+            })
+
+    if overdue_customers:
+        overdue_customers.sort(key=lambda x: (-x["overdue_days"], -x["days_since_reminder"]))
+        total_overdue = sum(c["outstanding"] for c in overdue_customers)
+        most_urgent = overdue_customers[0]
+        decisions.append({
+            "type": "overdue_collections",
+            "priority": 3,
+            "icon": "💰",
+            "headline": f"₹{total_overdue:,.0f} overdue from {len(overdue_customers)} customer{'s' if len(overdue_customers) > 1 else ''}",
+            "detail": f"{most_urgent['name']} hasn't paid in {most_urgent['overdue_days']} days. {'No reminder sent recently.' if most_urgent['days_since_reminder'] > 3 else 'Reminder sent recently.'}",
+            "amount_at_stake": total_overdue,
+            "action_label": "View Collections",
+            "action_url": "/dashboard/collections"
+        })
+
+    # Decision D — Stock-out risk (uses products dict — no loop queries)
+    stockout_risks = []
+    for inv in inventory_items:
+        product_id = inv.sku_id
+        pending_qty = pending_product_qty.get(product_id, 0)
+        available = inv.quantity_on_hand
+        if available <= 5 or (pending_qty > 0 and pending_qty > available):
+            product = products.get(product_id)
+            if not product:
+                continue
+            revenue_at_risk = float(pending_qty * (product.base_price or 0)) if pending_qty > available else 0
+            stockout_risks.append({
+                "product_name": f"{product.brand} {product.pack_size or ''}".strip(),
+                "available": available,
+                "pending_qty": pending_qty,
+                "revenue_at_risk": revenue_at_risk
+            })
+
+    if stockout_risks:
+        stockout_risks.sort(key=lambda x: -x["revenue_at_risk"])
+        total_at_risk = sum(s["revenue_at_risk"] for s in stockout_risks)
+        top = stockout_risks[0]
+        detail = f"{top['product_name']}: {top['available']} units left"
+        if top["pending_qty"] > top["available"]:
+            detail += f", {top['pending_qty']} units needed for pending orders"
+        decisions.append({
+            "type": "stockout_risk",
+            "priority": 4,
+            "icon": "⚠️",
+            "headline": f"{len(stockout_risks)} product{'s' if len(stockout_risks) > 1 else ''} may cause order failures",
+            "detail": detail + (f". ₹{total_at_risk:,.0f} revenue at risk." if total_at_risk > 0 else ""),
+            "amount_at_stake": total_at_risk,
+            "action_label": "Restock Now",
+            "action_url": "/dashboard/inventory"
+        })
+
+    decisions.sort(key=lambda x: x["priority"])
+
+    return {
+        "decisions": decisions,
+        "all_clear": len(decisions) == 0,
+        "generated_at": datetime.utcnow().isoformat() + "Z"
+    }

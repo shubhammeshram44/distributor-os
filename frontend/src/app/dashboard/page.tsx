@@ -10,7 +10,7 @@ import CollectionsDonut from "@/components/CollectionsDonut";
 // The component file (LiveDeliveries.tsx) is preserved on disk for future use.
 import InventorySummary from "@/components/InventorySummary";
 import DemandGapCard from "@/components/DemandGapCard";
-import ActivityFeed from "@/components/ActivityFeed";
+// ActivityFeed replaced with simple link (see bottom of dashboard layout)
 import OnboardingChecklist from "@/components/OnboardingChecklist";
 import { useDashboardData, DashboardMetrics } from "@/hooks/useDashboardData";
 import ErrorBanner from "@/components/ui/ErrorBanner";
@@ -42,6 +42,22 @@ export default function DashboardPage() {
     total_at_risk_count: number;
     total_at_risk_amount: number;
   } | null>(null);
+
+  const [decisionFocus, setDecisionFocus] = useState<{
+    decisions: Array<{
+      type: string;
+      priority: number;
+      icon: string;
+      headline: string;
+      detail: string;
+      amount_at_stake: number;
+      action_label: string;
+      action_url: string;
+    }>;
+    all_clear: boolean;
+    generated_at: string;
+  } | null>(null);
+  const [decisionLoading, setDecisionLoading] = useState(true);
 
   // Sync profile and tenant from backend / localStorage
   useEffect(() => {
@@ -186,9 +202,31 @@ export default function DashboardPage() {
     fetchCreditRisk();
   }, [fetchCreditRisk]);
 
+  const fetchDecisionFocus = useCallback(async () => {
+    if (!tenantId) return;
+    setDecisionLoading(true);
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+    try {
+      const decisionRes = await fetch(
+        `${apiBase}/api/v1/dashboard/decision-focus?tenant_id=${tenantId}`
+      );
+      const decisionData = await decisionRes.json();
+      setDecisionFocus(decisionData);
+    } catch (e) {
+      console.error("Failed to fetch decision focus:", e);
+    } finally {
+      setDecisionLoading(false);
+    }
+  }, [tenantId]);
+
+  useEffect(() => {
+    fetchDecisionFocus();
+  }, [fetchDecisionFocus]);
+
   const refreshAll = () => {
     originalRefreshAll();
     fetchCreditRisk();
+    fetchDecisionFocus();
   };
 
   // Poll connection status every 60 seconds
@@ -364,6 +402,85 @@ export default function DashboardPage() {
                   unfinished workspace; disappears once dismissed or complete. */}
               <OnboardingChecklist activeTenantId={tenantId} />
 
+              {/* ⚡ Decision Focus Card */}
+              <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                {/* Header */}
+                <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+                  <div>
+                    <h2 className="text-sm font-bold text-slate-800">
+                      ⚡ Focus for the Next 15 Minutes
+                    </h2>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Based on your current orders, collections, and inventory
+                    </p>
+                  </div>
+                  {decisionFocus?.generated_at && (
+                    <span className="text-xs text-slate-400">
+                      Updated {formatDateTime(decisionFocus.generated_at, "relative")}
+                    </span>
+                  )}
+                </div>
+
+                {/* Loading skeleton */}
+                {decisionLoading && (
+                  <div className="p-5 space-y-3">
+                    {[1, 2, 3].map(i => (
+                      <div key={i} className="h-16 bg-slate-100 rounded-lg animate-pulse" />
+                    ))}
+                  </div>
+                )}
+
+                {/* All clear state */}
+                {!decisionLoading && decisionFocus?.all_clear && (
+                  <div className="p-8 text-center">
+                    <div className="text-3xl mb-2">✅</div>
+                    <p className="text-sm font-semibold text-slate-700">All caught up!</p>
+                    <p className="text-xs text-slate-400 mt-1">
+                      No pending actions right now. Your business is running smoothly.
+                    </p>
+                  </div>
+                )}
+
+                {/* Decision items */}
+                {!decisionLoading && decisionFocus && !decisionFocus.all_clear && (
+                  <div className="divide-y divide-slate-50">
+                    {decisionFocus.decisions.map((decision, idx) => (
+                      <div
+                        key={decision.type}
+                        className={`flex items-start gap-4 px-5 py-4 hover:bg-slate-50 transition-colors ${
+                          idx === 0 ? "bg-red-50/30" : ""
+                        }`}
+                      >
+                        {/* Icon */}
+                        <span className="text-xl flex-shrink-0 mt-0.5">{decision.icon}</span>
+
+                        {/* Content */}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-slate-800">
+                            {decision.headline}
+                          </p>
+                          <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
+                            {decision.detail}
+                          </p>
+                        </div>
+
+                        {/* Action button */}
+                        <a
+                          href={decision.action_url}
+                          className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                            idx === 0
+                              ? "bg-red-600 text-white hover:bg-red-700"
+                              : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                          }`}
+                        >
+                          {decision.action_label} →
+                        </a>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               {/* A. Core Operational Metrics Row */}
               <MetricCards metrics={metrics} />
 
@@ -511,8 +628,8 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              {/* C. Bottom Operational Grid (Demand Gap, Stock Summary, Activity Feed) */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* C. Bottom Operational Grid (Demand Gap + Stock Summary) */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="min-h-[300px]">
                   {/* DemandGapCard replaces LiveDeliveries (2026-06-28) */}
                   <DemandGapCard activeTenantId={tenantId} />
@@ -520,9 +637,16 @@ export default function DashboardPage() {
                 <div className="min-h-[300px]">
                   <InventorySummary data={metrics || undefined} />
                 </div>
-                <div className="min-h-[300px]">
-                  <ActivityFeed activities={activities} viewAllHref="/dashboard/reports" />
-                </div>
+              </div>
+
+              {/* View recent activity link */}
+              <div className="flex justify-end pt-1">
+                <a
+                  href="/dashboard/reports"
+                  className="text-xs text-slate-400 hover:text-indigo-600 transition-colors"
+                >
+                  View Recent Activity →
+                </a>
               </div>
             </>
           )}
