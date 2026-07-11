@@ -7,6 +7,7 @@ import { InvoiceTypes, InvoiceType } from "@/types/order";
 import Pagination from "@/components/ui/Pagination";
 import { formatDateTime } from "@/utils/datetime";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import PlaceOrderModal from "@/components/PlaceOrderModal";
 import {
   Search,
   Loader2,
@@ -20,7 +21,8 @@ import {
   ChevronRight,
   Download,
   SlidersHorizontal,
-  ChevronDown
+  ChevronDown,
+  ShoppingCart
 } from "lucide-react";
 
 interface OrderItem {
@@ -102,6 +104,7 @@ export default function OrdersPage() {
   const limit = 50;
   const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
+  const [isPlaceOrderOpen, setIsPlaceOrderOpen] = useState(false);
 
   const [toast, setToast] = useState<{ show: boolean; message: string; type: "success" | "error" }>({
     show: false,
@@ -683,6 +686,14 @@ export default function OrdersPage() {
                 ) : (
                   <span>Download Invoices</span>
                 )}
+              </button>
+
+              <button
+                onClick={() => setIsPlaceOrderOpen(true)}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-lg flex items-center gap-2 transition-all cursor-pointer shadow-sm"
+              >
+                <ShoppingCart className="w-4 h-4" />
+                + New Order
               </button>
 
               <button
@@ -1467,6 +1478,18 @@ export default function OrdersPage() {
           </button>
         </div>
       )}
+
+      <PlaceOrderModal
+        activeTenantId={activeTenantId}
+        isOpen={isPlaceOrderOpen}
+        onClose={() => setIsPlaceOrderOpen(false)}
+        onSuccess={() => {
+          setIsPlaceOrderOpen(false);
+          if (activeTenantId) {
+            fetchOrders(activeTenantId);
+          }
+        }}
+      />
     </div>
   );
 }

@@ -16,7 +16,7 @@ import { useDashboardData, DashboardMetrics } from "@/hooks/useDashboardData";
 import ErrorBanner from "@/components/ui/ErrorBanner";
 import { formatDateTime } from "@/utils/datetime";
 import { ChevronDown, SlidersHorizontal, RefreshCw, CheckCircle2, AlertCircle, X, TrendingUp, TrendingDown, IndianRupee, ShoppingBag, BarChart, CreditCard } from "lucide-react";
-import WhatsAppSimulator from "@/components/WhatsAppSimulator";
+
 
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState("Dashboard");
@@ -529,11 +529,7 @@ export default function DashboardPage() {
         </main>
       </div>
 
-      {/* WhatsApp Ingestion Live testing simulator */}
-      <WhatsAppSimulator
-        activeTenantId={tenantId}
-        onSuccess={refreshAll}
-      />
+
 
       {/* Sleek Floating Toast Notification */}
       {toast.show && (
