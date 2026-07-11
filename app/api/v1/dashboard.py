@@ -1098,6 +1098,32 @@ def get_onboarding_status(
     }
 
 
+def parse_payment_terms_days(payment_terms: str | None) -> int:
+    """Parse payment terms string to number of days."""
+    if not payment_terms:
+        return 30
+    pt = payment_terms.strip().upper()
+    if "COD" in pt:
+        return 0
+    # Handle "Net X" format
+    if "NET" in pt:
+        try:
+            return int(''.join(filter(str.isdigit, pt.split("NET")[1][:5])))
+        except:
+            return 30
+    # Handle "X-Y Days" format — use the higher number
+    if "DAYS" in pt or "DAY" in pt:
+        import re
+        numbers = re.findall(r'\d+', pt)
+        if numbers:
+            return max(int(n) for n in numbers)
+    # Handle plain number
+    try:
+        return int(''.join(filter(str.isdigit, pt))[:3])
+    except:
+        return 30
+
+
 @router.get("/credit-risk-alerts")
 def get_credit_risk_alerts(
     tenant_id: uuid.UUID,
@@ -1133,7 +1159,7 @@ def get_credit_risk_alerts(
         if not oldest_unpaid:
             continue
 
-        payment_terms_days = int(customer.payment_terms.replace("Net ", "")) if customer.payment_terms and "Net" in customer.payment_terms else 30
+        payment_terms_days = parse_payment_terms_days(customer.payment_terms)
         due_date = oldest_unpaid + timedelta(days=payment_terms_days)
         overdue_days = max(0, (datetime.utcnow() - due_date).days)
 
@@ -1157,6 +1183,8 @@ def get_credit_risk_alerts(
             "overdue_days": overdue_days,
             "risk_level": risk_level
         })
+
+    logger.info("Credit risk scan: found %d customers at risk", len(results))
 
     # Sort: high_risk first, then by overdue days desc
     results.sort(key=lambda x: (
