@@ -1406,3 +1406,338 @@ def get_decision_focus(
         "all_clear": len(decisions) == 0,
         "generated_at": datetime.utcnow().isoformat() + "Z"
     }
+
+
+@router.get("/business-health-score")
+def get_business_health_score(
+    tenant_id: str | None = None,
+    access_token: str | None = Cookie(None),
+    authorization: str | None = Header(None),
+    db: Session = Depends(get_db)
+):
+    """
+    Computes a 0-100 Business Health Score from 5 weighted signals.
+    Only shown when sufficient data exists (7+ days, 5+ confirmed orders).
+
+    Weights:
+    - Collections Health: 30 points
+    - Sales Momentum: 25 points  
+    - Payment Recovery Speed: 20 points
+    - Inventory Health: 15 points
+    - Order Fulfillment Rate: 10 points
+    """
+    from app.models.order import Order, OrderLineItem
+    from app.models.customer import Customer
+    from app.models.invoice import Invoice
+    from app.models.inventory import Inventory
+    from app.models.product import Product
+    from app.models.payment import Payment, PaymentInvoiceLink
+    from sqlalchemy.orm import joinedload
+    from datetime import datetime, timedelta
+
+    resolved_tenant_id = resolve_tenant_id(tenant_id, access_token, authorization)
+    now = datetime.utcnow()
+
+    # ── BATCH LOAD all data upfront ──────────────────────────────────────────
+
+    # All confirmed orders last 30 days
+    confirmed_orders_30d = db.query(Order).options(
+        joinedload(Order.line_items)
+    ).filter(
+        Order.tenant_id == resolved_tenant_id,
+        Order.status.in_(["Confirmed", "Dispatched", "Delivered"]),
+        Order.created_at >= now - timedelta(days=30)
+    ).all()
+
+    # This week vs last week orders
+    this_week_orders = db.query(Order).filter(
+        Order.tenant_id == resolved_tenant_id,
+        Order.status.in_(["Confirmed", "Dispatched", "Delivered"]),
+        Order.created_at >= now - timedelta(days=7)
+    ).all()
+
+    last_week_orders = db.query(Order).filter(
+        Order.tenant_id == resolved_tenant_id,
+        Order.status.in_(["Confirmed", "Dispatched", "Delivered"]),
+        Order.created_at >= now - timedelta(days=14),
+        Order.created_at < now - timedelta(days=7)
+    ).all()
+
+    # Minimum data threshold check
+    total_confirmed = len(confirmed_orders_30d)
+    
+    min_created_at = db.query(func.min(Order.created_at)).filter(
+        Order.tenant_id == resolved_tenant_id
+    ).scalar()
+    
+    days_of_data = (now - min_created_at).days if min_created_at else 0
+
+    if total_confirmed < 5 or days_of_data < 7:
+        return {
+            "has_sufficient_data": False,
+            "message": "Score available after 7 days and 5+ confirmed orders",
+            "days_of_data": days_of_data,
+            "confirmed_orders": total_confirmed
+        }
+
+    # All unpaid invoices
+    unpaid_invoices = db.query(Invoice).filter(
+        Invoice.tenant_id == resolved_tenant_id,
+        Invoice.payment_status.in_(["UNPAID", "PARTIALLY_PAID"]),
+        Invoice.total_amount > 0
+    ).all()
+
+    # All customers
+    customers = db.query(Customer).filter(
+        Customer.tenant_id == resolved_tenant_id
+    ).all()
+
+    # All inventory
+    inventory_items = db.query(Inventory).filter(
+        Inventory.tenant_id == resolved_tenant_id
+    ).all()
+
+    # ── SIGNAL 1: Collections Health (30 points) ─────────────────────────────
+
+    total_outstanding = sum(float(c.outstanding_balance) for c in customers)
+
+    overdue_30d = 0
+    for invoice in unpaid_invoices:
+        customer = next((c for c in customers if c.id == invoice.customer_id), None)
+        if not customer:
+            continue
+        pt = customer.payment_terms or "Net 30"
+        days = 30
+        if "Net" in pt:
+            try:
+                days = int(''.join(filter(str.isdigit, pt.split("Net")[1][:5])))
+            except Exception:
+                days = 30
+        elif "Days" in pt:
+            import re
+            numbers = re.findall(r'\d+', pt)
+            if numbers:
+                days = max(int(n) for n in numbers)
+
+        due_date = invoice.created_at + timedelta(days=days)
+        if (now - due_date).days > 30:
+            overdue_30d += float(invoice.total_amount - (invoice.amount_paid or 0))
+
+    if total_outstanding == 0:
+        collections_score = 30  # no outstanding = perfect
+    else:
+        overdue_ratio = overdue_30d / total_outstanding
+        if overdue_ratio == 0:       collections_score = 30
+        elif overdue_ratio < 0.10:   collections_score = 25
+        elif overdue_ratio < 0.25:   collections_score = 19
+        elif overdue_ratio < 0.50:   collections_score = 12
+        else:                         collections_score = 4
+
+    collections_detail = {
+        "score": collections_score,
+        "max": 30,
+        "total_outstanding": total_outstanding,
+        "overdue_30d": overdue_30d,
+        "overdue_ratio_pct": round((overdue_30d / total_outstanding * 100) if total_outstanding > 0 else 0, 1),
+        "status": "good" if collections_score >= 22 else "attention" if collections_score >= 12 else "critical"
+    }
+
+    # ── SIGNAL 2: Sales Momentum (25 points) ──────────────────────────────────
+
+    this_week_revenue = sum(float(o.total_amount or 0) for o in this_week_orders)
+    last_week_revenue = sum(float(o.total_amount or 0) for o in last_week_orders)
+
+    if last_week_revenue == 0:
+        growth_pct = 100 if this_week_revenue > 0 else 0
+    else:
+        growth_pct = ((this_week_revenue - last_week_revenue) / last_week_revenue) * 100
+
+    if growth_pct > 20:    sales_score = 25
+    elif growth_pct > 10:  sales_score = 21
+    elif growth_pct > 0:   sales_score = 17
+    elif growth_pct == 0:  sales_score = 12
+    elif growth_pct > -10: sales_score = 7
+    else:                   sales_score = 3
+
+    sales_detail = {
+        "score": sales_score,
+        "max": 25,
+        "this_week_revenue": this_week_revenue,
+        "last_week_revenue": last_week_revenue,
+        "growth_pct": round(growth_pct, 1),
+        "status": "good" if sales_score >= 17 else "attention" if sales_score >= 10 else "critical"
+    }
+
+    # ── SIGNAL 3: Payment Recovery Speed (20 points) ──────────────────────────
+
+    # Calculate avg days between invoice creation and payment using payments directly joined with invoices
+    recent_payments_with_invoices = db.query(Payment, Invoice).join(
+        PaymentInvoiceLink, PaymentInvoiceLink.payment_id == Payment.id
+    ).join(
+        Invoice, Invoice.id == PaymentInvoiceLink.invoice_id
+    ).filter(
+        Payment.tenant_id == resolved_tenant_id,
+        Payment.status == "COMPLETED",
+        Payment.created_at >= now - timedelta(days=30)
+    ).all()
+
+    if recent_payments_with_invoices:
+        days_to_pay_list = [
+            max(0, (pay.created_at - inv.created_at).days)
+            for pay, inv in recent_payments_with_invoices
+            if pay.created_at and inv.created_at
+        ]
+        avg_days_to_pay = sum(days_to_pay_list) / len(days_to_pay_list) if days_to_pay_list else 30
+    else:
+        avg_days_to_pay = 30  # default assumption
+
+    if avg_days_to_pay <= 7:    recovery_score = 20
+    elif avg_days_to_pay <= 15: recovery_score = 17
+    elif avg_days_to_pay <= 30: recovery_score = 13
+    elif avg_days_to_pay <= 45: recovery_score = 8
+    else:                        recovery_score = 3
+
+    recovery_detail = {
+        "score": recovery_score,
+        "max": 20,
+        "avg_days_to_pay": round(avg_days_to_pay, 1),
+        "status": "good" if recovery_score >= 13 else "attention" if recovery_score >= 8 else "critical"
+    }
+
+    # ── SIGNAL 4: Inventory Health (15 points) ────────────────────────────────
+
+    active_products = db.query(Product).filter(
+        Product.tenant_id == resolved_tenant_id,
+        Product.is_active == True,
+        Product.sku_id != "UNMATCHED_TRIAGE_SKU"
+    ).count()
+
+    if active_products == 0:
+        inventory_score = 15
+        stockout_count = 0
+    else:
+        stockout_count = sum(1 for inv in inventory_items if inv.quantity_on_hand == 0)
+        stockout_ratio = stockout_count / active_products
+
+        if stockout_ratio == 0:      inventory_score = 15
+        elif stockout_ratio < 0.05:  inventory_score = 13
+        elif stockout_ratio < 0.10:  inventory_score = 10
+        elif stockout_ratio < 0.20:  inventory_score = 6
+        else:                         inventory_score = 2
+
+    inventory_detail = {
+        "score": inventory_score,
+        "max": 15,
+        "total_products": active_products,
+        "stockout_count": stockout_count,
+        "status": "good" if inventory_score >= 10 else "attention" if inventory_score >= 6 else "critical"
+    }
+
+    # ── SIGNAL 5: Order Fulfillment Rate (10 points) ──────────────────────────
+
+    if not confirmed_orders_30d:
+        fulfillment_score = 10
+        fulfillment_rate = 100.0
+    else:
+        fully_fulfilled = 0
+        for order in confirmed_orders_30d:
+            all_fulfilled = all(
+                (item.allocated_quantity or 0) >= item.quantity
+                for item in order.line_items
+            )
+            if all_fulfilled:
+                fully_fulfilled += 1
+
+        fulfillment_rate = (fully_fulfilled / len(confirmed_orders_30d)) * 100
+
+        if fulfillment_rate >= 95:   fulfillment_score = 10
+        elif fulfillment_rate >= 85: fulfillment_score = 8
+        elif fulfillment_rate >= 70: fulfillment_score = 6
+        elif fulfillment_rate >= 50: fulfillment_score = 3
+        else:                         fulfillment_score = 1
+
+    fulfillment_detail = {
+        "score": fulfillment_score,
+        "max": 10,
+        "fulfillment_rate_pct": round(fulfillment_rate, 1),
+        "status": "good" if fulfillment_score >= 7 else "attention" if fulfillment_score >= 4 else "critical"
+    }
+
+    # ── TOTAL SCORE ────────────────────────────────────────────────────────────
+
+    total_score = (
+        collections_score +
+        sales_score +
+        recovery_score +
+        inventory_score +
+        fulfillment_score
+    )
+
+    # Score band
+    if total_score >= 85:   band = "excellent"
+    elif total_score >= 70: band = "good"
+    elif total_score >= 50: band = "attention"
+    else:                    band = "at_risk"
+
+    band_labels = {
+        "excellent": "Excellent",
+        "good": "Good",
+        "attention": "Needs Attention",
+        "at_risk": "At Risk"
+    }
+
+    band_colors = {
+        "excellent": "green",
+        "good": "yellow",
+        "attention": "orange",
+        "at_risk": "red"
+    }
+
+    # ── WEEK-ON-WEEK TREND ────────────────────────────────────────────────────
+    # Simple proxy: compare this week revenue growth direction
+    if growth_pct > 2:    trend = "up"
+    elif growth_pct < -2: trend = "down"
+    else:                  trend = "stable"
+
+    # ── PRIMARY INSIGHT (one actionable line) ─────────────────────────────────
+    # Find worst performing signal and generate insight
+    signals = [
+        (collections_score / 30, "collections", collections_detail),
+        (sales_score / 25, "sales", sales_detail),
+        (recovery_score / 20, "recovery", recovery_detail),
+        (inventory_score / 15, "inventory", inventory_detail),
+        (fulfillment_score / 10, "fulfillment", fulfillment_detail),
+    ]
+    worst_signal = min(signals, key=lambda x: x[0])
+
+    insights = {
+        "collections": f"₹{overdue_30d:,.0f} overdue for 30+ days — follow up with retailers today.",
+        "sales": f"Sales dropped {abs(growth_pct):.0f}% vs last week — check if orders are coming in.",
+        "recovery": f"Retailers take {avg_days_to_pay:.0f} days to pay on average — send payment reminders.",
+        "inventory": f"{stockout_count} products out of stock — restock to avoid missing orders.",
+        "fulfillment": f"Only {fulfillment_rate:.0f}% of orders fully fulfilled — check inventory levels."
+    }
+
+    primary_insight = insights.get(worst_signal[1], "Your business is running well.")
+    if total_score >= 85:
+        primary_insight = "Your business is performing excellently. Keep it up!"
+
+    return {
+        "has_sufficient_data": True,
+        "score": total_score,
+        "band": band,
+        "band_label": band_labels[band],
+        "band_color": band_colors[band],
+        "trend": trend,
+        "trend_points": abs(round(growth_pct / 4)),
+        "primary_insight": primary_insight,
+        "signals": {
+            "collections": collections_detail,
+            "sales": sales_detail,
+            "recovery": recovery_detail,
+            "inventory": inventory_detail,
+            "fulfillment": fulfillment_detail
+        },
+        "generated_at": now.isoformat() + "Z"
+    }
+

@@ -182,3 +182,30 @@ def test_dashboard_credit_risk_alerts(db_session, client, seed_demo_data):
     assert "total_at_risk_amount" in data
 
 
+def test_dashboard_business_health_score(db_session, client, seed_demo_data):
+    demo_tenant_id = uuid.UUID("d3b07384-d113-4956-a5d2-64be7357c11d")
+
+    # Seed extra orders if needed to meet the 5+ confirmed orders in last 30 days check.
+    # Note: seed_demo_data already seeds 5 orders:
+    # ORD-2505-1476, ORD-2505-1477, ORD-2505-1479, ORD-2505-1481, ORD-2505-1482
+    # All are Confirmed or Delivered and created within the timeframe.
+
+    # 1. Fetch business health score
+    resp = client.get(f"/api/v1/dashboard/business-health-score?tenant_id={demo_tenant_id}")
+    assert resp.status_code == 200
+    data = resp.json()
+
+    assert "has_sufficient_data" in data
+    if data["has_sufficient_data"]:
+        assert "score" in data
+        assert "band" in data
+        assert "signals" in data
+        signals = data["signals"]
+        assert "collections" in signals
+        assert "sales" in signals
+        assert "recovery" in signals
+        assert "inventory" in signals
+        assert "fulfillment" in signals
+
+
+

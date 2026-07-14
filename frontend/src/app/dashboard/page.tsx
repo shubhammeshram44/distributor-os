@@ -59,6 +59,29 @@ export default function DashboardPage() {
   } | null>(null);
   const [decisionLoading, setDecisionLoading] = useState(true);
 
+  const [healthScore, setHealthScore] = useState<{
+    has_sufficient_data: boolean;
+    score: number;
+    band: string;
+    band_label: string;
+    band_color: string;
+    trend: string;
+    trend_points: number;
+    primary_insight: string;
+    signals: {
+      collections: { score: number; max: number; status: string; total_outstanding: number; overdue_30d: number; overdue_ratio_pct: number; };
+      sales: { score: number; max: number; growth_pct: number; status: string; this_week_revenue: number; last_week_revenue: number; };
+      recovery: { score: number; max: number; avg_days_to_pay: number; status: string; };
+      inventory: { score: number; max: number; stockout_count: number; total_products: number; status: string; };
+      fulfillment: { score: number; max: number; fulfillment_rate_pct: number; status: string; };
+    };
+    confirmed_orders?: number;
+    days_of_data?: number;
+  } | null>(null);
+  const [healthLoading, setHealthLoading] = useState(true);
+  const [healthExpanded, setHealthExpanded] = useState(false);
+
+
   // Sync profile and tenant from backend / localStorage
   useEffect(() => {
     const fetchProfileAndTenant = async () => {
@@ -223,10 +246,32 @@ export default function DashboardPage() {
     fetchDecisionFocus();
   }, [fetchDecisionFocus]);
 
+  const fetchHealthScore = useCallback(async () => {
+    if (!tenantId) return;
+    setHealthLoading(true);
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+    try {
+      const healthRes = await fetch(
+        `${apiBase}/api/v1/dashboard/business-health-score?tenant_id=${tenantId}`
+      );
+      const healthData = await healthRes.json();
+      setHealthScore(healthData);
+    } catch (e) {
+      console.error("Failed to fetch business health score:", e);
+    } finally {
+      setHealthLoading(false);
+    }
+  }, [tenantId]);
+
+  useEffect(() => {
+    fetchHealthScore();
+  }, [fetchHealthScore]);
+
   const refreshAll = () => {
     originalRefreshAll();
     fetchCreditRisk();
     fetchDecisionFocus();
+    fetchHealthScore();
   };
 
   // Poll connection status every 60 seconds
@@ -401,6 +446,169 @@ export default function DashboardPage() {
               {/* Getting Started checklist — only renders for a brand-new,
                   unfinished workspace; disappears once dismissed or complete. */}
               <OnboardingChecklist activeTenantId={tenantId} />
+
+              {/* Business Health Score */}
+              {!healthLoading && healthScore?.has_sufficient_data && (
+                  <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                      <div
+                          className="flex items-center justify-between px-5 py-4 cursor-pointer hover:bg-slate-50"
+                          onClick={() => setHealthExpanded(!healthExpanded)}
+                      >
+                          {/* Score display */}
+                          <div className="flex items-center gap-4">
+                              {/* Circular score */}
+                              <div className={`relative w-14 h-14 flex-shrink-0`}>
+                                  <svg className="w-14 h-14 -rotate-90" viewBox="0 0 56 56">
+                                      <circle cx="28" cy="28" r="24" fill="none" stroke="#e2e8f0" strokeWidth="4"/>
+                                      <circle
+                                          cx="28" cy="28" r="24"
+                                          fill="none"
+                                          stroke={
+                                              healthScore.band === "excellent" ? "#10b981" :
+                                              healthScore.band === "good" ? "#f59e0b" :
+                                              healthScore.band === "attention" ? "#f97316" : "#ef4444"
+                                          }
+                                          strokeWidth="4"
+                                          strokeDasharray={`${(healthScore.score / 100) * 150.8} 150.8`}
+                                          strokeLinecap="round"
+                                      />
+                                  </svg>
+                                  <div className="absolute inset-0 flex items-center justify-center">
+                                      <span className="text-sm font-bold text-slate-800">
+                                          {healthScore.score}
+                                      </span>
+                                  </div>
+                              </div>
+
+                              {/* Score details */}
+                              <div>
+                                  <div className="flex items-center gap-2">
+                                      <span className="text-sm font-bold text-slate-800">
+                                          Business Health
+                                      </span>
+                                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                                          healthScore.band === "excellent" ? "bg-emerald-50 text-emerald-700" :
+                                          healthScore.band === "good" ? "bg-amber-50 text-amber-700" :
+                                          healthScore.band === "attention" ? "bg-orange-50 text-orange-700" :
+                                          "bg-red-50 text-red-700"
+                                      }`}>
+                                          {healthScore.band_label}
+                                      </span>
+                                      {/* Trend */}
+                                      <span className={`text-xs font-medium ${
+                                          healthScore.trend === "up" ? "text-emerald-600" :
+                                          healthScore.trend === "down" ? "text-red-500" :
+                                          "text-slate-400"
+                                      }`}>
+                                          {healthScore.trend === "up" ? "↑" :
+                                           healthScore.trend === "down" ? "↓" : "→"}
+                                      </span>
+                                  </div>
+                                  <p className="text-xs text-slate-500 mt-0.5">
+                                      {healthScore.primary_insight}
+                                  </p>
+                              </div>
+                          </div>
+
+                          {/* Signal dots + expand */}
+                          <div className="flex items-center gap-3">
+                              <div className="flex gap-1">
+                                  {Object.values(healthScore.signals).map((signal, i) => (
+                                      <div
+                                          key={i}
+                                          className={`w-2 h-2 rounded-full ${
+                                              signal.status === "good" ? "bg-emerald-400" :
+                                              signal.status === "attention" ? "bg-amber-400" :
+                                              "bg-red-400"
+                                          }`}
+                                      />
+                                  ))}
+                              </div>
+                              <span className="text-slate-300 text-sm">
+                                  {healthExpanded ? "▲" : "▼"}
+                              </span>
+                          </div>
+                      </div>
+
+                      {/* Expanded signal details */}
+                      {healthExpanded && (
+                          <div className="border-t border-slate-100 px-5 py-4">
+                              <div className="space-y-3">
+                                  {[
+                                      {
+                                          key: "collections",
+                                          label: "Collections",
+                                          detail: `${healthScore.signals.collections.score}/${healthScore.signals.collections.max} pts`
+                                      },
+                                      {
+                                          key: "sales",
+                                          label: "Sales Momentum",
+                                          detail: `${healthScore.signals.sales.growth_pct > 0 ? "+" : ""}${healthScore.signals.sales.growth_pct}% vs last week`
+                                      },
+                                      {
+                                          key: "recovery",
+                                          label: "Payment Recovery",
+                                          detail: `Avg ${healthScore.signals.recovery.avg_days_to_pay} days to collect`
+                                      },
+                                      {
+                                          key: "inventory",
+                                          label: "Inventory",
+                                          detail: `${healthScore.signals.inventory.stockout_count} products out of stock`
+                                      },
+                                      {
+                                          key: "fulfillment",
+                                          label: "Order Fulfillment",
+                                          detail: `${healthScore.signals.fulfillment.fulfillment_rate_pct}% fully fulfilled`
+                                      }
+                                  ].map(({ key, label, detail }) => {
+                                      const signal = healthScore.signals[key as keyof typeof healthScore.signals];
+                                      return (
+                                          <div key={key} className="flex items-center gap-3">
+                                              <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                                                  signal.status === "good" ? "bg-emerald-400" :
+                                                  signal.status === "attention" ? "bg-amber-400" :
+                                                  "bg-red-400"
+                                              }`} />
+                                              <div className="flex-1">
+                                                  <div className="flex items-center justify-between">
+                                                      <span className="text-xs font-medium text-slate-700">{label}</span>
+                                                      <span className="text-xs text-slate-400">{detail}</span>
+                                                  </div>
+                                                  <div className="mt-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                                      <div
+                                                          className={`h-full rounded-full ${
+                                                              signal.status === "good" ? "bg-emerald-400" :
+                                                              signal.status === "attention" ? "bg-amber-400" :
+                                                              "bg-red-400"
+                                                          }`}
+                                                          style={{
+                                                              width: `${(signal.score / signal.max) * 100}%`
+                                                          }}
+                                                      />
+                                                  </div>
+                                              </div>
+                                          </div>
+                                      );
+                                  })}
+                              </div>
+                          </div>
+                      )}
+                  </div>
+              )}
+
+              {/* Not enough data state */}
+              {!healthLoading && healthScore && !healthScore.has_sufficient_data && (
+                  <div className="bg-slate-50 rounded-xl border border-slate-200 px-5 py-4 flex items-center gap-3">
+                      <span className="text-xl">📊</span>
+                      <div>
+                          <p className="text-xs font-semibold text-slate-600">Business Health Score</p>
+                          <p className="text-xs text-slate-400 mt-0.5">
+                              Available after 7 days and 5 confirmed orders.
+                              {healthScore.confirmed_orders !== undefined && healthScore.confirmed_orders > 0 && ` ${healthScore.confirmed_orders}/5 orders so far.`}
+                          </p>
+                      </div>
+                  </div>
+              )}
 
               {/* ⚡ Decision Focus Card */}
               <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
