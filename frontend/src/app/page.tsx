@@ -1,512 +1,461 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { Figtree } from 'next/font/google';
+import { Inter, Plus_Jakarta_Sans } from 'next/font/google';
 
-const figtree = Figtree({ subsets: ['latin'] });
+const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
+const plusJakartaSans = Plus_Jakarta_Sans({ subsets: ['latin'], variable: '--font-plus-jakarta-sans' });
+
+const TOP_PRODUCTS = [
+  { name: 'Parle-G', pct: '25%', width: '25%' },
+  { name: 'Maggi', pct: '18%', width: '18%' },
+  { name: 'Surf Excel', pct: '14%', width: '14%' }
+];
+
+const STATS = [
+  { value: '4+ Hours', label: 'Saved every day on order entry' },
+  { value: '₹20,000+', label: 'Monthly clerk cost replaced' },
+  { value: '2x Faster', label: 'Payment collection with automated reminders' },
+  { value: '100% Visibility', label: 'Of your business, anytime, anywhere' },
+  { value: 'Zero Data Entry', label: 'No manual typing. No human errors.' }
+];
+
+const TRUSTED_LOGOS = ['Prakash Distributors', 'Shree Balaji Distributors', 'Gupta Traders', 'Mahalaxmi Distributors', '+50 more'];
+
+const PROBLEMS = [
+  { icon: '💬', title: 'Orders lost in WhatsApp chats', body: 'Retailer messages get buried and missed entirely' },
+  { icon: '🧾', title: 'Manual billing wastes hours', body: 'Creating invoices by hand, every day, for every order' },
+  { icon: '📞', title: 'Chasing payments is exhausting', body: "Calling retailers again and again just to collect what you're owed" }
+];
+
+const PILLARS = [
+  { icon: '📉', title: 'Lost Sales Intelligence', body: "Know every order you couldn't fulfil. Recover lost revenue." },
+  { icon: '💰', title: 'Collections Intelligence', body: 'Know who to call today. Collect payments 2x faster.' },
+  { icon: '📦', title: 'Inventory Intelligence', body: 'Never run out of stock. Never overstock again.' },
+  { icon: '👥', title: 'Customer Intelligence', body: 'Identify inactive retailers and grow your customer base.' },
+  { icon: '⚡', title: 'Business Health Score', body: 'One score that shows how your business is performing.' }
+];
+
+const STEPS = [
+  { icon: '💬', title: 'Orders on WhatsApp', body: 'Retailers send orders as they always do.' },
+  { icon: '🤖', title: 'AI Reads & Understands', body: 'Our AI understands, validates and creates clean orders.' },
+  { icon: '✅', title: 'You Review & Confirm', body: 'Review once a day and confirm all orders.' },
+  { icon: '📄', title: 'Invoices & Dispatch', body: 'Invoices are generated. Goods are dispatched.' },
+  { icon: '💳', title: 'Payments & Collections', body: 'Record payments and automate follow-ups.' },
+  { icon: '📈', title: 'Insights & Growth', body: 'Get AI insights and grow your business.' }
+];
+
+const AI_ITEMS = [
+  { name: 'Surf Excel (1kg)', qty: '5 BOX' },
+  { name: 'Wheel (500g)', qty: '2 BOX' },
+  { name: 'Vim (500ml)', qty: '1 BOX' }
+];
+
+const AI_CAPABILITIES = [
+  { icon: '🎙️', text: 'Understands text, voice, images and even messy orders' },
+  { icon: '🔗', text: 'Maps to your products automatically' },
+  { icon: '📊', text: 'Checks stock & credit in real-time' },
+  { icon: '⚠️', text: 'Flags issues before you confirm' }
+];
+
+const PLANS = [
+  { name: 'Free Trial', price: '₹0', period: '/ 15 days', popular: false, shadow: '0 4px 24px rgba(0,0,0,0.08)', border: '1px solid #E2E8F0',
+    features: ['All features included', 'No credit card needed', 'Full WhatsApp AI parsing', 'Cancel anytime'],
+    ctaBg: 'transparent', ctaColor: '#4F46E5', ctaBorder: '1px solid #4F46E5', cta: 'Start Free Trial' },
+  { name: 'Growth', price: '₹2,499', period: '/month', popular: true, shadow: '0 12px 32px rgba(79,70,229,0.18)', border: '2px solid #4F46E5',
+    features: ['Up to 500 orders/month', '1 WhatsApp number', 'Auto invoicing & payments', 'Collections reminders', 'Email support'],
+    ctaBg: '#4F46E5', ctaColor: '#fff', ctaBorder: 'none', cta: 'Start Free Trial' },
+  { name: 'Pro', price: '₹4,999', period: '/month', popular: false, shadow: '0 4px 24px rgba(0,0,0,0.08)', border: '1px solid #E2E8F0',
+    features: ['Unlimited orders', '3 WhatsApp numbers', 'Priority support + dedicated onboarding', 'Tally XML export', 'Business Health Score'],
+    ctaBg: 'transparent', ctaColor: '#4F46E5', ctaBorder: '1px solid #4F46E5', cta: 'Start Free Trial' }
+];
+
+const FAQ_DATA = [
+  { q: 'Do my retailers need to download an app?', a: 'No. They WhatsApp you exactly as they do today. Nothing changes for them.' },
+  { q: 'Will this affect my Tally or Marg?', a: "No. We don't touch your books. We handle everything before an invoice exists. Your CA won't even know we exist." },
+  { q: 'What if the AI misreads an order?', a: 'Every order goes into a review queue before confirmation. You always have final approval.' },
+  { q: 'What languages does it understand?', a: 'Hindi, English, Hinglish, and common Indian shorthand — "bhaiya", "bhejna", mixed scripts — all understood.' },
+  { q: 'What happens if WhatsApp disconnects?', a: 'You get an instant alert on your dashboard and can reconnect in one click. Orders continue via your existing manual process as backup.' }
+];
 
 export default function MarketingPage() {
-  const [isMobile, setIsMobile] = useState(false);
-  const [navOpen, setNavOpen] = useState(false);
-  const [visible, setVisible] = useState<Record<string, boolean>>({});
-  const [faqOpenIdx, setFaqOpenIdx] = useState<number | null>(null);
-  const [demoTyped, setDemoTyped] = useState('');
-  const [demoShowOrder, setDemoShowOrder] = useState(false);
-  const [statDistributors, setStatDistributors] = useState(0);
-  const [statCrores, setStatCrores] = useState(0);
+  const [faqOpen, setFaqOpen] = useState(0);
 
-  // Set document title
   useEffect(() => {
     document.title = "DistributorOS — WhatsApp Order Management for Distributors";
+
+    const els = document.querySelectorAll('[data-fade]');
+    const obs = new IntersectionObserver((entries) => {
+      entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('in'); });
+    }, { threshold: 0.1 });
+    els.forEach(el => obs.observe(el));
+    return () => obs.disconnect();
   }, []);
 
-  const demoMessage = 'bhaiya 50 units rin soap bhejo 🙏';
+  const topProducts = TOP_PRODUCTS;
+  const stats = STATS;
+  const trustedLogos = TRUSTED_LOGOS;
+  const problems = PROBLEMS;
+  const pillars = PILLARS;
+  const steps = STEPS;
+  const aiItems = AI_ITEMS;
+  const aiCapabilities = AI_CAPABILITIES;
+  const plans = PLANS;
 
-  // Refs for scroll observation
-  const refProblem = useRef<HTMLDivElement>(null);
-  const refHow = useRef<HTMLDivElement>(null);
-  const refFeatures = useRef<HTMLDivElement>(null);
-  const refProof = useRef<HTMLDivElement>(null);
-  const refPricing = useRef<HTMLDivElement>(null);
-  const refFaq = useRef<HTMLDivElement>(null);
-
-  // Resize listener
-  useEffect(() => {
-    const onResize = () => {
-      setIsMobile(window.innerWidth < 860);
-    };
-    onResize();
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, []);
-
-  // Demo loop
-  useEffect(() => {
-    let mounted = true;
-    const sleep = (ms: number) => new Promise(res => setTimeout(res, ms));
-    const runDemoLoop = async () => {
-      while (mounted) {
-        setDemoTyped('');
-        setDemoShowOrder(false);
-        await sleep(500);
-        for (let i = 1; i <= demoMessage.length; i++) {
-          if (!mounted) return;
-          setDemoTyped(demoMessage.slice(0, i));
-          await sleep(55);
-        }
-        await sleep(600);
-        if (!mounted) return;
-        setDemoShowOrder(true);
-        await sleep(3200);
-      }
-    };
-    runDemoLoop();
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  // IntersectionObserver for animate-on-scroll
-  useEffect(() => {
-    const startCounters = () => {
-      const duration = 1100;
-      const start = performance.now();
-      const step = (now: number) => {
-        const t = Math.min(1, (now - start) / duration);
-        const ease = 1 - Math.pow(1 - t, 3);
-        setStatDistributors(Math.round(50 * ease));
-        setStatCrores(Math.round(10 * ease));
-        if (t < 1) requestAnimationFrame(step);
-      };
-      requestAnimationFrame(step);
-    };
-
-    const observedKeys: Record<string, React.RefObject<HTMLDivElement>> = {
-      problem: refProblem,
-      how: refHow,
-      features: refFeatures,
-      proof: refProof,
-      pricing: refPricing,
-      faq: refFaq
-    };
-
-    const io = new IntersectionObserver((entries) => {
-      entries.forEach((entry) => {
-        if (entry.isIntersecting) {
-          const key = entry.target.getAttribute('data-observe-key');
-          if (key) {
-            setVisible(prev => ({ ...prev, [key]: true }));
-            if (key === 'proof') startCounters();
-            io.unobserve(entry.target);
-          }
-        }
-      });
-    }, { threshold: 0.15 });
-
-    Object.entries(observedKeys).forEach(([key, ref]) => {
-      if (ref.current) {
-        ref.current.setAttribute('data-observe-key', key);
-        io.observe(ref.current);
-      }
-    });
-
-    return () => io.disconnect();
-  }, []);
-
-  const toggleNav = () => setNavOpen(prev => !prev);
-
-  const cardStyle = (visibleState: boolean, index: number) => {
-    return {
-      opacity: visibleState ? 1 : 0,
-      transform: visibleState ? 'translateY(0)' : 'translateY(24px)',
-      transition: `opacity 0.6s ease ${index * 0.08}s, transform 0.6s ease ${index * 0.08}s`,
-    };
-  };
-
-  const problems = useMemo(() => {
-    return [
-      { icon: '💬', title: 'Orders lost in WhatsApp chats', desc: 'Retailer messages get buried in busy chat threads and missed entirely.' },
-      { icon: '🧾', title: 'Manual billing wastes hours', desc: 'Creating invoices by hand, every single day, for every single order.' },
-      { icon: '📞', title: 'Chasing payments is exhausting', desc: "Calling retailers again and again just to collect what you're owed." },
-    ].map((p, i) => ({ ...p, style: { background: '#f8fafc', border: '1px solid #eef2f7', borderRadius: '16px', padding: '32px 26px', ...cardStyle(visible.problem, i) } as React.CSSProperties }));
-  }, [visible.problem]);
-
-  const steps = useMemo(() => {
-    return [
-      { num: '1', title: 'Retailer sends a WhatsApp message', desc: '"bhaiya 50 units rin soap bhejo" — our AI reads it instantly, in Hindi, English or both.' },
-      { num: '2', title: 'Order is created automatically', desc: 'Invoice generated, inventory updated — no typing, no spreadsheets.' },
-      { num: '3', title: 'Payment link sent, auto-reconciled', desc: 'Retailer pays on WhatsApp. Payment is matched to the order the moment it lands.' },
-    ].map((s, i) => ({ ...s, style: { position: 'relative', padding: '30px 26px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '16px', ...cardStyle(visible.how, i) } as React.CSSProperties }));
-  }, [visible.how]);
-
-  const features = useMemo(() => {
-    return [
-      { icon: '🤖', title: 'WhatsApp AI Order Parsing', desc: 'Hindi, English, mixed — all understood, instantly.' },
-      { icon: '🧾', title: 'Auto Invoice Generation', desc: 'GST bill or retail bill, ready in one click.' },
-      { icon: '📦', title: 'Smart Inventory Tracking', desc: "Know exactly what's in stock before you confirm an order." },
-      { icon: '💳', title: 'Payment Collection', desc: 'Razorpay links sent automatically, every payment tracked.' },
-      { icon: '🚚', title: 'Delivery Management', desc: 'Assign to a driver, track dispatch, notify the retailer.' },
-      { icon: '⏰', title: 'Payment Reminders', desc: 'Automatic WhatsApp reminders for overdue payments.' },
-    ].map((f, i) => ({ ...f, style: { display: 'flex', gap: '18px', padding: '24px', borderRadius: '14px', border: '1px solid #eef2f7', ...cardStyle(visible.features, i) } as React.CSSProperties }));
-  }, [visible.features]);
-
-  const testimonials = useMemo(() => {
-    return [
-      { name: 'Rajesh Gupta', city: 'Kanpur, UP', initial: 'R', quote: 'Ab main WhatsApp pe order aate hi dekh leta hoon — billing khud ho jaati hai.' },
-      { name: 'Sunil Deshmukh', city: 'Nashik, MH', initial: 'S', quote: 'Payment ke liye phone karna band ho gaya. Reminder khud chala jaata hai.' },
-      { name: 'Anita Reddy', city: 'Vijayawada, AP', initial: 'A', quote: 'Stock ka pata hamesha rehta hai. Galti se order confirm nahi hota.' },
-    ].map((t, i) => ({ ...t, style: { background: '#ffffff', border: '1px solid #eef2f7', borderRadius: '16px', padding: '28px', ...cardStyle(visible.proof, i) } as React.CSSProperties }));
-  }, [visible.proof]);
-
-  const pricingPlans = useMemo(() => {
-    return [
-      { name: 'Free Trial', price: '₹0', period: '/15 days', highlight: false,
-        features: ['All features included', 'No credit card needed', 'Full WhatsApp AI parsing', 'Cancel anytime'],
-        cta: 'Start Free Trial', bg: '#f8fafc', textColor: '#0f172a', subColor: '#64748b', btnBg: '#0f172a', btnColor: '#ffffff', border: '1px solid #eef2f7' },
-      { name: 'Growth', price: '₹2,999', period: '/month', highlight: true,
-        features: ['Up to 300 orders/month', '1 WhatsApp number', 'Auto invoicing & payments', 'Email support'],
-        cta: 'Choose Growth', bg: '#0f172a', textColor: '#ffffff', subColor: '#94a3b8', btnBg: '#10b981', btnColor: '#ffffff', border: '1px solid #0f172a' },
-      { name: 'Scale', price: '₹5,999', period: '/month', highlight: false,
-        features: ['Unlimited orders', '3 WhatsApp numbers', 'Priority support', 'Dedicated onboarding'],
-        cta: 'Choose Scale', bg: '#f8fafc', textColor: '#0f172a', subColor: '#64748b', btnBg: '#0f172a', btnColor: '#ffffff', border: '1px solid #eef2f7' },
-    ].map((p, i) => ({
-      ...p,
-      style: {
-        display: 'flex', flexDirection: 'column', background: p.bg, border: p.border, borderRadius: '18px',
-        padding: '32px 28px', transform: p.highlight ? 'scale(1.03)' : 'scale(1)',
-        boxShadow: p.highlight ? '0 24px 50px rgba(15,23,42,0.25)' : '0 1px 2px rgba(0,0,0,0.02)',
-        transition: 'transform 0.25s ease, box-shadow 0.25s ease',
-      } as React.CSSProperties,
-    }));
-  }, []);
-
-  const faqData = [
-    { q: 'Do my retailers need to download an app?', a: 'No. They just WhatsApp you as usual — nothing changes for them.' },
-    { q: 'What languages does it understand?', a: 'Hindi, English, and mixed Hinglish — however your retailers naturally type.' },
-    { q: 'Do I need to change how I work?', a: 'No. You keep using WhatsApp exactly as before. We automate everything behind it.' },
-    { q: 'What happens if the AI misreads an order?', a: 'You review and confirm every order before anything is dispatched.' },
-    { q: 'Is my data safe?', a: 'Yes. Hosted on secure cloud servers with daily backups.' },
-  ];
-
-  const faqs = useMemo(() => {
-    return faqData.map((f, i) => ({
-      ...f,
-      open: faqOpenIdx === i,
-      symbol: faqOpenIdx === i ? '−' : '+',
-      toggle: () => setFaqOpenIdx(prev => prev === i ? null : i),
-    }));
-  }, [faqOpenIdx]);
-
-  const navToggleIcon = navOpen ? '✕' : '☰';
-  const demoShowOrderNot = !demoShowOrder;
-  const isMobileNav = isMobile;
-  const isMobileNotNav = !isMobile;
-  const demoOrderStyle = {
-    background: '#ffffff', borderRadius: '16px', padding: '20px', boxShadow: '0 20px 45px rgba(0,0,0,0.35)',
-    animation: 'heroBubbleIn 0.5s ease',
-  } as React.CSSProperties;
+  const faqs = FAQ_DATA.map((f, i) => ({
+    q: f.q,
+    a: f.a,
+    open: faqOpen === i,
+    symbol: faqOpen === i ? '−' : '+',
+    toggle: () => setFaqOpen(faqOpen === i ? -1 : i)
+  }));
 
   return (
 
-<div className={figtree.className} style={{fontFamily: '\'Figtree\', \'Inter\', -apple-system, sans-serif', color: '#0f172a', background: '#ffffff', width: '100%', overflowX: 'hidden', minHeight: '100vh'}}>
 
-  {/* NAV */}
-  <div style={{position: 'sticky', top: 0, zIndex: 100, background: 'rgba(15,23,42,0.97)', backdropFilter: 'blur(8px)', borderBottom: '1px solid rgba(255,255,255,0.08)'}}>
-    <div style={{maxWidth: 1200, margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 24px'}}>
-      <div style={{display: 'flex', alignItems: 'center', gap: 10}}>
-        <div style={{width: 34, height: 34, borderRadius: 9, background: 'linear-gradient(135deg, #10b981, #0ea371)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0}}>💬</div>
-        <div style={{fontWeight: 800, fontSize: 18, color: '#ffffff', letterSpacing: '-0.02em'}}>Distributor<span style={{color: '#10b981'}}>OS</span></div>
-      </div>
-      {isMobileNav && (<React.Fragment>
-        <div style={{display: 'flex', alignItems: 'center', gap: 10}}>
-          <Link href="/auth" style={{background: '#10b981', color: '#ffffff', fontWeight: 700, fontSize: 13, padding: '9px 14px', borderRadius: 8, cursor: 'pointer', whiteSpace: 'nowrap', textDecoration: 'none'}}>Start Trial</Link>
-          <div onClick={toggleNav} style={{width: 38, height: 38, borderRadius: 8, background: 'rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#ffffff', fontSize: 18}}>{ navToggleIcon }</div>
-        </div>
-      </React.Fragment>)}
-      {isMobileNotNav && (<React.Fragment>
-        <div style={{display: 'flex', alignItems: 'center', gap: 32}}>
-          <a href="#problem" style={{color: '#cbd5e1', textDecoration: 'none', fontSize: 14, fontWeight: 500}}>Problem</a>
-          <a href="#how" style={{color: '#cbd5e1', textDecoration: 'none', fontSize: 14, fontWeight: 500}}>How it Works</a>
-          <a href="#features" style={{color: '#cbd5e1', textDecoration: 'none', fontSize: 14, fontWeight: 500}}>Features</a>
-          <a href="#pricing" style={{color: '#cbd5e1', textDecoration: 'none', fontSize: 14, fontWeight: 500}}>Pricing</a>
-          <a href="#faq" style={{color: '#cbd5e1', textDecoration: 'none', fontSize: 14, fontWeight: 500}}>FAQ</a>
-        </div>
-        <Link href="/auth" style={{background: '#10b981', color: '#ffffff', fontWeight: 700, fontSize: 14, padding: '11px 20px', borderRadius: 8, cursor: 'pointer', whiteSpace: 'nowrap', textDecoration: 'none'}}>Start Free Trial</Link>
-      </React.Fragment>)}
+<div className={`${inter.variable} ${plusJakartaSans.variable}`} style={{background: '#FFFFFF', overflowX: 'hidden'}}>
+  <style dangerouslySetInnerHTML={{ __html: `
+    body {
+      margin: 0;
+      font-family: var(--font-inter), sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    a {
+      color: #4F46E5;
+      text-decoration: none;
+    }
+    a:hover {
+      color: #4338CA;
+    }
+    h1, h2, h3, .disp {
+      font-family: var(--font-plus-jakarta-sans), sans-serif;
+    }
+    [data-fade] {
+      opacity: 0;
+      transform: translateY(16px);
+      transition: opacity .6s ease, transform .6s ease;
+    }
+    [data-fade].in {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    @keyframes spin {
+      from { stroke-dashoffset: 0; }
+      to { stroke-dashoffset: 0; }
+    }
+    ::selection {
+      background: #C7D2FE;
+    }
+    @media (max-width: 900px) {
+      [data-nav-links="1"] { display: none !important; }
+      [data-hero-grid="1"] { grid-template-columns: 1fr !important; }
+      [data-stats-grid="1"] { grid-template-columns: repeat(2, 1fr) !important; }
+      [data-problem-grid="1"] { grid-template-columns: 1fr !important; }
+      [data-pillars-grid="1"] { grid-template-columns: repeat(2, 1fr) !important; }
+      [data-steps-grid="1"] { grid-template-columns: repeat(2, 1fr) !important; }
+      [data-steps-line="1"] { display: none !important; }
+      [data-ai-grid="1"] { grid-template-columns: 1fr !important; }
+      [data-pricing-grid="1"] { grid-template-columns: 1fr !important; }
+      [data-footer-grid="1"] { grid-template-columns: 1fr 1fr !important; }
+    }
+  ` }} />
+
+{/* NAV */}
+<nav style={{position: 'sticky', top: 0, zIndex: 50, background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(10px)', borderBottom: '1px solid #E2E8F0'}}>
+  <div style={{maxWidth: 1200, margin: '0 auto', padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between'}}>
+    <div className="disp" style={{fontSize: 22, fontWeight: 800, color: '#0F172A'}}>Distributor<span style={{color: '#4F46E5'}}>OS</span></div>
+    <div style={{display: 'flex', alignItems: 'center', gap: 36}} data-nav-links="1">
+      <a href="#features" style={{color: '#334155', fontWeight: 600, fontSize: 15}}>Features</a>
+      <a href="#how-it-works" style={{color: '#334155', fontWeight: 600, fontSize: 15}}>How It Works</a>
+      <a href="#pricing" style={{color: '#334155', fontWeight: 600, fontSize: 15}}>Pricing</a>
     </div>
-    {navOpen && (<React.Fragment>
-      <div style={{display: 'flex', flexDirection: 'column', gap: 4, padding: '8px 24px 18px'}}>
-        <a href="#problem" style={{color: '#e2e8f0', textDecoration: 'none', fontSize: 15, fontWeight: 600, padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.08)'}}>Problem</a>
-        <a href="#how" style={{color: '#e2e8f0', textDecoration: 'none', fontSize: 15, fontWeight: 600, padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.08)'}}>How it Works</a>
-        <a href="#features" style={{color: '#e2e8f0', textDecoration: 'none', fontSize: 15, fontWeight: 600, padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.08)'}}>Features</a>
-        <a href="#pricing" style={{color: '#e2e8f0', textDecoration: 'none', fontSize: 15, fontWeight: 600, padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.08)'}}>Pricing</a>
-        <a href="#faq" style={{color: '#e2e8f0', textDecoration: 'none', fontSize: 15, fontWeight: 600, padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.08)'}}>FAQ</a>
-        <Link href="/auth" style={{color: '#e2e8f0', textDecoration: 'none', fontSize: 15, fontWeight: 600, padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.08)'}}>
-          Login
-        </Link>
-        <Link href="/auth" style={{color: '#10b981', textDecoration: 'none', fontSize: 15, fontWeight: 600, padding: '10px 0'}}>
-          Get Started Free
-        </Link>
-      </div>
-    </React.Fragment>)}
-  </div>
-
-  {/* HERO */}
-  <div style={{background: 'linear-gradient(180deg, #0f172a 0%, #111c33 100%)', padding: 'clamp(48px,7vw,96px) 24px clamp(64px,9vw,110px)'}}>
-    <div style={{maxWidth: 1200, margin: '0 auto', display: 'flex', flexWrap: 'wrap', gap: 56, alignItems: 'center'}}>
-      <div style={{flex: '1 1 460px', minWidth: 300}}>
-        <div style={{display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.3)', color: '#34d399', fontSize: 13, fontWeight: 600, padding: '7px 14px', borderRadius: 999, marginBottom: 22}}>
-          <span>🟢</span> Built for Indian FMCG Distributors
-        </div>
-        <div style={{fontSize: 'clamp(34px, 5vw, 58px)', fontWeight: 900, color: '#ffffff', lineHeight: 1.08, letterSpacing: '-0.02em', marginBottom: 22}}>
-          Turn WhatsApp Orders into a <span style={{color: '#10b981'}}>Business System</span> — Automatically
-        </div>
-        <div style={{fontSize: 'clamp(16px, 2vw, 19px)', color: '#94a3b8', lineHeight: 1.6, maxWidth: 560, marginBottom: 34}}>
-          Your retailers message you on WhatsApp. DistributorOS reads it, creates the order, updates inventory, and sends them a payment link. You do nothing.
-        </div>
-        <div style={{display: 'flex', flexWrap: 'wrap', gap: 14}}>
-          <Link href="/auth" style={{background: '#10b981', color: '#ffffff', fontWeight: 700, fontSize: 16, padding: '16px 28px', borderRadius: 10, cursor: 'pointer', boxShadow: '0 8px 24px rgba(16,185,129,0.35)', textDecoration: 'none'}}>Start Free Trial →</Link>
-          <a href="#how" style={{textDecoration: 'none', border: '1.5px solid rgba(255,255,255,0.25)', color: '#ffffff', fontWeight: 700, fontSize: 16, padding: '16px 28px', borderRadius: 10, textAlign: 'center'}}>See How It Works</a>
-        </div>
-        <div style={{marginTop: 28, color: '#64748b', fontSize: 13}}>No credit card needed · 15-day free trial · Setup in 10 minutes</div>
-      </div>
-
-      <div style={{flex: '1 1 380px', minWidth: 300, display: 'flex', justifyContent: 'center', position: 'relative'}}>
-        <div style={{animation: 'floatUpDown 4.5s ease-in-out infinite', position: 'relative', width: '100%', maxWidth: 400}}>
-          {/* phone frame */}
-          <div style={{background: '#1e293b', borderRadius: 30, padding: 12, boxShadow: '0 30px 70px rgba(0,0,0,0.45)', border: '1px solid rgba(255,255,255,0.06)'}}>
-            <div style={{background: '#0b141a', borderRadius: 20, overflow: 'hidden'}}>
-              <div style={{background: '#075e54', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10}}>
-                <div style={{width: 30, height: 30, borderRadius: '50%', background: '#128c7e', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14}}>🏪</div>
-                <div>
-                  <div style={{color: '#ffffff', fontSize: 13, fontWeight: 700}}>Sharma General Store</div>
-                  <div style={{color: '#cfe9e4', fontSize: 10}}>online</div>
-                </div>
-              </div>
-              <div style={{background: '#0b141a', padding: 16, minHeight: 200, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', gap: 10}}>
-                <div style={{alignSelf: 'flex-start', background: '#1f2c34', color: '#e9edef', fontSize: 13, padding: '9px 13px', borderRadius: '10px 10px 10px 2px', maxWidth: '82%', animation: 'heroBubbleIn 5.5s ease infinite'}}>
-                  bhaiya 50 units rin soap bhejo 🙏
-                </div>
-                <div style={{alignSelf: 'flex-end', background: '#005c4b', color: '#e9edef', fontSize: 13, padding: '9px 13px', borderRadius: '10px 10px 2px 10px', maxWidth: '82%', animation: 'heroBubbleIn 5.5s ease infinite', animationDelay: '0.4s'}}>
-                  ✅ Order confirmed! Pay here: rzp.io/i/os4
-                </div>
-              </div>
-            </div>
-          </div>
-          {/* floating dashboard order card */}
-          <div style={{position: 'absolute', right: -18, bottom: 30, width: 210, background: '#ffffff', borderRadius: 14, padding: 14, boxShadow: '0 20px 45px rgba(0,0,0,0.35)', animation: 'heroOrder 5.5s ease infinite'}}>
-            <div style={{display: 'flex', alignItems: 'center', gap: 6, color: '#10b981', fontSize: 11, fontWeight: 700, marginBottom: 8}}>
-              <span>●</span> NEW ORDER SYNCED
-            </div>
-            <div style={{fontSize: 13, fontWeight: 700, color: '#0f172a', marginBottom: 4}}>Rin Soap × 50 units</div>
-            <div style={{fontSize: 12, color: '#64748b', marginBottom: 8}}>Sharma General Store</div>
-            <div style={{display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed #e2e8f0', paddingTop: 8}}>
-              <span style={{fontSize: 11, color: '#94a3b8'}}>Amount</span>
-              <span style={{fontSize: 13, fontWeight: 800, color: '#0f172a'}}>₹1,250</span>
-            </div>
-          </div>
-        </div>
-      </div>
+    <div style={{display: 'flex', alignItems: 'center', gap: 12}}>
+      <Link href="/auth" style={{textDecoration: 'none'}}><button style={{background: 'transparent', border: '1px solid #CBD5E1', color: '#334155', fontWeight: 600, fontSize: 14, padding: '10px 20px', borderRadius: 10, cursor: 'pointer', fontFamily: '\'Inter\',sans-serif', whiteSpace: 'nowrap', flexShrink: 0}}>Log In</button></Link>
+      <Link href="/auth" style={{textDecoration: 'none'}}><button style={{background: '#4F46E5', border: 'none', color: '#fff', fontWeight: 700, fontSize: 14, padding: '10px 22px', borderRadius: 10, cursor: 'pointer', boxShadow: '0 4px 14px rgba(79,70,229,0.35)', fontFamily: '\'Inter\',sans-serif', whiteSpace: 'nowrap', flexShrink: 0}}>Start Free Trial</button></Link>
     </div>
   </div>
+</nav>
 
-  {/* PROBLEM */}
-  <div id="problem" ref={ refProblem } style={{padding: 'clamp(56px,8vw,110px) 24px', background: '#ffffff'}}>
-    <div style={{maxWidth: 1100, margin: '0 auto'}}>
-      <div style={{textAlign: 'center', maxWidth: 640, margin: '0 auto 52px'}}>
-        <div style={{color: '#10b981', fontWeight: 700, fontSize: 14, letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: 12}}>The Problem</div>
-        <div style={{fontSize: 'clamp(26px,3.4vw,40px)', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.02em'}}>Running orders on WhatsApp alone is chaos</div>
+{/* HERO */}
+<section data-hero-grid="1" style={{maxWidth: 1200, margin: '0 auto', padding: '40px 24px 64px', display: 'grid', gridTemplateColumns: '1.05fr 1fr', gap: 56, alignItems: 'center'}}>
+  <div>
+    <div style={{display: 'inline-flex', alignItems: 'center', gap: 8, background: '#EEF2FF', color: '#4F46E5', fontWeight: 700, fontSize: 13, padding: '8px 16px', borderRadius: 999, marginBottom: 24}}>Built for Indian Distributors 🇮🇳</div>
+    <h1 className="disp" style={{fontSize: 52, lineHeight: 1.12, fontWeight: 800, color: '#0F172A', margin: '0 0 24px', letterSpacing: '-0.02em'}}>Run your distribution business on autopilot.</h1>
+    <p style={{fontSize: 18, lineHeight: 1.6, color: '#475569', margin: '0 0 32px', maxWidth: 520}}>Retailers WhatsApp you orders. We turn them into invoices, inventory updates, and payment links — automatically. Keep Tally. Keep WhatsApp. Add zero new habits.</p>
+    <div style={{display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 16}}>
+      <Link href="/auth" style={{textDecoration: 'none'}}><button style={{background: '#4F46E5', border: 'none', color: '#fff', fontWeight: 700, fontSize: 16, padding: '16px 28px', borderRadius: 12, cursor: 'pointer', boxShadow: '0 8px 24px rgba(79,70,229,0.35)', fontFamily: '\'Inter\',sans-serif'}}>Start Free Trial →</button></Link>
+      <a href="#how-it-works" style={{textDecoration: 'none'}}><button style={{background: 'transparent', border: '1px solid #CBD5E1', color: '#0F172A', fontWeight: 700, fontSize: 16, padding: '16px 28px', borderRadius: 12, cursor: 'pointer', fontFamily: '\'Inter\',sans-serif'}}>See How It Works</button></a>
+    </div>
+    <p style={{fontSize: 14, color: '#94A3B8', margin: 0}}>No credit card needed · 15-day free trial · Setup in 10 minutes</p>
+  </div>
+
+  <div style={{position: 'relative'}}>
+    <div style={{position: 'absolute', inset: -40, background: 'radial-gradient(circle at 30% 20%,rgba(79,70,229,0.25),transparent 60%),radial-gradient(circle at 80% 80%,rgba(16,185,129,0.2),transparent 60%)', filter: 'blur(20px)'}}></div>
+    <div style={{position: 'relative', background: '#0F172A', borderRadius: 20, padding: 24, boxShadow: '0 30px 60px rgba(15,23,42,0.35)', color: '#fff'}}>
+      <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20}}>
+        <div>
+          <div style={{fontWeight: 700, fontSize: 15}}>Raj Kumar</div>
+          <div style={{fontSize: 12, color: '#94A3B8'}}>Shree Balaji Distributors</div>
+        </div>
+        <div style={{width: 36, height: 36, borderRadius: '50%', background: '#334155'}}></div>
       </div>
-      <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 24}}>
-        {problems && problems.map((item, i) => (<React.Fragment key={i}>
-          <div style={ item.style }>
-            <div style={{width: 52, height: 52, borderRadius: 12, background: '#ffffff', border: '1px solid #eef2f7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, marginBottom: 20}}>{ item.icon }</div>
-            <div style={{fontSize: 19, fontWeight: 700, color: '#0f172a', marginBottom: 10}}>{ item.title }</div>
-            <div style={{fontSize: 15, color: '#64748b', lineHeight: 1.55}}>{ item.desc }</div>
+      <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16}}>
+        <div style={{background: '#1E293B', borderRadius: 12, padding: 14}}>
+          <div style={{fontSize: 11, color: '#94A3B8', marginBottom: 4}}>Orders Received</div>
+          <div style={{fontSize: 20, fontWeight: 800}}>128</div>
+        </div>
+        <div style={{background: '#1E293B', borderRadius: 12, padding: 14}}>
+          <div style={{fontSize: 11, color: '#94A3B8', marginBottom: 4}}>Sales Today</div>
+          <div style={{fontSize: 20, fontWeight: 800, color: '#10B981'}}>₹4,52,300</div>
+        </div>
+        <div style={{background: '#1E293B', borderRadius: 12, padding: 14}}>
+          <div style={{fontSize: 11, color: '#94A3B8', marginBottom: 4}}>Outstanding</div>
+          <div style={{fontSize: 20, fontWeight: 800}}>₹12,45,000</div>
+        </div>
+        <div style={{background: '#1E293B', borderRadius: 12, padding: 14}}>
+          <div style={{fontSize: 11, color: '#94A3B8', marginBottom: 4}}>Collections Today</div>
+          <div style={{fontSize: 20, fontWeight: 800, color: '#10B981'}}>₹1,25,000</div>
+        </div>
+      </div>
+      <div style={{background: '#1E293B', borderRadius: 12, padding: 16, marginBottom: 12}}>
+        <div style={{fontSize: 12, color: '#94A3B8', marginBottom: 10}}>Orders by Source</div>
+        <div style={{display: 'flex', alignItems: 'center', gap: 16}}>
+          <div style={{width: 64, height: 64, borderRadius: '50%', background: 'conic-gradient(#10B981 0% 65%,#4F46E5 65% 85%,#F59E0B 85% 95%,#64748B 95% 100%)', flexShrink: 0}}></div>
+          <div style={{display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11}}>
+            <div><span style={{color: '#10B981'}}>●</span> WhatsApp 65%</div>
+            <div><span style={{color: '#4F46E5'}}>●</span> Sales App 20%</div>
+            <div><span style={{color: '#F59E0B'}}>●</span> Phone 10%</div>
+            <div><span style={{color: '#64748B'}}>●</span> Others 5%</div>
+          </div>
+        </div>
+      </div>
+      <div style={{background: '#1E293B', borderRadius: 12, padding: 16, marginBottom: 12}}>
+        <div style={{fontSize: 12, color: '#94A3B8', marginBottom: 10}}>Top Products</div>
+        {topProducts && topProducts.map((p, i) => (<React.Fragment key={i}>
+          <div style={{display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, fontSize: 12}}>
+            <div style={{width: 80}}>{ p.name }</div>
+            <div style={{flex: 1, height: 6, background: '#334155', borderRadius: 4, overflow: 'hidden'}}><div style={{height: '100%', background: '#10B981', width: p.width}}></div></div>
+            <div style={{color: '#94A3B8'}}>{ p.pct }</div>
+          </div>
+        </React.Fragment>))}
+      </div>
+      <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10}}>
+        <div style={{background: '#1E293B', borderRadius: 10, padding: '10px 12px'}}>
+          <div style={{fontSize: 10, color: '#94A3B8'}}>Inactive Retailers</div>
+          <div style={{fontSize: 15, fontWeight: 700, color: '#F87171'}}>23</div>
+        </div>
+        <div style={{background: '#1E293B', borderRadius: 10, padding: '10px 12px'}}>
+          <div style={{fontSize: 10, color: '#94A3B8'}}>Payment Due Today</div>
+          <div style={{fontSize: 15, fontWeight: 700, color: '#F59E0B'}}>₹73,000</div>
+        </div>
+        <div style={{background: '#1E293B', borderRadius: 10, padding: '10px 12px'}}>
+          <div style={{fontSize: 10, color: '#94A3B8'}}>Stock Out Risk</div>
+          <div style={{fontSize: 15, fontWeight: 700, color: '#F87171'}}>8</div>
+        </div>
+        <div style={{background: '#1E293B', borderRadius: 10, padding: '10px 12px'}}>
+          <div style={{fontSize: 10, color: '#94A3B8'}}>Lost Sales This Month</div>
+          <div style={{fontSize: 15, fontWeight: 700, color: '#F87171'}}>₹2,87,000</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+{/* TRUSTED BY */}
+<section style={{maxWidth: 1200, margin: '0 auto', padding: '32px 24px 64px'}}>
+  <p style={{textAlign: 'center', color: '#94A3B8', fontSize: 13, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', margin: '0 0 24px'}}>Trusted by distributors across India</p>
+  <div style={{display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 40, flexWrap: 'wrap'}}>
+    {trustedLogos && trustedLogos.map((l, i) => (<React.Fragment key={i}>
+      <div style={{color: '#64748B', fontWeight: 700, fontSize: 15, fontFamily: '\'Plus Jakarta Sans\',sans-serif'}}>{ l }</div>
+    </React.Fragment>))}
+  </div>
+</section>
+
+{/* STATS BAR */}
+<section style={{background: '#F1F5F9', padding: '56px 24px'}}>
+  <div data-stats-grid="1" style={{maxWidth: 1200, margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 24}}>
+    {stats && stats.map((s, i) => (<React.Fragment key={i}>
+      <div style={{textAlign: 'center'}}>
+        <div className="disp" style={{fontSize: 28, fontWeight: 800, color: '#0F172A', marginBottom: 6}}>{ s.value }</div>
+        <div style={{fontSize: 13, color: '#64748B', lineHeight: 1.4}}>{ s.label }</div>
+      </div>
+    </React.Fragment>))}
+  </div>
+  <p style={{textAlign: 'center', color: '#94A3B8', fontSize: 12, margin: '32px 0 0'}}>*Based on industry benchmarks for mid-size distributors handling 50+ orders/day.</p>
+</section>
+
+{/* PROBLEM */}
+<section style={{maxWidth: 1200, margin: '0 auto', padding: '96px 24px'}}>
+  <h2 className="disp" style={{fontSize: 38, fontWeight: 800, color: '#0F172A', textAlign: 'center', margin: '0 0 56px', letterSpacing: '-0.01em'}}>Running orders on WhatsApp alone is chaos.</h2>
+  <div data-problem-grid="1" style={{display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 24}}>
+    {problems && problems.map((pr, i) => (<React.Fragment key={i}>
+      <div style={{background: '#fff', borderRadius: 16, padding: 32, boxShadow: '0 4px 24px rgba(0,0,0,0.08)'}}>
+        <div style={{fontSize: 32, marginBottom: 16}}>{ pr.icon }</div>
+        <h3 style={{fontSize: 18, fontWeight: 700, color: '#0F172A', margin: '0 0 8px'}}>{ pr.title }</h3>
+        <p style={{fontSize: 15, color: '#475569', lineHeight: 1.6, margin: 0}}>{ pr.body }</p>
+      </div>
+    </React.Fragment>))}
+  </div>
+</section>
+
+{/* INTELLIGENCE PILLARS */}
+<section id="features" style={{background: '#F8FAFC', padding: '96px 24px'}}>
+  <div style={{maxWidth: 1200, margin: '0 auto'}}>
+    <h2 className="disp" style={{fontSize: 38, fontWeight: 800, color: '#0F172A', textAlign: 'center', margin: '0 0 56px', letterSpacing: '-0.01em'}}>Get complete visibility. Take the right actions.</h2>
+    <div data-pillars-grid="1" style={{display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 20}}>
+      {pillars && pillars.map((pi, i) => (<React.Fragment key={i}>
+        <div style={{background: '#fff', borderRadius: 16, padding: '24px 20px', boxShadow: '0 4px 24px rgba(0,0,0,0.06)', textAlign: 'center'}}>
+          <div style={{fontSize: 28, marginBottom: 14}}>{ pi.icon }</div>
+          <h3 style={{fontSize: 15, fontWeight: 700, color: '#0F172A', margin: '0 0 8px'}}>{ pi.title }</h3>
+          <p style={{fontSize: 13, color: '#64748B', lineHeight: 1.5, margin: 0}}>{ pi.body }</p>
+        </div>
+      </React.Fragment>))}
+    </div>
+  </div>
+</section>
+
+{/* HOW IT WORKS */}
+<section id="how-it-works" style={{maxWidth: 1200, margin: '0 auto', padding: '96px 24px'}}>
+  <h2 className="disp" style={{fontSize: 38, fontWeight: 800, color: '#0F172A', textAlign: 'center', margin: '0 0 64px', letterSpacing: '-0.01em'}}>How DistributorOS Works</h2>
+  <div data-steps-grid="1" style={{position: 'relative', display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', gap: 16}}>
+    <div data-steps-line="1" style={{position: 'absolute', top: 28, left: '8%', right: '8%', height: 0, borderTop: '2px dashed #CBD5E1', zIndex: 0}}></div>
+    {steps && steps.map((st, i) => (<React.Fragment key={i}>
+      <div style={{position: 'relative', zIndex: 1, textAlign: 'center'}}>
+        <div style={{width: 56, height: 56, borderRadius: '50%', background: '#4F46E5', color: '#fff', fontSize: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', boxShadow: '0 6px 16px rgba(79,70,229,0.3)'}}>{ st.icon }</div>
+        <h3 style={{fontSize: 14, fontWeight: 700, color: '#0F172A', margin: '0 0 6px'}}>{ st.title }</h3>
+        <p style={{fontSize: 12, color: '#64748B', lineHeight: 1.5, margin: 0}}>{ st.body }</p>
+      </div>
+    </React.Fragment>))}
+  </div>
+</section>
+
+{/* AI SECTION */}
+<section style={{background: '#F8FAFC', padding: '96px 24px'}}>
+  <div style={{maxWidth: 1200, margin: '0 auto'}}>
+    <h2 className="disp" style={{fontSize: 38, fontWeight: 800, color: '#0F172A', textAlign: 'center', margin: '0 0 64px', letterSpacing: '-0.01em'}}>AI that understands the way you do business.</h2>
+    <div data-ai-grid="1" style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 48, alignItems: 'center'}}>
+      <div>
+        <div style={{display: 'flex', alignItems: 'flex-end', gap: 12, marginBottom: 24}}>
+          <div style={{background: '#DCF8C6', borderRadius: '12px 12px 12px 2px', padding: '14px 18px', maxWidth: 320, boxShadow: '0 4px 12px rgba(0,0,0,0.06)'}}>
+            <p style={{margin: 0, fontSize: 14, color: '#0F172A', lineHeight: 1.5}}>Bhai, 5 box Surf Excel, 2 box Wheel, 1 box Vim. Kal delivery kar dena.</p>
+            <div style={{fontSize: 11, color: '#64748B', textAlign: 'right', marginTop: 6}}>11:30 AM</div>
+          </div>
+        </div>
+        <div style={{textAlign: 'center', fontSize: 24, color: '#94A3B8', marginBottom: 24}}>↓</div>
+        <div style={{background: '#0F172A', borderRadius: 16, padding: 24, color: '#fff', boxShadow: '0 20px 40px rgba(15,23,42,0.25)'}}>
+          <div style={{fontSize: 12, color: '#10B981', fontWeight: 700, marginBottom: 12}}>DistributorOS AI Output</div>
+          {aiItems && aiItems.map((ai, i) => (<React.Fragment key={i}>
+            <div style={{display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #1E293B', fontSize: 14}}>
+              <span>{ ai.name }</span><span style={{fontWeight: 700}}>{ ai.qty }</span>
+            </div>
+          </React.Fragment>))}
+          <div style={{display: 'flex', gap: 16, marginTop: 14, fontSize: 12, color: '#94A3B8'}}>
+            <span>Delivery: Tomorrow</span><span>Priority: Normal</span>
+          </div>
+        </div>
+      </div>
+      <div style={{display: 'flex', flexDirection: 'column', gap: 24}}>
+        {aiCapabilities && aiCapabilities.map((c, i) => (<React.Fragment key={i}>
+          <div style={{display: 'flex', gap: 16, alignItems: 'flex-start'}}>
+            <div style={{fontSize: 22, flexShrink: 0}}>{ c.icon }</div>
+            <p style={{margin: 0, fontSize: 16, color: '#334155', lineHeight: 1.5, fontWeight: 500}}>{ c.text }</p>
           </div>
         </React.Fragment>))}
       </div>
     </div>
   </div>
+</section>
 
-  {/* HOW IT WORKS */}
-  <div id="how" ref={ refHow } style={{padding: 'clamp(56px,8vw,110px) 24px', background: '#0f172a'}}>
-    <div style={{maxWidth: 1100, margin: '0 auto'}}>
-      <div style={{textAlign: 'center', maxWidth: 640, margin: '0 auto 60px'}}>
-        <div style={{color: '#34d399', fontWeight: 700, fontSize: 14, letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: 12}}>How It Works</div>
-        <div style={{fontSize: 'clamp(26px,3.4vw,40px)', fontWeight: 800, color: '#ffffff', letterSpacing: '-0.02em'}}>From a WhatsApp message to a reconciled payment</div>
-      </div>
-      <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 32}}>
-        {steps && steps.map((item, i) => (<React.Fragment key={i}>
-          <div style={ item.style }>
-            <div style={{fontSize: 46, fontWeight: 900, color: 'rgba(16,185,129,0.35)', lineHeight: 1, marginBottom: 18}}>{ item.num }</div>
-            <div style={{fontSize: 18, fontWeight: 700, color: '#ffffff', marginBottom: 10}}>{ item.title }</div>
-            <div style={{fontSize: 14.5, color: '#94a3b8', lineHeight: 1.6}}>{ item.desc }</div>
-          </div>
-        </React.Fragment>))}
-      </div>
-    </div>
-  </div>
-
-  {/* FEATURES */}
-  <div id="features" ref={ refFeatures } style={{padding: 'clamp(56px,8vw,110px) 24px', background: '#ffffff'}}>
-    <div style={{maxWidth: 1100, margin: '0 auto'}}>
-      <div style={{textAlign: 'center', maxWidth: 640, margin: '0 auto 52px'}}>
-        <div style={{color: '#10b981', fontWeight: 700, fontSize: 14, letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: 12}}>Features</div>
-        <div style={{fontSize: 'clamp(26px,3.4vw,40px)', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.02em'}}>Everything your business runs on, automated</div>
-      </div>
-      <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 20}}>
-        {features && features.map((item, i) => (<React.Fragment key={i}>
-          <div style={ item.style }>
-            <div style={{width: 48, height: 48, borderRadius: 12, background: '#ecfdf5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0}}>{ item.icon }</div>
-            <div>
-              <div style={{fontSize: 17, fontWeight: 700, color: '#0f172a', marginBottom: 6}}>{ item.title }</div>
-              <div style={{fontSize: 14.5, color: '#64748b', lineHeight: 1.55}}>{ item.desc }</div>
-            </div>
-          </div>
-        </React.Fragment>))}
-      </div>
-    </div>
-  </div>
-
-  {/* SOCIAL PROOF */}
-  <div id="proof" ref={ refProof } style={{padding: 'clamp(56px,8vw,100px) 24px', background: '#f8fafc'}}>
-    <div style={{maxWidth: 1100, margin: '0 auto'}}>
-      <div className="text-center py-8">
-          <p className="text-slate-500 text-sm font-medium">
-              🚀 Early Access — Currently onboarding first distributors
-          </p>
-          <p className="text-slate-400 text-xs mt-1">
-              Be among the first to automate your distribution business
-          </p>
-      </div>
-    </div>
-  </div>
-
-  {/* LIVE DEMO */}
-  <div style={{padding: 'clamp(56px,8vw,110px) 24px', background: '#0f172a'}}>
-    <div style={{maxWidth: 900, margin: '0 auto'}}>
-      <div style={{textAlign: 'center', maxWidth: 640, margin: '0 auto 48px'}}>
-        <div style={{color: '#34d399', fontWeight: 700, fontSize: 14, letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: 12}}>See It In Action</div>
-        <div style={{fontSize: 'clamp(26px,3.4vw,38px)', fontWeight: 800, color: '#ffffff', letterSpacing: '-0.02em'}}>Watch a real order happen, live</div>
-      </div>
-      <div style={{display: 'flex', flexWrap: 'wrap', gap: 28, alignItems: 'center', justifyContent: 'center'}}>
-        <div style={{flex: '1 1 320px', maxWidth: 380, background: '#0b141a', borderRadius: 18, padding: 20, border: '1px solid rgba(255,255,255,0.08)'}}>
-          <div style={{display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16}}>
-            <div style={{width: 28, height: 28, borderRadius: '50%', background: '#25D366', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13}}>💬</div>
-            <div style={{color: '#cbd5e1', fontSize: 13, fontWeight: 600}}>WhatsApp — Retailer</div>
-          </div>
-          <div style={{background: '#1f2c34', borderRadius: '10px 10px 10px 2px', padding: '14px 16px', minHeight: 46, color: '#e9edef', fontSize: 15}}>
-            { demoTyped }<span style={{animation: 'blinkCursor 1s step-start infinite'}}>|</span>
-          </div>
+{/* PRICING */}
+<section id="pricing" style={{maxWidth: 1200, margin: '0 auto', padding: '96px 24px'}}>
+  <h2 className="disp" style={{fontSize: 38, fontWeight: 800, color: '#0F172A', textAlign: 'center', margin: '0 0 12px', letterSpacing: '-0.01em'}}>Simple pricing, no surprises</h2>
+  <div data-pricing-grid="1" style={{display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 24, marginTop: 56, alignItems: 'stretch'}}>
+    {plans && plans.map((pl, i) => (<React.Fragment key={i}>
+      <div style={{background: '#fff', borderRadius: 16, padding: 32, display: 'flex', flexDirection: 'column', boxShadow: pl.shadow, border: pl.border, position: 'relative'}}>
+        {pl.popular && (<React.Fragment>
+          <div style={{position: 'absolute', top: -14, left: '50%', transform: 'translateX(-50%)', background: '#4F46E5', color: '#fff', fontSize: 12, fontWeight: 700, padding: '6px 16px', borderRadius: 999}}>⭐ MOST POPULAR</div>
+        </React.Fragment>)}
+        <h3 style={{fontSize: 18, fontWeight: 700, color: '#0F172A', margin: '8px 0 4px'}}>{ pl.name }</h3>
+        <div style={{marginBottom: 20}}>
+          <span className="disp" style={{fontSize: 32, fontWeight: 800, color: '#0F172A'}}>{ pl.price }</span>
+          <span style={{fontSize: 14, color: '#94A3B8'}}>{ pl.period }</span>
         </div>
-        <div style={{fontSize: 26, color: '#475569'}}>→</div>
-        <div style={{flex: '1 1 300px', maxWidth: 320}}>
-          {demoShowOrder && (<React.Fragment>
-            <div style={ demoOrderStyle }>
-              <div style={{display: 'flex', alignItems: 'center', gap: 6, color: '#10b981', fontSize: 11, fontWeight: 700, marginBottom: 10}}>
-                <span>●</span> ORDER CREATED
-              </div>
-              <div style={{fontSize: 15, fontWeight: 700, color: '#0f172a', marginBottom: 4}}>Rin Soap × 50 units</div>
-              <div style={{fontSize: 13, color: '#64748b', marginBottom: 10}}>Sharma General Store · Kanpur</div>
-              <div style={{display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed #e2e8f0', paddingTop: 10, marginBottom: 8}}>
-                <span style={{fontSize: 12, color: '#94a3b8'}}>Amount</span>
-                <span style={{fontSize: 14, fontWeight: 800, color: '#0f172a'}}>₹1,250</span>
-              </div>
-              <div style={{background: '#ecfdf5', color: '#059669', fontSize: 12, fontWeight: 700, padding: '8px 10px', borderRadius: 8, textAlign: 'center'}}>Payment link sent via WhatsApp ✓</div>
-            </div>
-          </React.Fragment>)}
-          {demoShowOrderNot && (<React.Fragment>
-            <div style={{border: '1.5px dashed rgba(255,255,255,0.15)', borderRadius: 16, padding: '40px 20px', textAlign: 'center', color: '#475569', fontSize: 13}}>Order will appear here</div>
-          </React.Fragment>)}
+        <div style={{display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 28, flex: 1}}>
+          {pl.features && pl.features.map((f, i) => (<React.Fragment key={i}>
+            <div style={{display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 14, color: '#475569'}}><span style={{color: '#10B981', fontWeight: 700}}>✓</span>{ f }</div>
+          </React.Fragment>))}
         </div>
+        <Link href="/auth" style={{textDecoration: 'none', display: 'block', width: '100%'}}><button style={{background: pl.ctaBg, color: pl.ctaColor, border: pl.ctaBorder, width: '100%', fontWeight: 700, fontSize: 15, padding: 14, borderRadius: 10, cursor: 'pointer', fontFamily: '\'Inter\',sans-serif'}}>{ pl.cta }</button></Link>
       </div>
-    </div>
+    </React.Fragment>))}
   </div>
-
-  {/* PRICING */}
-  <div id="pricing" ref={ refPricing } style={{padding: 'clamp(56px,8vw,110px) 24px', background: '#ffffff'}}>
-    <div style={{maxWidth: 1100, margin: '0 auto'}}>
-      <div style={{textAlign: 'center', maxWidth: 640, margin: '0 auto 52px'}}>
-        <div style={{color: '#10b981', fontWeight: 700, fontSize: 14, letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: 12}}>Pricing</div>
-        <div style={{fontSize: 'clamp(26px,3.4vw,40px)', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.02em'}}>Simple pricing, no surprises</div>
-      </div>
-      <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 24, alignItems: 'stretch'}}>
-        {pricingPlans && pricingPlans.map((item, i) => (<React.Fragment key={i}>
-          <div style={ item.style }>
-            {item.highlight && (<React.Fragment>
-              <div style={{background: '#10b981', color: '#ffffff', fontSize: 12, fontWeight: 700, padding: '5px 14px', borderRadius: 999, display: 'inline-block', marginBottom: 16, alignSelf: 'flex-start'}}>MOST POPULAR</div>
-            </React.Fragment>)}
-            <div style={{fontSize: 18, fontWeight: 700, color: item.textColor, marginBottom: 6}}>{ item.name }</div>
-            <div style={{display: 'flex', alignItems: 'baseline', gap: 4, marginBottom: 24}}>
-              <span style={{fontSize: 36, fontWeight: 900, color: item.textColor}}>{ item.price }</span>
-              <span style={{fontSize: 14, color: item.subColor}}>{ item.period }</span>
-            </div>
-            <div style={{display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 28, flex: 1}}>
-              {item.features && item.features.map((f, i) => (<React.Fragment key={i}>
-                <div style={{display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 14, color: item.subColor}}>
-                  <span style={{color: '#10b981', fontWeight: 700}}>✓</span> { f }
-                </div>
-              </React.Fragment>))}
-            </div>
-            <Link href="/auth" style={{background: item.btnBg, color: item.btnColor, fontWeight: 700, fontSize: 15, padding: 14, borderRadius: 10, cursor: 'pointer', textAlign: 'center', textDecoration: 'none', display: 'block'}}>{ item.cta }</Link>
-          </div>
-        </React.Fragment>))}
-      </div>
-    </div>
+  <div style={{textAlign: 'center', marginTop: 40}}>
+    <p style={{color: '#64748B', fontSize: 14, margin: '0 0 4px'}}>Not sure which plan? Start with the free trial. Upgrade anytime.</p>
+    <p style={{color: '#64748B', fontSize: 14, margin: 0}}>Keep your Tally. Keep your WhatsApp. DistributorOS works alongside both.</p>
   </div>
+</section>
 
-  {/* FAQ */}
-  <div id="faq" ref={ refFaq } style={{padding: 'clamp(56px,8vw,110px) 24px', background: '#f8fafc'}}>
-    <div style={{maxWidth: 760, margin: '0 auto'}}>
-      <div style={{textAlign: 'center', marginBottom: 44}}>
-        <div style={{color: '#10b981', fontWeight: 700, fontSize: 14, letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: 12}}>FAQ</div>
-        <div style={{fontSize: 'clamp(26px,3.4vw,36px)', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.02em'}}>Common questions</div>
+{/* FAQ */}
+<section style={{background: '#F8FAFC', padding: '96px 24px'}}>
+  <div style={{maxWidth: 800, margin: '0 auto'}}>
+    <h2 className="disp" style={{fontSize: 38, fontWeight: 800, color: '#0F172A', textAlign: 'center', margin: '0 0 48px', letterSpacing: '-0.01em'}}>Frequently Asked Questions</h2>
+    {faqs && faqs.map((fq, i) => (<React.Fragment key={i}>
+      <div style={{background: '#fff', borderRadius: 14, marginBottom: 14, boxShadow: '0 2px 12px rgba(0,0,0,0.05)', overflow: 'hidden'}}>
+        <div onClick={ fq.toggle } style={{padding: '20px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer'}}>
+          <h3 style={{fontSize: 16, fontWeight: 700, color: '#0F172A', margin: 0}}>{ fq.q }</h3>
+          <span style={{fontSize: 18, color: '#4F46E5'}}>{ fq.symbol }</span>
+        </div>
+        {fq.open && (<React.Fragment>
+          <p style={{padding: '0 24px 20px', fontSize: 14, color: '#475569', lineHeight: 1.6, margin: 0}}>{ fq.a }</p>
+        </React.Fragment>)}
       </div>
+    </React.Fragment>))}
+  </div>
+</section>
+
+{/* FINAL CTA */}
+<section style={{background: '#0F172A', padding: '96px 24px', textAlign: 'center'}}>
+  <div style={{maxWidth: 700, margin: '0 auto'}}>
+    <h2 className="disp" style={{fontSize: 38, fontWeight: 800, color: '#fff', margin: '0 0 16px', letterSpacing: '-0.01em'}}>Ready to automate your distribution business?</h2>
+    <p style={{fontSize: 17, color: '#94A3B8', margin: '0 0 36px', lineHeight: 1.6}}>Join distributors across India who are replacing manual order chaos with a system that runs itself.</p>
+    <div style={{display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 16}}>
+      <a href="mailto:contact@distroos.in" style={{textDecoration: 'none'}}><button style={{background: 'transparent', border: '1px solid #475569', color: '#fff', fontWeight: 700, fontSize: 16, padding: '16px 28px', borderRadius: 12, cursor: 'pointer', fontFamily: '\'Inter\',sans-serif'}}>Book a Demo</button></a>
+      <Link href="/auth" style={{textDecoration: 'none'}}><button style={{background: '#4F46E5', border: 'none', color: '#fff', fontWeight: 700, fontSize: 16, padding: '16px 28px', borderRadius: 12, cursor: 'pointer', boxShadow: '0 8px 24px rgba(79,70,229,0.4)', fontFamily: '\'Inter\',sans-serif'}}>Start Free Trial →</button></Link>
+    </div>
+    <p style={{fontSize: 13, color: '#64748B', margin: 0}}>No credit card required.</p>
+  </div>
+</section>
+
+{/* FOOTER */}
+<footer style={{background: '#fff', padding: '64px 24px 32px', borderTop: '1px solid #E2E8F0'}}>
+  <div data-footer-grid="1" style={{maxWidth: 1200, margin: '0 auto', display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr', gap: 32, marginBottom: 48}}>
+    <div className="disp" style={{fontSize: 20, fontWeight: 800, color: '#0F172A'}}>Distributor<span style={{color: '#4F46E5'}}>OS</span></div>
+    <div>
+      <h4 style={{fontSize: 13, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.04em', margin: '0 0 16px'}}>Company</h4>
       <div style={{display: 'flex', flexDirection: 'column', gap: 12}}>
-        {faqs && faqs.map((item, i) => (<React.Fragment key={i}>
-          <div style={{background: '#ffffff', border: '1px solid #eef2f7', borderRadius: 14, overflow: 'hidden'}}>
-            <div onClick={item.toggle} style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 22px', cursor: 'pointer'}}>
-              <div style={{fontSize: 15.5, fontWeight: 700, color: '#0f172a'}}>{ item.q }</div>
-              <div style={{fontSize: 20, color: '#10b981', fontWeight: 300, flexShrink: 0, marginLeft: 12}}>{ item.symbol }</div>
-            </div>
-            {item.open && (<React.Fragment>
-              <div style={{padding: '0 22px 20px', fontSize: 14.5, color: '#64748b', lineHeight: 1.6}}>{ item.a }</div>
-            </React.Fragment>)}
-          </div>
-        </React.Fragment>))}
+        <Link href="/privacy" style={{fontSize: 14, color: '#475569'}}>Privacy Policy</Link>
+        <Link href="/terms" style={{fontSize: 14, color: '#475569'}}>Terms of Service</Link>
+        <a href="mailto:contact@distroos.in" style={{fontSize: 14, color: '#475569'}}>Contact</a>
       </div>
     </div>
-  </div>
-
-  {/* FOOTER */}
-  <div style={{background: '#0f172a', padding: '56px 24px 32px'}}>
-    <div style={{maxWidth: 1100, margin: '0 auto'}}>
-      <div style={{display: 'flex', flexWrap: 'wrap', gap: 40, justifyContent: 'space-between', paddingBottom: 32, borderBottom: '1px solid rgba(255,255,255,0.08)'}}>
-        <div style={{flex: '1 1 260px', maxWidth: 340}}>
-          <div style={{display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14}}>
-            <div style={{width: 32, height: 32, borderRadius: 8, background: 'linear-gradient(135deg, #10b981, #0ea371)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16}}>💬</div>
-            <div style={{fontWeight: 800, fontSize: 17, color: '#ffffff'}}>Distributor<span style={{color: '#10b981'}}>OS</span></div>
-          </div>
-          <div style={{color: '#64748b', fontSize: 14, lineHeight: 1.6}}>Your distributor's WhatsApp is now a full business.</div>
-        </div>
-        <div style={{display: 'flex', gap: 60, flexWrap: 'wrap'}}>
-          <div>
-            <div style={{color: '#ffffff', fontSize: 13, fontWeight: 700, marginBottom: 14}}>Company</div>
-            <div style={{display: 'flex', flexDirection: 'column', gap: 10}}>
-              <a href="/privacy" style={{color: '#94a3b8', textDecoration: 'none', fontSize: 14}}>Privacy Policy</a>
-              <a href="/terms" style={{color: '#94a3b8', textDecoration: 'none', fontSize: 14}}>Terms of Service</a>
-              <a href="mailto:contact@distroos.in" style={{color: '#94a3b8', textDecoration: 'none', fontSize: 14}}>Contact</a>
-            </div>
-          </div>
-        </div>
+    <div>
+      <h4 style={{fontSize: 13, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.04em', margin: '0 0 16px'}}>Product</h4>
+      <div style={{display: 'flex', flexDirection: 'column', gap: 12}}>
+        <a href="#features" style={{fontSize: 14, color: '#475569'}}>Features</a>
+        <a href="#pricing" style={{fontSize: 14, color: '#475569'}}>Pricing</a>
+        <a href="#how-it-works" style={{fontSize: 14, color: '#475569'}}>How It Works</a>
       </div>
-      <div style={{paddingTop: 24, textAlign: 'center', color: '#475569', fontSize: 13}}>Made for Indian distributors 🇮🇳 · © 2026 DistributorOS</div>
+    </div>
+    <div>
+      <h4 style={{fontSize: 13, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.04em', margin: '0 0 16px'}}>Connect</h4>
+      <a href="mailto:contact@distroos.in" style={{fontSize: 14, color: '#475569'}}>contact@distroos.in</a>
     </div>
   </div>
-
-
+  <div style={{maxWidth: 1200, margin: '0 auto', paddingTop: 24, borderTop: '1px solid #E2E8F0', textAlign: 'center'}}>
+    <p style={{fontSize: 13, color: '#94A3B8', margin: 0}}>Made for Indian distributors 🇮🇳 · © 2026 DistributorOS</p>
+  </div>
+</footer>
 
 </div>
   );
