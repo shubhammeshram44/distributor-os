@@ -420,7 +420,7 @@ export default function MarketingPage() {
     <h2 className="disp" style={{fontSize: 38, fontWeight: 800, color: '#fff', margin: '0 0 16px', letterSpacing: '-0.01em'}}>Ready to automate your distribution business?</h2>
     <p style={{fontSize: 17, color: '#94A3B8', margin: '0 0 36px', lineHeight: 1.6}}>Join distributors across India who are replacing manual order chaos with a system that runs itself.</p>
     <div style={{display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 16}}>
-      <a href="https://calendly.com/consultme44/15min" target="_blank" rel="noopener noreferrer" style={{textDecoration: 'none'}}><button style={{background: 'transparent', border: '1px solid #475569', color: '#fff', fontWeight: 700, fontSize: 16, padding: '16px 28px', borderRadius: 12, cursor: 'pointer', fontFamily: '\'Inter\',sans-serif'}}>Book a Demo</button></a>
+      <a href="https://calendly.com/consultme44/distributor-os-free-demo" target="_blank" rel="noopener noreferrer" style={{textDecoration: 'none'}}><button style={{background: 'transparent', border: '1px solid #475569', color: '#fff', fontWeight: 700, fontSize: 16, padding: '16px 28px', borderRadius: 12, cursor: 'pointer', fontFamily: '\'Inter\',sans-serif'}}>Book a Demo</button></a>
       <Link href="/auth" style={{textDecoration: 'none'}}><button style={{background: '#4F46E5', border: 'none', color: '#fff', fontWeight: 700, fontSize: 16, padding: '16px 28px', borderRadius: 12, cursor: 'pointer', boxShadow: '0 8px 24px rgba(79,70,229,0.4)', fontFamily: '\'Inter\',sans-serif'}}>Start Free Trial →</button></Link>
     </div>
     <p style={{fontSize: 13, color: '#64748B', margin: 0}}>No credit card required.</p>
