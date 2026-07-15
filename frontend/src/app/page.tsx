@@ -63,10 +63,10 @@ const PLANS = [
   { name: 'Free Trial', price: '₹0', period: '/ 15 days', popular: false, shadow: '0 4px 24px rgba(0,0,0,0.08)', border: '1px solid #E2E8F0',
     features: ['All features included', 'No credit card needed', 'Full WhatsApp AI parsing', 'Cancel anytime'],
     ctaBg: 'transparent', ctaColor: '#4F46E5', ctaBorder: '1px solid #4F46E5', cta: 'Start Free Trial' },
-  { name: 'Growth', price: '₹2,499', period: '/month', popular: true, shadow: '0 12px 32px rgba(79,70,229,0.18)', border: '2px solid #4F46E5',
+  { name: 'Growth', price: '₹899', period: '/month', popular: true, shadow: '0 12px 32px rgba(79,70,229,0.18)', border: '2px solid #4F46E5',
     features: ['Up to 500 orders/month', '1 WhatsApp number', 'Auto invoicing & payments', 'Collections reminders', 'Email support'],
     ctaBg: '#4F46E5', ctaColor: '#fff', ctaBorder: 'none', cta: 'Start Free Trial' },
-  { name: 'Pro', price: '₹4,999', period: '/month', popular: false, shadow: '0 4px 24px rgba(0,0,0,0.08)', border: '1px solid #E2E8F0',
+  { name: 'Pro', price: '₹1,499', period: '/month', popular: false, shadow: '0 4px 24px rgba(0,0,0,0.08)', border: '1px solid #E2E8F0',
     features: ['Unlimited orders', '3 WhatsApp numbers', 'Priority support + dedicated onboarding', 'Tally XML export', 'Business Health Score'],
     ctaBg: 'transparent', ctaColor: '#4F46E5', ctaBorder: '1px solid #4F46E5', cta: 'Start Free Trial' }
 ];
