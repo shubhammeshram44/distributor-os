@@ -26,7 +26,8 @@ class EvolutionGatewayService:
         return headers
 
     def _get_client(self) -> httpx.AsyncClient:
-        return self._client if self._client is not None else httpx.AsyncClient(timeout=30.0)
+        # 60s timeout to handle Render free tier cold starts (can take up to 45s)
+        return self._client if self._client is not None else httpx.AsyncClient(timeout=60.0)
 
     async def initialize_instance(self, instance_name: str) -> dict:
         """POST /instance/create"""

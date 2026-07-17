@@ -15,27 +15,36 @@ import {
   Lock
 } from "lucide-react";
 
-const WA_STATUS_KEY = "wa_provisioning_status";
-
 export default function IntegrationsPage() {
   const [activeTenantId, setActiveTenantId] = useState("");
   const [whatsappPhoneId, setWhatsappPhoneId] = useState("");
   const [whatsappAccessToken, setWhatsappAccessToken] = useState("");
-  
+
   // Masked visibility states
   const [showPhoneId, setShowPhoneId] = useState(false);
   const [showToken, setShowToken] = useState(false);
-  
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
   // Evolution API provisioning states
   const [instanceName, setInstanceName] = useState("");
-  const [provisioningStatus, setProvisioningStatus] = useState<"idle" | "provisioning" | "connecting" | "connected" | "error">("idle");
+  // Storage key is tenant-specific to prevent cross-tenant contamination
+  const getWaStatusKey = () => `wa_provisioning_status_${activeTenantId}`;
+  // Initialize directly from localStorage so the UI never flashes "Not Connected" on nav-back.
+  // The lazy initializer runs only on the client (typeof window guard for SSR safety).
+  const [provisioningStatus, setProvisioningStatus] = useState<"idle" | "provisioning" | "connecting" | "connected" | "error">(() => {
+    if (typeof window !== "undefined" && activeTenantId) {
+      const key = `wa_provisioning_status_${activeTenantId}`;
+      const saved = localStorage.getItem(key);
+      if (saved === "connecting" || saved === "connected") return saved as "connecting" | "connected";
+    }
+    return "idle";
+  });
   const [qrCodeBase64, setQrCodeBase64] = useState("");
   const [evolutionError, setEvolutionError] = useState("");
 
-  // Pre-fill instanceName with slugified tenant ID, then verify live connection status
+  // Pre-fill instanceName + verify live Evolution API status on every mount/nav-back
   useEffect(() => {
     if (!activeTenantId) {
       setInstanceName("");
@@ -44,37 +53,31 @@ export default function IntegrationsPage() {
     const name = `dist-${activeTenantId.substring(0, 8)}`;
     setInstanceName(name);
 
-    // If we don't already know we're connected/connecting, query the actual instance state
-    // so the UI recovers correctly after a hard refresh or cross-page navigation.
-    setProvisioningStatus(prev => {
-      if (prev === "connected" || prev === "connecting") return prev;
-      return prev; // keep idle/error until we hear back from the API
-    });
+    // Live API is the source of truth: confirm "connected", detect real disconnects,
+    // or keep "connecting" for mid-QR-scan recovery.
     const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
     fetch(`${apiBase}/api/v1/evolution/status?instance_name=${name}`)
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         if (data?.status === "open") {
           setProvisioningStatus("connected");
+        } else if (data !== null) {
+          // API responded but instance is not open — update to reality
+          setProvisioningStatus(prev => (prev === "connecting" ? "connecting" : "idle"));
+          localStorage.removeItem(getWaStatusKey());
         }
+        // data === null means error response → keep current state (don't overwrite with stale)
       })
-      .catch(() => {/* non-fatal — Evolution API may not be reachable */});
+      .catch(() => {/* Evolution API unreachable — keep current state */});
   }, [activeTenantId]);
 
-  // Restore provisioning state when navigating back to this page
+  // Persist status to localStorage so navigation away and hard-refresh both recover correctly
   useEffect(() => {
-    const saved = sessionStorage.getItem(WA_STATUS_KEY);
-    if (saved === "connecting" || saved === "connected") {
-      setProvisioningStatus(saved as "connecting" | "connected");
-    }
-  }, []);
-
-  // Persist provisioning state so navigation away doesn't lose progress
-  useEffect(() => {
+    const key = getWaStatusKey();
     if (provisioningStatus === "connecting" || provisioningStatus === "connected") {
-      sessionStorage.setItem(WA_STATUS_KEY, provisioningStatus);
+      localStorage.setItem(key, provisioningStatus);
     } else {
-      sessionStorage.removeItem(WA_STATUS_KEY);
+      localStorage.removeItem(key);
     }
   }, [provisioningStatus]);
 
@@ -126,9 +129,10 @@ export default function IntegrationsPage() {
     checkStatus(instanceName);
     refreshQr(instanceName);
 
-    const statusInterval = setInterval(() => checkStatus(instanceName), 3000);
-    // Refresh QR at 25s — slightly before Baileys' ~30s expiry
-    const qrInterval = setInterval(() => refreshQr(instanceName), 25000);
+    // Poll status more aggressively (1.5s) for faster QR scan detection
+    const statusInterval = setInterval(() => checkStatus(instanceName), 1500);
+    // Refresh QR at 20s — conservative margin before Baileys' ~30s expiry
+    const qrInterval = setInterval(() => refreshQr(instanceName), 20000);
 
     // Recover immediately when the browser tab regains focus
     const handleVisibilityChange = () => {
@@ -145,6 +149,33 @@ export default function IntegrationsPage() {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [provisioningStatus, instanceName]);
+
+  // Keep-alive ping when connected — prevents Evolution API (Render free tier) from idling
+  useEffect(() => {
+    if (provisioningStatus !== "connected" || !instanceName) return;
+
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+    const keepAlive = async () => {
+      try {
+        const resp = await fetch(`${apiBase}/api/v1/evolution/status?instance_name=${instanceName}`);
+        if (resp.ok) {
+          const data = await resp.json();
+          if (data.status !== "open") {
+            // Instance disconnected — reset status
+            setProvisioningStatus("idle");
+            localStorage.removeItem(getWaStatusKey());
+            showToast("WhatsApp connection lost. Please reconnect.", "error");
+          }
+        }
+      } catch (err) {
+        console.warn("Keep-alive ping failed (connection might be down):", err);
+      }
+    };
+
+    // Ping every 45s to keep Render instance warm and detect disconnects
+    const keepAliveInterval = setInterval(keepAlive, 45000);
+    return () => clearInterval(keepAliveInterval);
   }, [provisioningStatus, instanceName]);
 
   const handleProvisionEvolution = async (e: React.FormEvent) => {
