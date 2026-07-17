@@ -31,18 +31,29 @@ export default function IntegrationsPage() {
   const [instanceName, setInstanceName] = useState("");
   // Storage key is tenant-specific to prevent cross-tenant contamination
   const getWaStatusKey = () => `wa_provisioning_status_${activeTenantId}`;
-  // Initialize directly from localStorage so the UI never flashes "Not Connected" on nav-back.
-  // The lazy initializer runs only on the client (typeof window guard for SSR safety).
-  const [provisioningStatus, setProvisioningStatus] = useState<"idle" | "provisioning" | "connecting" | "connected" | "error">(() => {
-    if (typeof window !== "undefined" && activeTenantId) {
-      const key = `wa_provisioning_status_${activeTenantId}`;
-      const saved = localStorage.getItem(key);
-      if (saved === "connecting" || saved === "connected") return saved as "connecting" | "connected";
-    }
-    return "idle";
-  });
+  // Track if we've restored status from storage — prevents race with persist effect
+  const [hasRestoredStatus, setHasRestoredStatus] = useState(false);
+  // Initialize as idle; will be restored from storage after activeTenantId loads
+  const [provisioningStatus, setProvisioningStatus] = useState<"idle" | "provisioning" | "connecting" | "connected" | "error">("idle");
   const [qrCodeBase64, setQrCodeBase64] = useState("");
   const [evolutionError, setEvolutionError] = useState("");
+
+  // Restore provisioning status from localStorage AFTER activeTenantId loads
+  // This runs when activeTenantId changes, ensuring the storage key is correct
+  useEffect(() => {
+    if (!activeTenantId) {
+      setHasRestoredStatus(false);
+      return;
+    }
+
+    const key = getWaStatusKey();
+    const saved = localStorage.getItem(key);
+    if (saved === "connecting" || saved === "connected") {
+      setProvisioningStatus(saved as "connecting" | "connected");
+    }
+    // Signal that restore is complete — allows persist effect to run
+    setHasRestoredStatus(true);
+  }, [activeTenantId]);
 
   // Pre-fill instanceName + verify live Evolution API status on every mount/nav-back
   useEffect(() => {
@@ -68,18 +79,21 @@ export default function IntegrationsPage() {
         }
         // data === null means error response → keep current state (don't overwrite with stale)
       })
-      .catch(() => {/* Evolution API unreachable — keep current state */});
+      .catch(() => {/* Evolution API unreachable — keep current state */ });
   }, [activeTenantId]);
 
-  // Persist status to localStorage so navigation away and hard-refresh both recover correctly
+  // Persist status to localStorage — but only AFTER we've restored from storage
+  // This prevents the persist effect from clearing storage during the initial restore
   useEffect(() => {
+    if (!hasRestoredStatus) return; // Wait for restore to complete first
+
     const key = getWaStatusKey();
     if (provisioningStatus === "connecting" || provisioningStatus === "connected") {
       localStorage.setItem(key, provisioningStatus);
     } else {
       localStorage.removeItem(key);
     }
-  }, [provisioningStatus]);
+  }, [provisioningStatus, hasRestoredStatus]);
 
   // Stable ref so visibility handler always sees current instanceName
   const instanceNameRef = useRef(instanceName);
@@ -148,7 +162,7 @@ export default function IntegrationsPage() {
       clearInterval(qrInterval);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [provisioningStatus, instanceName]);
 
   // Keep-alive ping when connected — prevents Evolution API (Render free tier) from idling
@@ -223,7 +237,7 @@ export default function IntegrationsPage() {
       showToast("Network connection error.", "error");
     }
   };
-  
+
   const [toast, setToast] = useState<{ show: boolean; message: string; type: "success" | "error" }>({
     show: false,
     message: "",
@@ -335,11 +349,11 @@ export default function IntegrationsPage() {
 
   return (
     <div className="flex h-screen bg-[#F8FAFC]">
-      <Sidebar activeTab="Integrations" setActiveTab={() => {}} tenantName={getTenantName()} />
-      
+      <Sidebar activeTab="Integrations" setActiveTab={() => { }} tenantName={getTenantName()} />
+
       <div className="flex-1 flex flex-col md:pl-64 min-h-screen">
         <DashboardHeader onTenantChange={handleTenantChange} />
-        
+
         <main className="flex-1 p-6 space-y-6 max-w-4xl w-full mx-auto">
 
           <div>
@@ -609,11 +623,10 @@ export default function IntegrationsPage() {
       {/* Elegant Toast Notifications */}
       {toast.show && (
         <div className="fixed bottom-5 right-5 z-50 animate-slide-in">
-          <div className={`flex items-center gap-3 px-5 py-3 rounded-lg border shadow-xl bg-white ${
-            toast.type === "success" 
-              ? "border-emerald-200 text-emerald-800" 
+          <div className={`flex items-center gap-3 px-5 py-3 rounded-lg border shadow-xl bg-white ${toast.type === "success"
+              ? "border-emerald-200 text-emerald-800"
               : "border-rose-200 text-rose-800"
-          }`}>
+            }`}>
             <span className="text-lg">
               {toast.type === "success" ? "✓" : "⚠"}
             </span>
