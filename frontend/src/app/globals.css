@@ -2,9 +2,55 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ============================================================
+   Theme tokens — two full themes, switched via [data-theme] on <html>.
+   "dark" = new premium redesign. "light" = original theme, preserved
+   exactly so nothing is lost. ThemeProvider (src/contexts/ThemeContext.tsx)
+   toggles this attribute (and the Tailwind `.dark` class in parallel for
+   any component using native dark: variants) and persists the choice.
+   ============================================================ */
+:root,
+[data-theme="dark"] {
+  --color-canvas: #080c16;
+  --color-surface: #101828;
+  --color-surface-hover: #182338;
+  --color-surface-inset: #0b1220;
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-text: #f1f5f9;
+  --color-text-muted: #94a3b8;
+  --color-accent: #10b981;
+  --color-accent-hover: #059669;
+}
+
+[data-theme="light"] {
+  --color-canvas: #f8fafc;
+  --color-surface: #ffffff;
+  --color-surface-hover: #f1f5f9;
+  --color-surface-inset: #f8fafc;
+  --color-border: #e2e8f0;
+  --color-text: #0f172a;
+  --color-text-muted: #64748b;
+  --color-accent: #1e62ec;
+  --color-accent-hover: #164fc2;
+}
+
 body {
-  color: #0f172a;
-  background-color: #f8fafc;
+  color: var(--color-text);
+  background-color: var(--color-canvas);
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Subtle radial glow behind the main dashboard canvas — gives the dark
+   theme depth instead of a flat black fill. Inert (invisible) in light theme. */
+.dashboard-canvas {
+  background:
+    radial-gradient(circle at 15% 0%, rgba(16, 185, 129, 0.06), transparent 45%),
+    radial-gradient(circle at 85% 20%, rgba(59, 130, 246, 0.05), transparent 40%),
+    var(--color-canvas);
+}
+
+[data-theme="light"] .dashboard-canvas {
+  background: var(--color-canvas);
 }
 
 /* Sidebar collapse transition overrides */
@@ -41,7 +87,7 @@ body {
   }
 }
 
-/* Custom scrollbars for high-density tables */
+/* Custom scrollbars for high-density tables (theme-aware) */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -52,12 +98,12 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: var(--color-border);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: var(--color-text-muted);
 }
 
 /* Toast slide-in animation */
@@ -107,4 +153,37 @@ body {
 
 .animate-fade-in {
   animation: fade-in 0.15s ease-out;
+}
+
+/* Shimmer sweep used by skeleton loaders */
+@keyframes shimmer {
+  from {
+    background-position: -200% 0;
+  }
+
+  to {
+    background-position: 200% 0;
+  }
+}
+
+.animate-shimmer {
+  background-size: 200% 100%;
+  animation: shimmer 1.6s ease-in-out infinite;
+}
+
+/* Soft rise-in for stat cards / dashboard sections on load */
+@keyframes rise-in {
+  from {
+    transform: translateY(8px);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.animate-rise-in {
+  animation: rise-in 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
 }

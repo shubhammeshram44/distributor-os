@@ -33,10 +33,10 @@ function reasonStyle(reasonCode: string): {
       };
     default:
       return {
-        bg: "bg-slate-50",
-        text: "text-slate-700",
-        border: "border-slate-200",
-        badge: "bg-slate-100 text-slate-700",
+        bg: "bg-slate-50 dark:bg-dashboard-inset",
+        text: "text-slate-700 dark:text-slate-300",
+        border: "border-slate-200 dark:border-white/10",
+        badge: "bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-slate-300",
         Icon: TrendingDown,
       };
   }
@@ -126,15 +126,15 @@ export default function DemandGapCard({ activeTenantId }: DemandGapCardProps) {
     }
 
     return (
-      <p className="text-xs text-slate-500 font-semibold mt-1 leading-relaxed">
+      <p className="text-xs text-slate-500 dark:text-slate-500 font-semibold mt-1 leading-relaxed">
         In the last{" "}
-        <span className="font-bold text-slate-700">{window_days}</span>{" "}
+        <span className="font-bold text-slate-700 dark:text-slate-300">{window_days}</span>{" "}
         {window_days === 1 ? "day" : "days"} you lost{" "}
         <span className="font-bold text-rose-600">
           {formatCurrency(total_revenue_at_risk)}
         </span>{" "}
         —{" "}
-        <span className="font-bold text-slate-700">
+        <span className="font-bold text-slate-700 dark:text-slate-300">
           {distinct_customers_affected}
         </span>{" "}
         retailer{distinct_customers_affected === 1 ? "" : "s"} affected.
@@ -143,7 +143,7 @@ export default function DemandGapCard({ activeTenantId }: DemandGapCardProps) {
   };
 
   return (
-    <div className="bg-white p-5 rounded-xl border border-dashboard-border shadow-sm h-full w-full flex flex-col">
+    <div className="bg-white dark:bg-dashboard-card p-5 rounded-xl border border-dashboard-border shadow-sm h-full w-full flex flex-col">
       {/* Card header */}
       <div className="flex items-start justify-between pb-4 border-b border-dashboard-border mb-4">
         <div>
@@ -151,7 +151,7 @@ export default function DemandGapCard({ activeTenantId }: DemandGapCardProps) {
             <div className="w-7 h-7 rounded-lg bg-rose-50 flex items-center justify-center text-rose-500 shrink-0">
               <TrendingDown className="w-4 h-4" />
             </div>
-            <h3 className="font-bold text-slate-800 text-base">Demand Gap</h3>
+            <h3 className="font-bold text-slate-800 dark:text-slate-100 text-base">Demand Gap</h3>
           </div>
           {!loading && !error && headline()}
         </div>
@@ -161,7 +161,7 @@ export default function DemandGapCard({ activeTenantId }: DemandGapCardProps) {
       <div className="flex-1 flex flex-col justify-start gap-3">
         {loading && (
           <div className="flex flex-col items-center justify-center h-32 gap-2">
-            <div className="w-6 h-6 rounded-full border-4 border-slate-200 border-t-rose-400 animate-spin" />
+            <div className="w-6 h-6 rounded-full border-4 border-slate-200 dark:border-white/10 border-t-rose-400 animate-spin" />
             <span className="text-xs text-slate-400 font-semibold">Loading gap data...</span>
           </div>
         )}

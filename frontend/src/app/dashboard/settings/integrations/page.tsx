@@ -366,7 +366,7 @@ export default function IntegrationsPage() {
         <main className="flex-1 p-6 space-y-6 max-w-4xl w-full mx-auto">
 
           <div>
-            <h1 className="text-xl font-bold text-slate-800 tracking-tight flex items-center gap-2">
+            <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100 tracking-tight flex items-center gap-2">
               <Link2 className="w-5 h-5 text-brand-blue" />
               <span>Integrations & Connections</span>
             </h1>
@@ -383,9 +383,9 @@ export default function IntegrationsPage() {
           ) : (
             <div className="space-y-6">
               {/* Business Profile / GSTIN — required for a legally correct Tax Invoice */}
-              <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                <div className="p-6 border-b border-slate-100">
-                  <h3 className="font-extrabold text-slate-800 text-base">Business Profile</h3>
+              <div className="bg-white dark:bg-dashboard-card rounded-xl border border-slate-200 dark:border-white/10 shadow-sm overflow-hidden">
+                <div className="p-6 border-b border-slate-100 dark:border-white/5">
+                  <h3 className="font-extrabold text-slate-800 dark:text-slate-100 text-base">Business Profile</h3>
                   <p className="text-xs text-slate-400 font-semibold mt-0.5">
                     Shown on your customers&apos; Tax Invoices.
                   </p>
@@ -393,19 +393,19 @@ export default function IntegrationsPage() {
                 <div className="p-6 space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-[11px] font-bold text-slate-500 mb-2 uppercase tracking-wider">
+                      <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-500 mb-2 uppercase tracking-wider">
                         Business Name
                       </label>
                       <input
                         type="text"
                         value={businessName}
                         onChange={(e) => setBusinessName(e.target.value)}
-                        className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-slate-50/20 text-slate-700"
+                        className="w-full px-4 py-2.5 border border-slate-200 dark:border-white/10 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-slate-50/20 text-slate-700 dark:text-slate-300"
                         disabled={savingProfile}
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-bold text-slate-500 mb-2 uppercase tracking-wider">
+                      <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-500 mb-2 uppercase tracking-wider">
                         GSTIN <span className="normal-case font-medium text-slate-400">(optional)</span>
                       </label>
                       <input
@@ -414,12 +414,12 @@ export default function IntegrationsPage() {
                         value={businessGstin}
                         onChange={(e) => setBusinessGstin(e.target.value.toUpperCase())}
                         maxLength={15}
-                        className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-slate-50/20 text-slate-700 uppercase"
+                        className="w-full px-4 py-2.5 border border-slate-200 dark:border-white/10 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-slate-50/20 text-slate-700 dark:text-slate-300 uppercase"
                         disabled={savingProfile}
                       />
                     </div>
                   </div>
-                  <div className="flex justify-end pt-2 border-t border-slate-100 mt-2">
+                  <div className="flex justify-end pt-2 border-t border-slate-100 dark:border-white/5 mt-2">
                     <button
                       type="button"
                       onClick={handleSaveBusinessProfile}
@@ -435,14 +435,14 @@ export default function IntegrationsPage() {
 
               {/* // LEGACY_META_CODE_START */}
               {/* 
-              <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+              <div className="bg-white dark:bg-dashboard-card rounded-xl border border-slate-200 dark:border-white/10 shadow-sm overflow-hidden">
+                <div className="p-6 border-b border-slate-100 dark:border-white/5 flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
                       <Link2 className="w-5 h-5" />
                     </div>
                     <div>
-                      <h3 className="font-extrabold text-slate-800 text-base">WhatsApp Business API</h3>
+                      <h3 className="font-extrabold text-slate-800 dark:text-slate-100 text-base">WhatsApp Business API</h3>
                       <p className="text-xs text-slate-400 font-semibold mt-0.5">
                         Direct multi-tenant conversational webhook routing channel.
                       </p>
@@ -455,7 +455,7 @@ export default function IntegrationsPage() {
                         <span>Connected</span>
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1.5 bg-slate-50 text-slate-500 border border-slate-200 px-3 py-1 rounded-full text-xs font-bold">
+                      <span className="inline-flex items-center gap-1.5 bg-slate-50 dark:bg-dashboard-inset text-slate-500 dark:text-slate-500 border border-slate-200 dark:border-white/10 px-3 py-1 rounded-full text-xs font-bold">
                         <Lock className="w-4 h-4 text-slate-400" />
                         <span>Not Configured</span>
                       </span>
@@ -464,13 +464,13 @@ export default function IntegrationsPage() {
                 </div>
 
                 <div className="p-6 space-y-6">
-                  <div className="bg-slate-50 border border-slate-200/60 rounded-xl p-4 flex gap-3 text-slate-600 text-xs leading-relaxed font-semibold">
+                  <div className="bg-slate-50 dark:bg-dashboard-inset border border-slate-200/60 rounded-xl p-4 flex gap-3 text-slate-600 dark:text-slate-400 text-xs leading-relaxed font-semibold">
                     <AlertCircle className="w-5 h-5 text-brand-blue flex-shrink-0 mt-0.5" />
                     <div>
-                      <span className="text-slate-800 font-bold">Configuration Instructions:</span>
-                      <ul className="list-disc pl-4 mt-1.5 space-y-1 text-slate-500 font-medium">
-                        <li>Retrieve your <span className="font-semibold text-slate-700">Phone Number ID</span> from your Meta Developer Portal under WhatsApp &gt; API Setup.</li>
-                        <li>Generate a <span className="font-semibold text-slate-700">Permanent Access Token</span> from your Meta Business Suite System User Settings.</li>
+                      <span className="text-slate-800 dark:text-slate-100 font-bold">Configuration Instructions:</span>
+                      <ul className="list-disc pl-4 mt-1.5 space-y-1 text-slate-500 dark:text-slate-500 font-medium">
+                        <li>Retrieve your <span className="font-semibold text-slate-700 dark:text-slate-300">Phone Number ID</span> from your Meta Developer Portal under WhatsApp &gt; API Setup.</li>
+                        <li>Generate a <span className="font-semibold text-slate-700 dark:text-slate-300">Permanent Access Token</span> from your Meta Business Suite System User Settings.</li>
                         <li>Incoming webhooks will resolve this tenant ID using the configured Phone Number ID.</li>
                       </ul>
                     </div>
@@ -479,7 +479,7 @@ export default function IntegrationsPage() {
                   <form onSubmit={handleSubmit} className="space-y-5">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                       <div className="relative">
-                        <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">
+                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-500 mb-1.5 uppercase tracking-wide">
                           WhatsApp Phone Number ID *
                         </label>
                         <div className="relative rounded-lg shadow-sm">
@@ -492,7 +492,7 @@ export default function IntegrationsPage() {
                             onChange={(e) => setWhatsappPhoneId(e.target.value)}
                             required
                             placeholder="e.g. 104928184719047"
-                            className="w-full pl-10 pr-10 py-2.5 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-1 focus:ring-brand-blue bg-white font-semibold"
+                            className="w-full pl-10 pr-10 py-2.5 border border-slate-200 dark:border-white/10 rounded-lg text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-brand-blue bg-white dark:bg-dashboard-card font-semibold"
                           />
                           <button
                             type="button"
@@ -505,7 +505,7 @@ export default function IntegrationsPage() {
                       </div>
 
                       <div className="relative">
-                        <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">
+                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-500 mb-1.5 uppercase tracking-wide">
                           Permanent Access Token *
                         </label>
                         <div className="relative rounded-lg shadow-sm">
@@ -518,7 +518,7 @@ export default function IntegrationsPage() {
                             onChange={(e) => setWhatsappAccessToken(e.target.value)}
                             required
                             placeholder="EAAGxxxxxxxxxxxxxxxxxxxx"
-                            className="w-full pl-10 pr-10 py-2.5 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-1 focus:ring-brand-blue bg-white font-semibold"
+                            className="w-full pl-10 pr-10 py-2.5 border border-slate-200 dark:border-white/10 rounded-lg text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-brand-blue bg-white dark:bg-dashboard-card font-semibold"
                           />
                           <button
                             type="button"
@@ -531,7 +531,7 @@ export default function IntegrationsPage() {
                       </div>
                     </div>
 
-                    <div className="flex justify-end pt-2 border-t border-slate-100 mt-6">
+                    <div className="flex justify-end pt-2 border-t border-slate-100 dark:border-white/5 mt-6">
                       <button
                         type="submit"
                         disabled={saving}
@@ -554,14 +554,14 @@ export default function IntegrationsPage() {
               {/* // LEGACY_META_CODE_END */}
 
               {/* Evolution API Connection & Provisioning */}
-              <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mt-6">
-                <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+              <div className="bg-white dark:bg-dashboard-card rounded-xl border border-slate-200 dark:border-white/10 shadow-sm overflow-hidden mt-6">
+                <div className="p-6 border-b border-slate-100 dark:border-white/5 flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
                       EV
                     </div>
                     <div>
-                      <h3 className="font-extrabold text-slate-800 text-base">Evolution API Integration</h3>
+                      <h3 className="font-extrabold text-slate-800 dark:text-slate-100 text-base">Evolution API Integration</h3>
                       <p className="text-xs text-slate-400 font-semibold mt-0.5">
                         Scan QR code to connect and provision a new WhatsApp instance.
                       </p>
@@ -600,22 +600,22 @@ export default function IntegrationsPage() {
                 <div className="p-6 space-y-6">
                   {provisioningStatus === "connected" ? (
                     <div className="space-y-4">
-                      <div className="bg-slate-50 border border-slate-200/60 rounded-xl p-4 flex flex-col gap-2">
+                      <div className="bg-slate-50 dark:bg-dashboard-inset border border-slate-200/60 rounded-xl p-4 flex flex-col gap-2">
                         <div className="flex justify-between items-center">
-                          <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Connected Phone Number</span>
-                          <span className="text-sm font-bold text-slate-800">
+                          <span className="text-xs font-bold text-slate-500 dark:text-slate-500 uppercase tracking-wide">Connected Phone Number</span>
+                          <span className="text-sm font-bold text-slate-800 dark:text-slate-100">
                             +{displayPhone.replace("+", "")}
                           </span>
                         </div>
                         <div className="flex justify-between items-center border-t border-slate-200/60 pt-2 mt-1">
-                          <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Instance ID</span>
-                          <span className="text-xs font-semibold text-slate-500 font-mono">
+                          <span className="text-xs font-bold text-slate-500 dark:text-slate-500 uppercase tracking-wide">Instance ID</span>
+                          <span className="text-xs font-semibold text-slate-500 dark:text-slate-500 font-mono">
                             {instanceName}
                           </span>
                         </div>
                       </div>
 
-                      <div className="flex justify-end pt-2 border-t border-slate-100 mt-6">
+                      <div className="flex justify-end pt-2 border-t border-slate-100 dark:border-white/5 mt-6">
                         <button
                           type="button"
                           onClick={() => setShowDisconnectModal(true)}
@@ -647,9 +647,9 @@ export default function IntegrationsPage() {
                         </div>
                       </div>
 
-                      <div className="bg-slate-50 border border-slate-200/60 rounded-xl p-4 text-xs text-slate-500 leading-relaxed font-semibold">
-                        <p className="font-semibold text-slate-700 mb-1">To reconnect:</p>
-                        <ol className="list-decimal pl-4 space-y-1 text-slate-500 font-medium">
+                      <div className="bg-slate-50 dark:bg-dashboard-inset border border-slate-200/60 rounded-xl p-4 text-xs text-slate-500 dark:text-slate-500 leading-relaxed font-semibold">
+                        <p className="font-semibold text-slate-700 dark:text-slate-300 mb-1">To reconnect:</p>
+                        <ol className="list-decimal pl-4 space-y-1 text-slate-500 dark:text-slate-500 font-medium">
                           <li>Click "Reconnect WhatsApp" below</li>
                           <li>Scan the QR code with your WhatsApp</li>
                           <li>Orders will resume automatically</li>
@@ -663,7 +663,7 @@ export default function IntegrationsPage() {
                         </div>
                       )}
 
-                      <div className="flex justify-end pt-2 border-t border-slate-100 mt-6">
+                      <div className="flex justify-end pt-2 border-t border-slate-100 dark:border-white/5 mt-6">
                         <button
                           type="button"
                           onClick={handleProvisionEvolution}
@@ -676,11 +676,11 @@ export default function IntegrationsPage() {
                     </div>
                   ) : (
                     <>
-                      <div className="bg-slate-50 border border-slate-200/60 rounded-xl p-4 flex gap-3 text-slate-600 text-xs leading-relaxed font-semibold">
+                      <div className="bg-slate-50 dark:bg-dashboard-inset border border-slate-200/60 rounded-xl p-4 flex gap-3 text-slate-600 dark:text-slate-400 text-xs leading-relaxed font-semibold">
                         <AlertCircle className="w-5 h-5 text-brand-blue flex-shrink-0 mt-0.5" />
                         <div>
-                          <span className="text-slate-800 font-bold">Evolution API Connection Instructions:</span>
-                          <ul className="list-disc pl-4 mt-1.5 space-y-1 text-slate-500 font-medium">
+                          <span className="text-slate-800 dark:text-slate-100 font-bold">Evolution API Connection Instructions:</span>
+                          <ul className="list-disc pl-4 mt-1.5 space-y-1 text-slate-500 dark:text-slate-500 font-medium">
                             <li>Click "Connect WhatsApp" to initialize the connection.</li>
                             <li>The system will auto-generate a unique instance ID for your workspace.</li>
                             <li>Scan the generated QR code using the "Link a Device" option in your WhatsApp app.</li>
@@ -691,9 +691,9 @@ export default function IntegrationsPage() {
 
                       <form onSubmit={handleProvisionEvolution} className="space-y-5">
                         {qrCodeBase64 && (provisioningStatus === "connecting" || provisioningStatus === "provisioning") && (
-                          <div className="flex flex-col items-center justify-center p-6 bg-slate-50 border border-dashed border-slate-200 rounded-xl space-y-4">
-                            <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Scan this QR code with WhatsApp</p>
-                            <div className="bg-white p-4 rounded-xl shadow-md border border-slate-100">
+                          <div className="flex flex-col items-center justify-center p-6 bg-slate-50 dark:bg-dashboard-inset border border-dashed border-slate-200 dark:border-white/10 rounded-xl space-y-4">
+                            <p className="text-xs font-bold text-slate-500 dark:text-slate-500 uppercase tracking-wide">Scan this QR code with WhatsApp</p>
+                            <div className="bg-white dark:bg-dashboard-card p-4 rounded-xl shadow-md border border-slate-100 dark:border-white/5">
                               <img src={qrCodeBase64} alt="WhatsApp QR Code" className="w-48 h-48" />
                             </div>
                             <p className="text-[10px] text-slate-400 font-semibold animate-pulse flex items-center gap-1.5">
@@ -710,7 +710,7 @@ export default function IntegrationsPage() {
                           </div>
                         )}
 
-                        <div className="flex justify-end pt-2 border-t border-slate-100 mt-6">
+                        <div className="flex justify-end pt-2 border-t border-slate-100 dark:border-white/5 mt-6">
                           <button
                             type="submit"
                             disabled={provisioningStatus === "provisioning" || provisioningStatus === "connecting"}
@@ -738,24 +738,24 @@ export default function IntegrationsPage() {
 
       {showDisconnectModal && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full border border-slate-100 p-6 space-y-6 animate-in fade-in zoom-in duration-200">
+          <div className="bg-white dark:bg-dashboard-card rounded-2xl shadow-xl max-w-md w-full border border-slate-100 dark:border-white/5 p-6 space-y-6 animate-in fade-in zoom-in duration-200">
             <div className="flex items-start gap-4">
               <div className="p-3 bg-rose-50 rounded-full text-rose-600">
                 <AlertCircle className="w-6 h-6" />
               </div>
               <div className="space-y-1.5">
                 <h3 className="text-base font-bold text-slate-950">Disconnect WhatsApp</h3>
-                <p className="text-sm text-slate-500 font-medium leading-relaxed font-semibold">
+                <p className="text-sm text-slate-500 dark:text-slate-500 font-medium leading-relaxed font-semibold">
                   This will disconnect your WhatsApp. New orders will stop coming in. Are you sure?
                 </p>
               </div>
             </div>
-            <div className="flex justify-end gap-3 pt-2 border-t border-slate-100">
+            <div className="flex justify-end gap-3 pt-2 border-t border-slate-100 dark:border-white/5">
               <button
                 type="button"
                 disabled={disconnecting}
                 onClick={() => setShowDisconnectModal(false)}
-                className="px-4 py-2 text-slate-600 hover:bg-slate-50 rounded-lg text-sm font-bold cursor-pointer transition-all"
+                className="px-4 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-white/5 rounded-lg text-sm font-bold cursor-pointer transition-all"
               >
                 Cancel
               </button>
@@ -782,7 +782,7 @@ export default function IntegrationsPage() {
       {/* Elegant Toast Notifications */}
       {toast.show && (
         <div className="fixed bottom-5 right-5 z-50 animate-slide-in">
-          <div className={`flex items-center gap-3 px-5 py-3 rounded-lg border shadow-xl bg-white ${
+          <div className={`flex items-center gap-3 px-5 py-3 rounded-lg border shadow-xl bg-white dark:bg-dashboard-card ${
             toast.type === "success" 
               ? "border-emerald-200 text-emerald-800" 
               : "border-rose-200 text-rose-800"

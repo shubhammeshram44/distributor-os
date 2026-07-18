@@ -285,14 +285,14 @@ export default function DashboardPage() {
 
   if (!tenantId || tenantId === "") {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-slate-50">
+      <div className="flex items-center justify-center min-h-screen bg-slate-50 dark:bg-dashboard-inset">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-blue" />
       </div>
     );
   }
 
   return (
-    <div className="flex bg-dashboard-bg min-h-screen text-slate-800">
+    <div className="flex bg-dashboard-bg min-h-screen text-slate-800 dark:text-slate-100">
       {/* 1. Left Sidebar */}
       <Sidebar
         activeTab={activeTab}
@@ -313,16 +313,16 @@ export default function DashboardPage() {
         {/* 3. Dashboard Scrollable Content */}
         <main className="flex-1 mt-16 p-6 overflow-y-auto space-y-6">
           {isHydrating ? (
-            <div className="flex flex-col items-center justify-center py-32 gap-3 bg-white rounded-xl border border-dashboard-border shadow-sm h-[400px]">
-              <div className="w-8 h-8 rounded-full border-4 border-slate-200 border-t-brand-blue animate-spin" />
-              <span className="text-sm font-semibold text-slate-500">Setting up your workspace...</span>
+            <div className="flex flex-col items-center justify-center py-32 gap-3 bg-white dark:bg-dashboard-card rounded-xl border border-dashboard-border shadow-sm h-[400px]">
+              <div className="w-8 h-8 rounded-full border-4 border-slate-200 dark:border-white/10 border-t-brand-blue animate-spin" />
+              <span className="text-sm font-semibold text-slate-500 dark:text-slate-500">Setting up your workspace...</span>
             </div>
           ) : (
             <>
               {/* Dashboard Control Header */}
               <div className="flex items-center justify-between">
                 <div>
-                  <h1 className="text-xl font-bold text-slate-800 tracking-tight">Dashboard</h1>
+                  <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">Dashboard</h1>
                   <p className="text-xs text-slate-400 font-semibold mt-0.5">Real-time operational workflow management</p>
                 </div>
 
@@ -379,7 +379,7 @@ export default function DashboardPage() {
               {/* Business Health Score */}
               {/* Business Health Score - Full Width */}
               {!healthLoading && healthScore?.has_sufficient_data && (
-                <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm mb-6">
+                <div className="bg-white dark:bg-dashboard-card rounded-xl border border-slate-200 dark:border-white/10 p-6 shadow-sm mb-6">
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                     <div className="flex items-center gap-5">
                       {/* Circular score */}
@@ -400,7 +400,7 @@ export default function DashboardPage() {
                           />
                         </svg>
                         <div className="absolute inset-0 flex items-center justify-center">
-                          <span className="text-base font-bold text-slate-800">
+                          <span className="text-base font-bold text-slate-800 dark:text-slate-100">
                             {healthScore.score}
                           </span>
                         </div>
@@ -409,7 +409,7 @@ export default function DashboardPage() {
                       {/* Score details */}
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="text-sm font-bold text-slate-800">
+                          <span className="text-sm font-bold text-slate-800 dark:text-slate-100">
                             Business Health
                           </span>
                           <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
@@ -430,7 +430,7 @@ export default function DashboardPage() {
                              healthScore.trend === "down" ? "↓" : "→"}
                           </span>
                         </div>
-                        <p className="text-xs text-slate-500 mt-1">
+                        <p className="text-xs text-slate-500 dark:text-slate-500 mt-1">
                           {healthScore.primary_insight}
                         </p>
                       </div>
@@ -441,10 +441,10 @@ export default function DashboardPage() {
 
               {/* Not enough data state */}
               {!healthLoading && healthScore && !healthScore.has_sufficient_data && (
-                <div className="bg-slate-50 rounded-xl border border-slate-200 p-6 flex items-center gap-3 mb-6">
+                <div className="bg-slate-50 dark:bg-dashboard-inset rounded-xl border border-slate-200 dark:border-white/10 p-6 flex items-center gap-3 mb-6">
                   <span className="text-xl">📊</span>
                   <div>
-                    <p className="text-xs font-semibold text-slate-600">Business Health Score</p>
+                    <p className="text-xs font-semibold text-slate-600 dark:text-slate-400">Business Health Score</p>
                     <p className="text-xs text-slate-400 mt-0.5">
                       Available after 7 days and 5 confirmed orders.
                       {healthScore.confirmed_orders !== undefined && healthScore.confirmed_orders > 0 && ` ${healthScore.confirmed_orders}/5 orders so far.`}
@@ -454,11 +454,11 @@ export default function DashboardPage() {
               )}
 
               {/* ⚡ Decision Focus Card */}
-              <div className="bg-white rounded-xl border border-slate-200 overflow-hidden mb-6 shadow-sm">
+              <div className="bg-white dark:bg-dashboard-card rounded-xl border border-slate-200 dark:border-white/10 overflow-hidden mb-6 shadow-sm">
                 {/* Header */}
-                <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+                <div className="px-6 py-5 border-b border-slate-100 dark:border-white/5 flex items-center justify-between">
                   <div>
-                    <h2 className="text-sm font-bold text-slate-800">
+                    <h2 className="text-sm font-bold text-slate-800 dark:text-slate-100">
                       ⚡ Focus for the Next 15 Minutes
                     </h2>
                     <p className="text-xs text-slate-400 mt-0.5">
@@ -476,7 +476,7 @@ export default function DashboardPage() {
                 {decisionLoading && (
                   <div className="p-6 space-y-3">
                     {[1, 2, 3].map(i => (
-                      <div key={i} className="h-16 bg-slate-100 rounded-lg animate-pulse" />
+                      <div key={i} className="h-16 bg-slate-100 dark:bg-white/5 rounded-lg animate-pulse" />
                     ))}
                   </div>
                 )}
@@ -485,7 +485,7 @@ export default function DashboardPage() {
                 {!decisionLoading && decisionFocus?.all_clear && (
                   <div className="p-8 text-center">
                     <div className="text-3xl mb-2">✅</div>
-                    <p className="text-sm font-semibold text-slate-700">All caught up!</p>
+                    <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">All caught up!</p>
                     <p className="text-xs text-slate-400 mt-1">
                       No pending actions right now. Your business is running smoothly.
                     </p>
@@ -498,7 +498,7 @@ export default function DashboardPage() {
                     {decisionFocus.decisions.map((decision, idx) => (
                       <div
                         key={decision.type}
-                        className={`flex items-start gap-4 px-6 py-4 hover:bg-slate-50 transition-colors ${idx === 0 ? "bg-red-50/30" : ""
+                        className={`flex items-start gap-4 px-6 py-4 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors ${idx === 0 ? "bg-red-50/30" : ""
                           }`}
                       >
                         {/* Icon */}
@@ -506,10 +506,10 @@ export default function DashboardPage() {
 
                         {/* Content */}
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-slate-800">
+                          <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">
                             {decision.headline}
                           </p>
-                          <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
+                          <p className="text-xs text-slate-500 dark:text-slate-500 mt-0.5 leading-relaxed">
                             {decision.detail}
                           </p>
                         </div>
@@ -519,7 +519,7 @@ export default function DashboardPage() {
                           href={decision.action_url}
                           className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${idx === 0
                               ? "bg-red-600 text-white hover:bg-red-700"
-                              : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                              : "bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-slate-300 hover:bg-slate-200"
                             }`}
                         >
                           {decision.action_label} →
@@ -536,14 +536,14 @@ export default function DashboardPage() {
                 <div className="md:col-span-1 lg:col-span-5">
                   {/* Credit Risk Alerts List */}
                   {creditRisk && creditRisk.alerts.length > 0 ? (
-                    <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm h-full flex flex-col justify-between">
+                    <div className="bg-white dark:bg-dashboard-card rounded-xl border border-slate-200 dark:border-white/10 p-6 shadow-sm h-full flex flex-col justify-between">
                       <div>
                         <div className="flex items-center justify-between mb-4">
                           <div>
-                            <h3 className="text-sm font-semibold text-slate-800">
+                            <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
                               ⚠️ Credit Risk Alerts
                             </h3>
-                            <p className="text-xs text-slate-500 mt-0.5">
+                            <p className="text-xs text-slate-500 dark:text-slate-500 mt-0.5">
                               {creditRisk.total_at_risk_count} customers · 
                               ₹{creditRisk.total_at_risk_amount.toLocaleString("en-IN")} at risk
                             </p>
@@ -555,26 +555,26 @@ export default function DashboardPage() {
                         </div>
 
                         {/* Risk summary bar */}
-                        <div className="flex gap-3 mb-4 p-3 bg-slate-50 rounded-lg">
+                        <div className="flex gap-3 mb-4 p-3 bg-slate-50 dark:bg-dashboard-inset rounded-lg">
                           <div className="flex-1 text-center">
                             <div className="text-lg font-bold text-red-600">
                               {creditRisk.alerts.filter(a => a.risk_level === "high_risk").length}
                             </div>
-                            <div className="text-xs text-slate-500">🔴 High Risk</div>
+                            <div className="text-xs text-slate-500 dark:text-slate-500">🔴 High Risk</div>
                           </div>
                           <div className="w-px bg-slate-200" />
                           <div className="flex-1 text-center">
                             <div className="text-lg font-bold text-amber-500">
                               {creditRisk.alerts.filter(a => a.risk_level === "caution").length}
                             </div>
-                            <div className="text-xs text-slate-500">🟡 Caution</div>
+                            <div className="text-xs text-slate-500 dark:text-slate-500">🟡 Caution</div>
                           </div>
                           <div className="w-px bg-slate-200" />
                           <div className="flex-1 text-center">
-                            <div className="text-lg font-bold text-slate-700">
+                            <div className="text-lg font-bold text-slate-700 dark:text-slate-300">
                               ₹{(creditRisk.total_at_risk_amount / 1000).toFixed(1)}K
                             </div>
-                            <div className="text-xs text-slate-500">Total Due</div>
+                            <div className="text-xs text-slate-500 dark:text-slate-500">Total Due</div>
                           </div>
                         </div>
 
@@ -594,7 +594,7 @@ export default function DashboardPage() {
                               </span>
 
                               <div className="flex-1 min-w-0">
-                                <p className="text-xs font-semibold text-slate-800 truncate">
+                                <p className="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">
                                   {alert.customer_name}
                                 </p>
                                 
@@ -611,7 +611,7 @@ export default function DashboardPage() {
                                       }}
                                     />
                                   </div>
-                                  <span className="text-xs text-slate-500 flex-shrink-0">
+                                  <span className="text-xs text-slate-500 dark:text-slate-500 flex-shrink-0">
                                     {alert.overdue_days}d overdue
                                   </span>
                                 </div>
@@ -641,9 +641,9 @@ export default function DashboardPage() {
                       </div>
                     </div>
                   ) : (
-                    <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm h-full flex flex-col justify-center items-center text-center min-h-[300px]">
+                    <div className="bg-white dark:bg-dashboard-card rounded-xl border border-slate-200 dark:border-white/10 p-6 shadow-sm h-full flex flex-col justify-center items-center text-center min-h-[300px]">
                       <span className="text-3xl mb-3">🛡️</span>
-                      <p className="text-sm font-semibold text-slate-700">No Credit Risks</p>
+                      <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">No Credit Risks</p>
                       <p className="text-xs text-slate-400 mt-1.5 max-w-[240px] leading-relaxed">
                         All customers are within their credit limits and payment terms.
                       </p>
@@ -653,10 +653,10 @@ export default function DashboardPage() {
 
                 {/* Column B (lg:col-span-4): Orders Status (Orders Intelligence) */}
                 <div className="md:col-span-1 lg:col-span-4">
-                  <div className="bg-white rounded-xl border border-slate-200 p-6 flex flex-col justify-between h-full shadow-sm">
+                  <div className="bg-white dark:bg-dashboard-card rounded-xl border border-slate-200 dark:border-white/10 p-6 flex flex-col justify-between h-full shadow-sm">
                     <div className="flex-1 flex flex-col justify-between">
                       <div className="flex items-center justify-between mb-5">
-                        <h3 className="text-sm font-semibold text-slate-800">📦 Orders Status</h3>
+                        <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">📦 Orders Status</h3>
                         <a href="/dashboard/orders" className="text-xs text-emerald-600 font-medium hover:underline">
                           View all →
                         </a>
@@ -682,8 +682,8 @@ export default function DashboardPage() {
                           {
                             label: "Awaiting stock",
                             count: orders?.filter((o: any) => o.status === "Awaiting Stock").length || 0,
-                            color: "text-slate-500",
-                            bg: "bg-slate-50",
+                            color: "text-slate-500 dark:text-slate-500",
+                            bg: "bg-slate-50 dark:bg-dashboard-inset",
                             url: "/dashboard/orders?status=Awaiting+Stock",
                             suffix: "→ Restock needed"
                           },
@@ -701,7 +701,7 @@ export default function DashboardPage() {
                             href={item.url}
                             className={`flex items-center justify-between py-3.5 px-4 rounded-lg ${item.bg} hover:opacity-80 transition-opacity border border-slate-100/50`}
                           >
-                            <span className="text-xs font-semibold text-slate-600">{item.label}</span>
+                            <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">{item.label}</span>
                             <div className="flex items-center gap-2">
                               <span className={`text-sm font-bold ${item.color}`}>{item.count}</span>
                               {item.count > 0 && (
@@ -717,15 +717,15 @@ export default function DashboardPage() {
 
                 {/* Column C (lg:col-span-3): Business Health details */}
                 <div className="md:col-span-2 lg:col-span-3">
-                  <div className="bg-white rounded-xl border border-slate-200 p-6 flex flex-col justify-between h-full shadow-sm">
+                  <div className="bg-white dark:bg-dashboard-card rounded-xl border border-slate-200 dark:border-white/10 p-6 flex flex-col justify-between h-full shadow-sm">
                     <div>
                       <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-sm font-semibold text-slate-800">📊 Health Details</h3>
+                        <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">📊 Health Details</h3>
                       </div>
                       {healthLoading ? (
                         <div className="space-y-3">
                           {[1, 2, 3].map(i => (
-                            <div key={i} className="h-10 bg-slate-100 rounded-lg animate-pulse" />
+                            <div key={i} className="h-10 bg-slate-100 dark:bg-white/5 rounded-lg animate-pulse" />
                           ))}
                         </div>
                       ) : healthScore?.has_sufficient_data ? (
@@ -767,10 +767,10 @@ export default function DashboardPage() {
                                 }`} />
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center justify-between">
-                                    <span className="text-xs font-semibold text-slate-600 truncate mr-2">{label}</span>
+                                    <span className="text-xs font-semibold text-slate-600 dark:text-slate-400 truncate mr-2">{label}</span>
                                     <span className="text-[10px] font-semibold text-slate-400 shrink-0">{detail}</span>
                                   </div>
-                                  <div className="mt-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                  <div className="mt-1 h-1.5 bg-slate-100 dark:bg-white/5 rounded-full overflow-hidden">
                                     <div
                                       className={`h-full rounded-full ${
                                         signal.status === "good" ? "bg-emerald-400" :
@@ -788,7 +788,7 @@ export default function DashboardPage() {
                           })}
                         </div>
                       ) : (
-                        <div className="text-xs text-slate-400 flex items-center justify-center h-48 border border-dashed border-slate-100 rounded-lg">
+                        <div className="text-xs text-slate-400 flex items-center justify-center h-48 border border-dashed border-slate-100 dark:border-white/5 rounded-lg">
                           Metrics details unavailable
                         </div>
                       )}
@@ -817,9 +817,9 @@ export default function DashboardPage() {
               {/* Row 6: Recent Activity Footer (Hidden for now) */}
               {/*
               {activities && activities.length > 0 && (
-                <div className="bg-white rounded-xl border border-slate-200 p-6 mt-6 shadow-sm">
+                <div className="bg-white dark:bg-dashboard-card rounded-xl border border-slate-200 dark:border-white/10 p-6 mt-6 shadow-sm">
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    <h3 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
                       Recent Activity
                     </h3>
                     <a
@@ -831,12 +831,12 @@ export default function DashboardPage() {
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
                     {activities.slice(0, 5).map((act: any, idx: number) => (
-                      <div key={idx} className="flex items-center gap-3 text-xs bg-slate-50 rounded-lg p-3">
-                        <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-sm shrink-0">
+                      <div key={idx} className="flex items-center gap-3 text-xs bg-slate-50 dark:bg-dashboard-inset rounded-lg p-3">
+                        <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-white/5 flex items-center justify-center text-sm shrink-0">
                           {act.type === "order" ? "🛒" : act.type === "payment" ? "💸" : "📦"}
                         </div>
                         <div className="min-w-0">
-                          <p className="font-semibold text-slate-800 truncate">{act.title}</p>
+                          <p className="font-semibold text-slate-800 dark:text-slate-100 truncate">{act.title}</p>
                           <p className="text-slate-400 text-[10px] mt-0.5">{act.timestamp || "Just now"}</p>
                         </div>
                       </div>

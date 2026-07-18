@@ -372,14 +372,14 @@ export default function ShipmentsPage() {
 
   if (!activeTenantId) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-slate-50">
+      <div className="flex items-center justify-center min-h-screen bg-slate-50 dark:bg-dashboard-inset">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-blue" />
       </div>
     );
   }
 
   return (
-    <div className="flex bg-dashboard-bg min-h-screen text-slate-800">
+    <div className="flex bg-dashboard-bg min-h-screen text-slate-800 dark:text-slate-100">
       <Sidebar
         activeTab="Shipments"
         setActiveTab={() => {}}
@@ -397,7 +397,7 @@ export default function ShipmentsPage() {
           {/* Header Banners */}
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-xl font-bold text-slate-800 tracking-tight flex items-center gap-2">
+              <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100 tracking-tight flex items-center gap-2">
                 <Truck className="w-5 h-5 text-brand-blue" />
                 <span>Shipments & Logistics Hub</span>
               </h1>
@@ -409,10 +409,10 @@ export default function ShipmentsPage() {
 
           {/* Quick Stats Banners */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="bg-white p-5 rounded-xl border border-dashboard-border shadow-sm flex items-center justify-between">
+            <div className="bg-white dark:bg-dashboard-card p-5 rounded-xl border border-dashboard-border shadow-sm flex items-center justify-between">
               <div>
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Pending Vehicle Allocation</p>
-                <h3 className="text-2xl font-extrabold text-slate-800 mt-1">{pendingAllocationCount}</h3>
+                <h3 className="text-2xl font-extrabold text-slate-800 dark:text-slate-100 mt-1">{pendingAllocationCount}</h3>
                 <p className="text-[10px] text-slate-400 font-semibold mt-1">Confirmed orders waiting dispatch</p>
               </div>
               <div className="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center text-brand-blue shadow-sm">
@@ -420,10 +420,10 @@ export default function ShipmentsPage() {
               </div>
             </div>
 
-            <div className="bg-white p-5 rounded-xl border border-dashboard-border shadow-sm flex items-center justify-between">
+            <div className="bg-white dark:bg-dashboard-card p-5 rounded-xl border border-dashboard-border shadow-sm flex items-center justify-between">
               <div>
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Active Dispatched Runs</p>
-                <h3 className="text-2xl font-extrabold text-slate-800 mt-1">{activeDispatchedRunsCount}</h3>
+                <h3 className="text-2xl font-extrabold text-slate-800 dark:text-slate-100 mt-1">{activeDispatchedRunsCount}</h3>
                 <p className="text-[10px] text-slate-400 font-semibold mt-1">Vehicles currently on route</p>
               </div>
               <div className="w-12 h-12 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600 shadow-sm">
@@ -433,14 +433,14 @@ export default function ShipmentsPage() {
           </div>
 
           {loading && (
-            <div className="flex flex-col items-center justify-center py-24 gap-3 bg-white rounded-xl border border-dashboard-border">
+            <div className="flex flex-col items-center justify-center py-24 gap-3 bg-white dark:bg-dashboard-card rounded-xl border border-dashboard-border">
               <Loader2 className="w-8 h-8 text-brand-blue animate-spin" />
-              <span className="text-sm font-semibold text-slate-500">Retrieving logistics status...</span>
+              <span className="text-sm font-semibold text-slate-500 dark:text-slate-500">Retrieving logistics status...</span>
             </div>
           )}
 
           {error && (
-            <div className="flex flex-col items-center justify-center py-24 gap-3 text-rose-600 bg-white rounded-xl border border-dashboard-border">
+            <div className="flex flex-col items-center justify-center py-24 gap-3 text-rose-600 bg-white dark:bg-dashboard-card rounded-xl border border-dashboard-border">
               <AlertCircle className="w-8 h-8" />
               <span className="text-sm font-semibold">{error}</span>
             </div>
@@ -449,14 +449,14 @@ export default function ShipmentsPage() {
           {!loading && !error && (
             <div className="space-y-6">
               {/* Search & Filter Bar */}
-              <div className="bg-white p-4 rounded-xl border border-dashboard-border shadow-sm flex flex-col sm:flex-row gap-4 items-center justify-between">
+              <div className="bg-white dark:bg-dashboard-card p-4 rounded-xl border border-dashboard-border shadow-sm flex flex-col sm:flex-row gap-4 items-center justify-between">
                 <div className="relative w-full sm:max-w-md">
                   <input
                     type="text"
                     placeholder="Search customer, order ID, or tracking ID..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-brand-blue"
+                    className="w-full pl-9 pr-4 py-2 border border-slate-200 dark:border-white/10 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-brand-blue"
                   />
                   <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -469,7 +469,7 @@ export default function ShipmentsPage() {
                   <select
                     value={statusFilter}
                     onChange={(e) => setStatusFilter(e.target.value)}
-                    className="w-full sm:w-48 p-2 border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-brand-blue bg-white cursor-pointer"
+                    className="w-full sm:w-48 p-2 border border-slate-200 dark:border-white/10 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-brand-blue bg-white dark:bg-dashboard-card cursor-pointer"
                   >
                     <option value="">All Milestone Statuses</option>
                     <option value="Created">Created</option>
@@ -482,32 +482,32 @@ export default function ShipmentsPage() {
               {/* Split-Screen Interactive Builder */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Left: Tabular Checklist */}
-                <div className="lg:col-span-2 bg-white rounded-xl border border-dashboard-border shadow-sm p-5 flex flex-col min-h-[350px]">
-                  <h3 className="text-sm font-bold text-slate-700 mb-3 uppercase tracking-wider">
+                <div className="lg:col-span-2 bg-white dark:bg-dashboard-card rounded-xl border border-dashboard-border shadow-sm p-5 flex flex-col min-h-[350px]">
+                  <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-3 uppercase tracking-wider">
                     Unallocated Orders Checklist
                   </h3>
-                  <div className="flex-1 overflow-y-auto border border-slate-100 rounded-lg mb-3">
+                  <div className="flex-1 overflow-y-auto border border-slate-100 dark:border-white/5 rounded-lg mb-3">
                     {pendingOrders.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/40 text-center my-4 mx-6">
-                        <div className="p-3 bg-slate-100 text-slate-400 rounded-full mb-3">
+                      <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed border-slate-200 dark:border-white/10 rounded-xl bg-slate-50/40 text-center my-4 mx-6">
+                        <div className="p-3 bg-slate-100 dark:bg-white/5 text-slate-400 rounded-full mb-3">
                           <Truck className="w-6 h-6" />
                         </div>
-                        <h3 className="text-sm font-semibold text-slate-800">Your workspace is clean</h3>
-                        <p className="text-xs text-slate-500 max-w-xs mt-1">
+                        <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Your workspace is clean</h3>
+                        <p className="text-xs text-slate-500 dark:text-slate-500 max-w-xs mt-1">
                           Connect your warehouse stock or send your first WhatsApp text order to see live tracking metrics update instantly.
                         </p>
                       </div>
                     ) : (
                       <table className="w-full text-left text-xs border-collapse">
                         <thead>
-                          <tr className="text-slate-400 font-bold border-b border-dashboard-border bg-slate-50">
+                          <tr className="text-slate-400 font-bold border-b border-dashboard-border bg-slate-50 dark:bg-dashboard-inset">
                             <th className="py-2.5 px-4 text-center w-12">Load</th>
                             <th className="py-2.5 px-4">Order ID</th>
                             <th className="py-2.5 px-4">Store Name</th>
                             <th className="py-2.5 px-4 text-right">Invoice Amount</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-100 font-medium">
+                        <tbody className="divide-y divide-slate-100 dark:divide-white/5 font-medium">
                           {pendingOrders.map(o => (
                             <tr key={o.order_id} className="hover:bg-slate-50/50">
                               <td className="py-3 px-4 text-center">
@@ -515,12 +515,12 @@ export default function ShipmentsPage() {
                                   type="checkbox"
                                   checked={selectedOrderIds.includes(o.order_id)}
                                   onChange={() => handleCheckboxToggle(o.order_id)}
-                                  className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                  className="w-3.5 h-3.5 rounded border-slate-300 dark:border-white/10 text-blue-600 focus:ring-blue-500 cursor-pointer"
                                 />
                               </td>
-                              <td className="py-3 px-4 font-bold text-slate-700">{o.internal_order_id}</td>
-                              <td className="py-3 px-4 text-slate-500">{o.customer_name}</td>
-                              <td className="py-3 px-4 text-right font-bold text-slate-700">
+                              <td className="py-3 px-4 font-bold text-slate-700 dark:text-slate-300">{o.internal_order_id}</td>
+                              <td className="py-3 px-4 text-slate-500 dark:text-slate-500">{o.customer_name}</td>
+                              <td className="py-3 px-4 text-right font-bold text-slate-700 dark:text-slate-300">
                                 {formatCurrency(o.invoice_amount)}
                               </td>
                             </tr>
@@ -530,10 +530,10 @@ export default function ShipmentsPage() {
                     )}
                   </div>
                   {pendingCursor && (
-                    <div className="flex justify-center border-t border-slate-100 pt-3">
+                    <div className="flex justify-center border-t border-slate-100 dark:border-white/5 pt-3">
                       <button
                         onClick={loadMorePending}
-                        className="px-4 py-1.5 bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100 text-[10px] font-bold rounded-lg transition-all cursor-pointer shadow-sm"
+                        className="px-4 py-1.5 bg-slate-50 dark:bg-dashboard-inset border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 text-[10px] font-bold rounded-lg transition-all cursor-pointer shadow-sm"
                       >
                         Load More Orders
                       </button>
@@ -542,9 +542,9 @@ export default function ShipmentsPage() {
                 </div>
 
                 {/* Right: Input Terminal Card */}
-                <div className="bg-white rounded-xl border border-dashboard-border shadow-sm p-5 flex flex-col justify-between min-h-[350px]">
+                <div className="bg-white dark:bg-dashboard-card rounded-xl border border-dashboard-border shadow-sm p-5 flex flex-col justify-between min-h-[350px]">
                   <div>
-                    <h3 className="text-sm font-bold text-slate-700 mb-3 uppercase tracking-wider">
+                    <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-3 uppercase tracking-wider">
                       Dispatch Terminal
                     </h3>
                     <p className="text-[11px] text-slate-400 font-semibold mb-5 leading-relaxed">
@@ -555,12 +555,12 @@ export default function ShipmentsPage() {
                   <form onSubmit={handleCreateDeliveryRun} className="space-y-4 flex-1 flex flex-col justify-between">
                     <div className="space-y-3">
                       <div>
-                        <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">Driver Name</label>
+                        <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-500 mb-1 uppercase">Driver Name</label>
                         <div className="relative">
                           <select
                             value={selectedDriverId}
                             onChange={(e) => setSelectedDriverId(e.target.value)}
-                            className="w-full p-2.5 pr-8 border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-brand-blue cursor-pointer bg-white appearance-none text-slate-700"
+                            className="w-full p-2.5 pr-8 border border-slate-200 dark:border-white/10 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-brand-blue cursor-pointer bg-white dark:bg-dashboard-card appearance-none text-slate-700 dark:text-slate-300"
                             required
                           >
                             <option value="" disabled>Select Driver...</option>
@@ -575,13 +575,13 @@ export default function ShipmentsPage() {
                       </div>
 
                       <div>
-                        <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">Vehicle Number</label>
+                        <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-500 mb-1 uppercase">Vehicle Number</label>
                         <input
                           type="text"
                           value={vehicleNumber}
                           onChange={(e) => setVehicleNumber(e.target.value)}
                           placeholder="e.g. KA-01-MJ-9876"
-                          className="w-full p-2.5 border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-brand-blue"
+                          className="w-full p-2.5 border border-slate-200 dark:border-white/10 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-brand-blue"
                           required
                         />
                       </div>
@@ -606,20 +606,20 @@ export default function ShipmentsPage() {
               </div>
 
               {/* Active Fulfillment Ledger */}
-              <div className="bg-white rounded-xl border border-dashboard-border shadow-sm flex flex-col min-h-[300px]">
-                <div className="p-4 border-b border-dashboard-border bg-slate-50 rounded-t-xl">
-                  <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+              <div className="bg-white dark:bg-dashboard-card rounded-xl border border-dashboard-border shadow-sm flex flex-col min-h-[300px]">
+                <div className="p-4 border-b border-dashboard-border bg-slate-50 dark:bg-dashboard-inset rounded-t-xl">
+                  <h3 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
                     Active Shipments Ledger
                   </h3>
                 </div>
 
                 {hasNoShipments ? (
-                  <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/40 text-center my-4 mx-6">
-                    <div className="p-3 bg-slate-100 text-slate-400 rounded-full mb-3">
+                  <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed border-slate-200 dark:border-white/10 rounded-xl bg-slate-50/40 text-center my-4 mx-6">
+                    <div className="p-3 bg-slate-100 dark:bg-white/5 text-slate-400 rounded-full mb-3">
                       <Truck className="w-6 h-6" />
                     </div>
-                    <h3 className="text-sm font-semibold text-slate-800">Your workspace is clean</h3>
-                    <p className="text-xs text-slate-500 max-w-xs mt-1">
+                    <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Your workspace is clean</h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-500 max-w-xs mt-1">
                       Connect your warehouse stock or send your first WhatsApp text order to see live tracking metrics update instantly.
                     </p>
                   </div>
@@ -636,13 +636,13 @@ export default function ShipmentsPage() {
                           <th className="py-3 px-6 text-center">Actions</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
+                      <tbody className="divide-y divide-slate-100 dark:divide-white/5 font-semibold text-slate-700 dark:text-slate-300">
                         {shipments.map(s => (
                           <tr key={s.shipment_id} className="hover:bg-slate-50/50 transition-colors">
                             <td className="py-4 px-6">
-                              <span className="font-bold text-slate-800">{s.shipment_id.slice(0, 8).toUpperCase()}...</span>
+                              <span className="font-bold text-slate-800 dark:text-slate-100">{s.shipment_id.slice(0, 8).toUpperCase()}...</span>
                             </td>
-                            <td className="py-4 px-6 text-slate-600">
+                            <td className="py-4 px-6 text-slate-600 dark:text-slate-400">
                               <div>{s.driver_name}</div>
                               <div className="text-[10px] text-slate-400 mt-0.5">{s.vehicle_number}</div>
                             </td>
@@ -697,10 +697,10 @@ export default function ShipmentsPage() {
                   </div>
                 )}
                 {activeCursor && (
-                  <div className="flex justify-center border-t border-slate-100 p-4">
+                  <div className="flex justify-center border-t border-slate-100 dark:border-white/5 p-4">
                     <button
                       onClick={loadMoreActive}
-                      className="px-4 py-1.5 bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100 text-[10px] font-bold rounded-lg transition-all cursor-pointer shadow-sm"
+                      className="px-4 py-1.5 bg-slate-50 dark:bg-dashboard-inset border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 text-[10px] font-bold rounded-lg transition-all cursor-pointer shadow-sm"
                     >
                       Load More Shipments
                     </button>
@@ -714,7 +714,7 @@ export default function ShipmentsPage() {
 
       {/* Sleek Floating Toast Notification */}
       {toast.show && (
-        <div className="fixed top-5 right-5 z-50 flex items-center gap-3 bg-white/95 backdrop-blur-md border border-slate-100 shadow-2xl px-4 py-3.5 rounded-xl animate-slide-in pointer-events-auto max-w-sm">
+        <div className="fixed top-5 right-5 z-50 flex items-center gap-3 bg-white/95 dark:bg-dashboard-card/95 backdrop-blur-md border border-slate-100 dark:border-white/5 shadow-2xl px-4 py-3.5 rounded-xl animate-slide-in pointer-events-auto max-w-sm">
           {toast.type === "success" ? (
             <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0 shadow-sm">
               <CheckCircle2 className="w-4.5 h-4.5" />
@@ -725,12 +725,12 @@ export default function ShipmentsPage() {
             </div>
           )}
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-bold text-slate-800">{toast.type === "success" ? "Success" : "Error"}</p>
-            <p className="text-[11px] text-slate-500 font-semibold mt-0.5 break-words">{toast.message}</p>
+            <p className="text-xs font-bold text-slate-800 dark:text-slate-100">{toast.type === "success" ? "Success" : "Error"}</p>
+            <p className="text-[11px] text-slate-500 dark:text-slate-500 font-semibold mt-0.5 break-words">{toast.message}</p>
           </div>
           <button
             onClick={() => setToast(prev => ({ ...prev, show: false }))}
-            className="text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-50 transition-all shrink-0 cursor-pointer"
+            className="text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-50 dark:hover:bg-white/5 transition-all shrink-0 cursor-pointer"
           >
             <X className="w-3.5 h-3.5" />
           </button>

@@ -2,6 +2,7 @@ import { Figtree } from "next/font/google";
 import "./globals.css";
 import type { Metadata } from "next";
 import Script from "next/script";
+import { ThemeProvider } from "@/contexts/ThemeContext";
 
 const figtree = Figtree({
   subsets: ["latin"],
@@ -14,14 +15,29 @@ export const metadata: Metadata = {
   description: "B2B Operational Operating System for India",
 };
 
+// Runs before hydration to set the correct theme attribute/class from
+// localStorage, preventing a flash of the wrong theme on load. Defaults to
+// "dark" (the new premium default) when no preference has been saved yet.
+const THEME_BOOTSTRAP_SCRIPT = `
+(function () {
+  try {
+    var stored = localStorage.getItem('theme');
+    var theme = stored === 'light' || stored === 'dark' ? stored : 'dark';
+    document.documentElement.setAttribute('data-theme', theme);
+    document.documentElement.classList.toggle('dark', theme === 'dark');
+  } catch (e) {}
+})();
+`;
+
 export default function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${figtree.className} ${figtree.variable}`}>
+    <html lang="en" className={`${figtree.className} ${figtree.variable}`} suppressHydrationWarning>
       <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }} />
         {process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID && (
           <>
             <Script
@@ -50,8 +66,8 @@ export default function RootLayout({
           </Script>
         )}
       </head>
-      <body className="antialiased bg-slate-50 text-slate-900">
-        {children}
+      <body className="antialiased bg-dashboard-bg text-dashboard-text" suppressHydrationWarning>
+        <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>
   );

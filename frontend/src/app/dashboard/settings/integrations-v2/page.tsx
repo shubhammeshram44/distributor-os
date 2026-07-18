@@ -471,7 +471,7 @@ export default function IntegrationsPageV2() {
   const displayPhone = ownerJid ? ownerJid.replace("@s.whatsapp.net", "") : whatsappOrderPhone;
 
   return (
-    <div className="flex min-h-screen bg-slate-50">
+    <div className="flex min-h-screen bg-slate-50 dark:bg-dashboard-inset">
       <Sidebar activeTab="Integrations" setActiveTab={() => {}} tenantName={getTenantName()} />
       
       <main className="flex-1 md:pl-64 min-h-screen flex flex-col">
@@ -487,16 +487,16 @@ export default function IntegrationsPageV2() {
             
             {/* Page header */}
             <div className="mb-4">
-              <h1 className="text-2xl font-bold text-slate-900">Integrations</h1>
-              <p className="text-slate-500 text-sm mt-1">
+              <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-50">Integrations</h1>
+              <p className="text-slate-500 dark:text-slate-500 text-sm mt-1">
                 Connect your tools to automate your distribution business.
               </p>
             </div>
 
             {/* Business Profile / GSTIN */}
-            <div className="bg-white rounded-xl border border-slate-200 p-6">
+            <div className="bg-white dark:bg-dashboard-card rounded-xl border border-slate-200 dark:border-white/10 p-6">
               <div>
-                <h3 className="font-bold text-slate-800 text-base">Business Profile</h3>
+                <h3 className="font-bold text-slate-800 dark:text-slate-100 text-base">Business Profile</h3>
                 <p className="text-xs text-slate-400 font-semibold mt-0.5">
                   Shown on your customers&apos; Tax Invoices.
                 </p>
@@ -504,19 +504,19 @@ export default function IntegrationsPageV2() {
               <div className="space-y-4 mt-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-[11px] font-bold text-slate-500 mb-2 uppercase tracking-wider">
+                    <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-500 mb-2 uppercase tracking-wider">
                       Business Name
                     </label>
                     <input
                       type="text"
                       value={businessName}
                       onChange={(e) => setBusinessName(e.target.value)}
-                      className="w-full px-4 py-2 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-slate-50/20 text-slate-700"
+                      className="w-full px-4 py-2 border border-slate-200 dark:border-white/10 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-slate-50/20 text-slate-700 dark:text-slate-300"
                       disabled={savingProfile}
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-bold text-slate-500 mb-2 uppercase tracking-wider">
+                    <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-500 mb-2 uppercase tracking-wider">
                       GSTIN <span className="normal-case font-medium text-slate-400">(optional)</span>
                     </label>
                     <input
@@ -525,12 +525,12 @@ export default function IntegrationsPageV2() {
                       value={businessGstin}
                       onChange={(e) => setBusinessGstin(e.target.value.toUpperCase())}
                       maxLength={15}
-                      className="w-full px-4 py-2 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-slate-50/20 text-slate-700 uppercase"
+                      className="w-full px-4 py-2 border border-slate-200 dark:border-white/10 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-slate-50/20 text-slate-700 dark:text-slate-300 uppercase"
                       disabled={savingProfile}
                     />
                   </div>
                 </div>
-                <div className="flex justify-end pt-2 border-t border-slate-100 mt-2">
+                <div className="flex justify-end pt-2 border-t border-slate-100 dark:border-white/5 mt-2">
                   <button
                     type="button"
                     onClick={handleSaveBusinessProfile}
@@ -545,7 +545,7 @@ export default function IntegrationsPageV2() {
             </div>
 
             {/* Category tabs */}
-            <div className="flex gap-2 mb-4 border-b border-slate-200">
+            <div className="flex gap-2 mb-4 border-b border-slate-200 dark:border-white/10">
               {["All", "Communication", "Payments"].map(tab => (
                 <button
                   key={tab}
@@ -554,7 +554,7 @@ export default function IntegrationsPageV2() {
                   className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
                     activeTab === tab
                       ? "border-emerald-600 text-emerald-700"
-                      : "border-transparent text-slate-500 hover:text-slate-700"
+                      : "border-transparent text-slate-500 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200"
                   }`}
                 >
                   {tab}
@@ -571,14 +571,14 @@ export default function IntegrationsPageV2() {
 
                 {/* WhatsApp Card */}
                 {(activeTab === "All" || activeTab === "Communication") && (
-                  <div className="bg-white rounded-xl border border-slate-200 p-5">
+                  <div className="bg-white dark:bg-dashboard-card rounded-xl border border-slate-200 dark:border-white/10 p-5">
                     <div className="flex items-start justify-between mb-3">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 bg-green-50 rounded-xl flex items-center justify-center text-xl">
                           💬
                         </div>
                         <div>
-                          <h3 className="text-sm font-semibold text-slate-800">WhatsApp</h3>
+                          <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">WhatsApp</h3>
                           <p className="text-xs text-slate-400">Order intake & notifications</p>
                         </div>
                       </div>
@@ -593,13 +593,13 @@ export default function IntegrationsPageV2() {
                           Disconnected
                         </span>
                       ) : (
-                        <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">
+                        <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 dark:text-slate-500 bg-slate-100 dark:bg-white/5 px-2.5 py-1 rounded-full">
                           <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
                           Not Connected
                         </span>
                       )}
                     </div>
-                    <p className="text-xs text-slate-500 mb-4">
+                    <p className="text-xs text-slate-500 dark:text-slate-500 mb-4">
                       Retailers order via WhatsApp as usual. Orders appear in your dashboard automatically.
                     </p>
                     
@@ -614,25 +614,25 @@ export default function IntegrationsPageV2() {
 
                     {/* Existing WhatsApp connect/disconnect/QR JSX — show when expanded */}
                     {whatsappExpanded && (
-                      <div className="mt-4 pt-4 border-t border-slate-100">
+                      <div className="mt-4 pt-4 border-t border-slate-100 dark:border-white/5">
                         {provisioningStatus === "connected" ? (
                           <div className="space-y-4">
-                            <div className="bg-slate-50 border border-slate-200/60 rounded-xl p-4 flex flex-col gap-2">
+                            <div className="bg-slate-50 dark:bg-dashboard-inset border border-slate-200/60 rounded-xl p-4 flex flex-col gap-2">
                               <div className="flex justify-between items-center">
-                                <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Connected Phone Number</span>
-                                <span className="text-sm font-bold text-slate-800">
+                                <span className="text-xs font-bold text-slate-500 dark:text-slate-500 uppercase tracking-wide">Connected Phone Number</span>
+                                <span className="text-sm font-bold text-slate-800 dark:text-slate-100">
                                   +{displayPhone.replace("+", "")}
                                 </span>
                               </div>
                               <div className="flex justify-between items-center border-t border-slate-200/60 pt-2 mt-1">
-                                <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Instance ID</span>
-                                <span className="text-xs font-semibold text-slate-500 font-mono">
+                                <span className="text-xs font-bold text-slate-500 dark:text-slate-500 uppercase tracking-wide">Instance ID</span>
+                                <span className="text-xs font-semibold text-slate-500 dark:text-slate-500 font-mono">
                                   {instanceName}
                                 </span>
                               </div>
                             </div>
 
-                            <div className="flex justify-end pt-2 border-t border-slate-100 mt-6">
+                            <div className="flex justify-end pt-2 border-t border-slate-100 dark:border-white/5 mt-6">
                               <button
                                 type="button"
                                 onClick={() => setShowDisconnectModal(true)}
@@ -664,9 +664,9 @@ export default function IntegrationsPageV2() {
                               </div>
                             </div>
 
-                            <div className="bg-slate-50 border border-slate-200/60 rounded-xl p-4 text-xs text-slate-500 leading-relaxed font-semibold">
-                              <p className="font-semibold text-slate-700 mb-1">To reconnect:</p>
-                              <ol className="list-decimal pl-4 space-y-1 text-slate-500 font-medium">
+                            <div className="bg-slate-50 dark:bg-dashboard-inset border border-slate-200/60 rounded-xl p-4 text-xs text-slate-500 dark:text-slate-500 leading-relaxed font-semibold">
+                              <p className="font-semibold text-slate-700 dark:text-slate-300 mb-1">To reconnect:</p>
+                              <ol className="list-decimal pl-4 space-y-1 text-slate-500 dark:text-slate-500 font-medium">
                                 <li>Click "Reconnect WhatsApp" below</li>
                                 <li>Scan the QR code with your WhatsApp</li>
                                 <li>Orders will resume automatically</li>
@@ -680,7 +680,7 @@ export default function IntegrationsPageV2() {
                               </div>
                             )}
 
-                            <div className="flex justify-end pt-2 border-t border-slate-100 mt-6">
+                            <div className="flex justify-end pt-2 border-t border-slate-100 dark:border-white/5 mt-6">
                               <button
                                 type="button"
                                 onClick={handleProvisionEvolution}
@@ -693,11 +693,11 @@ export default function IntegrationsPageV2() {
                           </div>
                         ) : (
                           <>
-                            <div className="bg-slate-50 border border-slate-200/60 rounded-xl p-4 flex gap-3 text-slate-600 text-xs leading-relaxed font-semibold">
+                            <div className="bg-slate-50 dark:bg-dashboard-inset border border-slate-200/60 rounded-xl p-4 flex gap-3 text-slate-600 dark:text-slate-400 text-xs leading-relaxed font-semibold">
                               <AlertCircle className="w-5 h-5 text-brand-blue flex-shrink-0 mt-0.5" />
                               <div>
-                                <span className="text-slate-800 font-bold">Evolution API Connection Instructions:</span>
-                                <ul className="list-disc pl-4 mt-1.5 space-y-1 text-slate-500 font-medium">
+                                <span className="text-slate-800 dark:text-slate-100 font-bold">Evolution API Connection Instructions:</span>
+                                <ul className="list-disc pl-4 mt-1.5 space-y-1 text-slate-500 dark:text-slate-500 font-medium">
                                   <li>Click "Connect WhatsApp" to initialize the connection.</li>
                                   <li>The system will auto-generate a unique instance ID for your workspace.</li>
                                   <li>Scan the generated QR code using the "Link a Device" option in your WhatsApp app.</li>
@@ -708,9 +708,9 @@ export default function IntegrationsPageV2() {
 
                             <form onSubmit={handleProvisionEvolution} className="space-y-5 mt-4">
                               {qrCodeBase64 && (provisioningStatus === "connecting" || provisioningStatus === "provisioning") && (
-                                <div className="flex flex-col items-center justify-center p-6 bg-slate-50 border border-dashed border-slate-200 rounded-xl space-y-4">
-                                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Scan this QR code with WhatsApp</p>
-                                  <div className="bg-white p-4 rounded-xl shadow-md border border-slate-100">
+                                <div className="flex flex-col items-center justify-center p-6 bg-slate-50 dark:bg-dashboard-inset border border-dashed border-slate-200 dark:border-white/10 rounded-xl space-y-4">
+                                  <p className="text-xs font-bold text-slate-500 dark:text-slate-500 uppercase tracking-wide">Scan this QR code with WhatsApp</p>
+                                  <div className="bg-white dark:bg-dashboard-card p-4 rounded-xl shadow-md border border-slate-100 dark:border-white/5">
                                     <img src={qrCodeBase64} alt="WhatsApp QR Code" className="w-48 h-48" />
                                   </div>
                                   <p className="text-[10px] text-slate-400 font-semibold animate-pulse flex items-center gap-1.5">
@@ -727,7 +727,7 @@ export default function IntegrationsPageV2() {
                                 </div>
                               )}
 
-                              <div className="flex justify-end pt-2 border-t border-slate-100 mt-6">
+                              <div className="flex justify-end pt-2 border-t border-slate-100 dark:border-white/5 mt-6">
                                 <button
                                   type="submit"
                                   disabled={provisioningStatus === "provisioning" || provisioningStatus === "connecting"}
@@ -753,14 +753,14 @@ export default function IntegrationsPageV2() {
 
                 {/* Razorpay Card */}
                 {(activeTab === "All" || activeTab === "Payments") && (
-                  <div className="bg-white rounded-xl border border-slate-200 p-5">
+                  <div className="bg-white dark:bg-dashboard-card rounded-xl border border-slate-200 dark:border-white/10 p-5">
                     <div className="flex items-start justify-between mb-3">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center text-xl">
                           💳
                         </div>
                         <div>
-                          <h3 className="text-sm font-semibold text-slate-800">Razorpay</h3>
+                          <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Razorpay</h3>
                           <p className="text-xs text-slate-400">Payment collection</p>
                         </div>
                       </div>
@@ -770,13 +770,13 @@ export default function IntegrationsPageV2() {
                           {razorpayMode === "test" ? "Connected · Test Mode" : "Connected · Live"}
                         </span>
                       ) : (
-                        <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">
+                        <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 dark:text-slate-500 bg-slate-100 dark:bg-white/5 px-2.5 py-1 rounded-full">
                           <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
                           Not Connected
                         </span>
                       )}
                     </div>
-                    <p className="text-xs text-slate-500 mb-4">
+                    <p className="text-xs text-slate-500 dark:text-slate-500 mb-4">
                       Send UPI payment links to retailers on WhatsApp. Payments reconcile automatically.
                     </p>
 
@@ -790,25 +790,25 @@ export default function IntegrationsPageV2() {
 
                     {/* Existing Razorpay connect/disconnect JSX — show when expanded */}
                     {razorpayExpanded && (
-                      <div className="mt-4 pt-4 border-t border-slate-100">
+                      <div className="mt-4 pt-4 border-t border-slate-100 dark:border-white/5">
                         {razorpayConnected && !showUpdateForm ? (
                           <div className="space-y-4">
-                            <div className="bg-slate-50 border border-slate-200/60 rounded-xl p-4 flex flex-col gap-2 font-semibold">
+                            <div className="bg-slate-50 dark:bg-dashboard-inset border border-slate-200/60 rounded-xl p-4 flex flex-col gap-2 font-semibold">
                               <div className="flex justify-between items-center">
-                                <span className="text-xs text-slate-500 uppercase tracking-wide">Account Name</span>
-                                <span className="text-sm text-slate-800">{accountName || "—"}</span>
+                                <span className="text-xs text-slate-500 dark:text-slate-500 uppercase tracking-wide">Account Name</span>
+                                <span className="text-sm text-slate-800 dark:text-slate-100">{accountName || "—"}</span>
                               </div>
                               <div className="flex justify-between items-center border-t border-slate-200/60 pt-2 mt-1">
-                                <span className="text-xs text-slate-500 uppercase tracking-wide">Key ID</span>
-                                <span className="text-sm font-mono text-slate-800">{keyIdMasked}</span>
+                                <span className="text-xs text-slate-500 dark:text-slate-500 uppercase tracking-wide">Key ID</span>
+                                <span className="text-sm font-mono text-slate-800 dark:text-slate-100">{keyIdMasked}</span>
                               </div>
                             </div>
 
-                            <div className="flex justify-end gap-3 pt-2 border-t border-slate-100 mt-6">
+                            <div className="flex justify-end gap-3 pt-2 border-t border-slate-100 dark:border-white/5 mt-6">
                               <button
                                 type="button"
                                 onClick={() => setShowUpdateForm(true)}
-                                className="px-6 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-bold shadow-sm cursor-pointer transition-all"
+                                className="px-6 py-2.5 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-bold shadow-sm cursor-pointer transition-all"
                               >
                                 Update Keys
                               </button>
@@ -823,11 +823,11 @@ export default function IntegrationsPageV2() {
                           </div>
                         ) : (
                           <>
-                            <div className="bg-slate-50 border border-slate-200/60 rounded-xl p-4 flex gap-3 text-slate-600 text-xs leading-relaxed font-semibold">
+                            <div className="bg-slate-50 dark:bg-dashboard-inset border border-slate-200/60 rounded-xl p-4 flex gap-3 text-slate-600 dark:text-slate-400 text-xs leading-relaxed font-semibold">
                               <ShieldCheck className="w-5 h-5 text-brand-blue flex-shrink-0 mt-0.5" />
                               <div>
-                                <span className="text-slate-800 font-bold">Secure connection:</span>
-                                <ul className="list-disc pl-4 mt-1.5 space-y-1 text-slate-500 font-medium">
+                                <span className="text-slate-800 dark:text-slate-100 font-bold">Secure connection:</span>
+                                <ul className="list-disc pl-4 mt-1.5 space-y-1 text-slate-500 dark:text-slate-500 font-medium">
                                   <li>Your secret key is encrypted with AES-256 and is never visible after saving.</li>
                                   <li>Keys are used only to generate payment links for your retailers.</li>
                                 </ul>
@@ -836,7 +836,7 @@ export default function IntegrationsPageV2() {
 
                             <form onSubmit={handleRazorpayConnect} className="space-y-5 mt-4">
                               <div className="space-y-1.5">
-                                <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">
+                                <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wide">
                                   Razorpay Key ID *
                                 </label>
                                 <input
@@ -844,12 +844,12 @@ export default function IntegrationsPageV2() {
                                   value={keyIdInput}
                                   onChange={e => setKeyIdInput(e.target.value)}
                                   placeholder="rzp_test_xxxxxxxxxxxx"
-                                  className="w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm font-medium focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
+                                  className="w-full px-4 py-2.5 border border-slate-200 dark:border-white/10 rounded-lg text-sm font-medium focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
                                 />
                               </div>
 
                               <div className="space-y-1.5">
-                                <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">
+                                <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wide">
                                   Razorpay Key Secret *
                                 </label>
                                 <div className="relative">
@@ -858,7 +858,7 @@ export default function IntegrationsPageV2() {
                                     value={keySecretInput}
                                     onChange={e => setKeySecretInput(e.target.value)}
                                     placeholder="••••••••••••••••••••••••••••••"
-                                    className="w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm font-medium focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all pr-12"
+                                    className="w-full px-4 py-2.5 border border-slate-200 dark:border-white/10 rounded-lg text-sm font-medium focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all pr-12"
                                   />
                                   <button
                                     type="button"
@@ -877,7 +877,7 @@ export default function IntegrationsPageV2() {
                                 </div>
                               )}
 
-                              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pt-2 border-t border-slate-100 mt-6 gap-4">
+                              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pt-2 border-t border-slate-100 dark:border-white/5 mt-6 gap-4">
                                 <div className="flex flex-col gap-1.5">
                                   <a
                                     href="https://razorpay.com/"
@@ -909,7 +909,7 @@ export default function IntegrationsPageV2() {
                                         setKeyIdInput("");
                                         setKeySecretInput("");
                                       }}
-                                      className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-bold cursor-pointer transition-all"
+                                      className="px-5 py-2.5 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-bold cursor-pointer transition-all"
                                     >
                                       Cancel
                                     </button>
@@ -953,22 +953,22 @@ export default function IntegrationsPageV2() {
                     { icon: "🏦", name: "Marg ERP", desc: "Sync orders with Marg distribution software", category: "ERP" },
                     { icon: "📋", name: "GST Portal", desc: "Generate e-Invoice IRN for invoices above ₹5Cr", category: "Accounting" },
                   ].map(item => (
-                    <div key={item.name} className="bg-white rounded-xl border border-slate-200 p-5 opacity-70">
+                    <div key={item.name} className="bg-white dark:bg-dashboard-card rounded-xl border border-slate-200 dark:border-white/10 p-5 opacity-70">
                       <div className="flex items-start justify-between mb-3">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-xl">
+                          <div className="w-10 h-10 bg-slate-50 dark:bg-dashboard-inset rounded-xl flex items-center justify-center text-xl">
                             {item.icon}
                           </div>
                           <div>
-                            <h3 className="text-sm font-semibold text-slate-800">{item.name}</h3>
+                            <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">{item.name}</h3>
                             <p className="text-xs text-slate-400">{item.category}</p>
                           </div>
                         </div>
-                        <span className="text-xs font-semibold text-slate-400 bg-slate-100 px-2.5 py-1 rounded-full">
+                        <span className="text-xs font-semibold text-slate-400 bg-slate-100 dark:bg-white/5 px-2.5 py-1 rounded-full">
                           Coming Soon
                         </span>
                       </div>
-                      <p className="text-xs text-slate-500">{item.desc}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-500">{item.desc}</p>
                     </div>
                   ))}
                 </div>
@@ -976,11 +976,11 @@ export default function IntegrationsPageV2() {
             )}
 
             {/* Request Integration */}
-            <div className="bg-slate-50 rounded-xl border border-slate-200 p-6">
-              <h3 className="text-sm font-semibold text-slate-800 mb-1">
+            <div className="bg-slate-50 dark:bg-dashboard-inset rounded-xl border border-slate-200 dark:border-white/10 p-6">
+              <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100 mb-1">
                 Don&apos;t see what you need?
               </h3>
-              <p className="text-xs text-slate-500 mb-4">
+              <p className="text-xs text-slate-500 dark:text-slate-500 mb-4">
                 Tell us which tool you use and we&apos;ll prioritize it.
               </p>
               <div className="flex gap-3">
@@ -989,7 +989,7 @@ export default function IntegrationsPageV2() {
                   value={integrationRequest}
                   onChange={e => setIntegrationRequest(e.target.value)}
                   placeholder="e.g. Marg ERP, Busy Accounting, Zoho..."
-                  className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-emerald-500 bg-white"
+                  className="flex-1 border border-slate-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-emerald-500 bg-white dark:bg-dashboard-card"
                 />
                 <button
                   type="button"
@@ -1018,24 +1018,24 @@ export default function IntegrationsPageV2() {
       {/* Disconnect WhatsApp Modal */}
       {showDisconnectModal && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full border border-slate-100 p-6 space-y-6 animate-in fade-in zoom-in duration-200">
+          <div className="bg-white dark:bg-dashboard-card rounded-2xl shadow-xl max-w-md w-full border border-slate-100 dark:border-white/5 p-6 space-y-6 animate-in fade-in zoom-in duration-200">
             <div className="flex items-start gap-4">
               <div className="p-3 bg-rose-50 rounded-full text-rose-600">
                 <AlertCircle className="w-6 h-6" />
               </div>
               <div className="space-y-1.5">
                 <h3 className="text-base font-bold text-slate-950">Disconnect WhatsApp</h3>
-                <p className="text-sm text-slate-500 font-semibold leading-relaxed font-semibold">
+                <p className="text-sm text-slate-500 dark:text-slate-500 font-semibold leading-relaxed font-semibold">
                   This will disconnect your WhatsApp. New orders will stop coming in. Are you sure?
                 </p>
               </div>
             </div>
-            <div className="flex justify-end gap-3 pt-2 border-t border-slate-100">
+            <div className="flex justify-end gap-3 pt-2 border-t border-slate-100 dark:border-white/5">
               <button
                 type="button"
                 disabled={disconnecting}
                 onClick={() => setShowDisconnectModal(false)}
-                className="px-4 py-2 text-slate-600 hover:bg-slate-50 rounded-lg text-sm font-bold cursor-pointer transition-all"
+                className="px-4 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-white/5 rounded-lg text-sm font-bold cursor-pointer transition-all"
               >
                 Cancel
               </button>
@@ -1062,24 +1062,24 @@ export default function IntegrationsPageV2() {
       {/* Disconnect Razorpay Modal */}
       {showRazorpayDisconnectModal && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full border border-slate-100 p-6 space-y-6 animate-in fade-in zoom-in duration-200">
+          <div className="bg-white dark:bg-dashboard-card rounded-2xl shadow-xl max-w-md w-full border border-slate-100 dark:border-white/5 p-6 space-y-6 animate-in fade-in zoom-in duration-200">
             <div className="flex items-start gap-4">
               <div className="p-3 bg-rose-50 rounded-full text-rose-600">
                 <AlertCircle className="w-6 h-6" />
               </div>
               <div className="space-y-1.5">
                 <h3 className="text-base font-bold text-slate-950">Disconnect Razorpay</h3>
-                <p className="text-sm text-slate-500 font-semibold leading-relaxed font-semibold">
+                <p className="text-sm text-slate-500 dark:text-slate-500 font-semibold leading-relaxed font-semibold">
                   This will disconnect your Razorpay integration. Retailers will no longer be able to make online payments. Are you sure?
                 </p>
               </div>
             </div>
-            <div className="flex justify-end gap-3 pt-2 border-t border-slate-100">
+            <div className="flex justify-end gap-3 pt-2 border-t border-slate-100 dark:border-white/5">
               <button
                 type="button"
                 disabled={disconnectingRazorpay}
                 onClick={() => setShowRazorpayDisconnectModal(false)}
-                className="px-4 py-2 text-slate-600 hover:bg-slate-50 rounded-lg text-sm font-bold cursor-pointer transition-all"
+                className="px-4 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-white/5 rounded-lg text-sm font-bold cursor-pointer transition-all"
               >
                 Cancel
               </button>
@@ -1106,7 +1106,7 @@ export default function IntegrationsPageV2() {
       {/* Elegant Toast Notifications */}
       {toast.show && (
         <div className="fixed bottom-5 right-5 z-50 animate-slide-in">
-          <div className={`flex items-center gap-3 px-5 py-3 rounded-lg border shadow-xl bg-white ${
+          <div className={`flex items-center gap-3 px-5 py-3 rounded-lg border shadow-xl bg-white dark:bg-dashboard-card ${
             toast.type === "success" 
               ? "border-emerald-200 text-emerald-800" 
               : "border-rose-200 text-rose-800"

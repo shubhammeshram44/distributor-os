@@ -207,7 +207,7 @@ export default function NotificationsSettingsPage() {
   };
 
   return (
-    <div className="flex bg-dashboard-bg min-h-screen text-slate-800 font-sans">
+    <div className="flex bg-dashboard-bg min-h-screen text-slate-800 dark:text-slate-100 font-sans">
       {/* Sidebar */}
       <Sidebar
         activeTab="Notifications"
@@ -237,13 +237,13 @@ export default function NotificationsSettingsPage() {
 
           <div className="p-8 max-w-4xl mx-auto space-y-6">
             {/* Header Card */}
-            <div className="bg-white border border-dashboard-border rounded-xl p-6 shadow-sm flex items-center justify-between">
+            <div className="bg-white dark:bg-dashboard-card border border-dashboard-border rounded-xl p-6 shadow-sm flex items-center justify-between">
               <div>
-                <h2 className="text-xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
+                <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-50 flex items-center gap-2">
                   <Bell className="w-6 h-6 text-brand-blue" />
                   WhatsApp Notifications
                 </h2>
-                <p className="text-slate-500 text-sm mt-1">
+                <p className="text-slate-500 dark:text-slate-500 text-sm mt-1">
                   Configure automated WhatsApp notifications triggered by key order lifecycle events.
                 </p>
               </div>
@@ -255,14 +255,14 @@ export default function NotificationsSettingsPage() {
             {loading ? (
               <div className="flex flex-col items-center justify-center py-20 gap-3">
                 <Loader2 className="w-10 h-10 text-brand-blue animate-spin" />
-                <span className="text-slate-500 text-sm font-medium animate-pulse">Loading notification preferences...</span>
+                <span className="text-slate-500 dark:text-slate-500 text-sm font-medium animate-pulse">Loading notification preferences...</span>
               </div>
             ) : (
               <div className="space-y-6">
                 {/* Operational Section */}
-                <div className="bg-white border border-dashboard-border rounded-xl overflow-hidden shadow-sm">
-                  <div className="px-6 py-4 border-b border-dashboard-border bg-slate-50 flex items-center justify-between">
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Operational Notifications</span>
+                <div className="bg-white dark:bg-dashboard-card border border-dashboard-border rounded-xl overflow-hidden shadow-sm">
+                  <div className="px-6 py-4 border-b border-dashboard-border bg-slate-50 dark:bg-dashboard-inset flex items-center justify-between">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-500">Operational Notifications</span>
                     <span className="text-xs text-slate-400 font-medium">Auto-saves on change</span>
                   </div>
                   <div className="divide-y divide-dashboard-border">
@@ -272,8 +272,8 @@ export default function NotificationsSettingsPage() {
                       return (
                         <div key={key} className="px-6 py-5 flex items-center justify-between hover:bg-slate-50/50 transition-all duration-200">
                           <div className="space-y-1 pr-6">
-                            <h4 className="text-sm font-semibold text-slate-800">{label.title}</h4>
-                            <p className="text-xs text-slate-500 leading-relaxed max-w-xl">{label.desc}</p>
+                            <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-100">{label.title}</h4>
+                            <p className="text-xs text-slate-500 dark:text-slate-500 leading-relaxed max-w-xl">{label.desc}</p>
                           </div>
                           
                           {/* Toggle Switch */}
@@ -284,7 +284,7 @@ export default function NotificationsSettingsPage() {
                             }`}
                           >
                             <span
-                              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white dark:bg-dashboard-card shadow ring-0 transition duration-200 ease-in-out ${
                                 isChecked ? "translate-x-5" : "translate-x-0"
                               }`}
                             />
@@ -296,9 +296,9 @@ export default function NotificationsSettingsPage() {
                 </div>
 
                 {/* Financial Section */}
-                <div className="bg-white border border-dashboard-border rounded-xl overflow-hidden shadow-sm">
-                  <div className="px-6 py-4 border-b border-dashboard-border bg-slate-50 flex items-center justify-between">
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Financial Notifications</span>
+                <div className="bg-white dark:bg-dashboard-card border border-dashboard-border rounded-xl overflow-hidden shadow-sm">
+                  <div className="px-6 py-4 border-b border-dashboard-border bg-slate-50 dark:bg-dashboard-inset flex items-center justify-between">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-500">Financial Notifications</span>
                     <span className="text-xs text-slate-400 font-medium">Auto-saves on change</span>
                   </div>
                   <div className="divide-y divide-dashboard-border">
@@ -308,8 +308,8 @@ export default function NotificationsSettingsPage() {
                       return (
                         <div key={key} className="px-6 py-5 flex items-center justify-between hover:bg-slate-50/50 transition-all duration-200">
                           <div className="space-y-1 pr-6">
-                            <h4 className="text-sm font-semibold text-slate-800">{label.title}</h4>
-                            <p className="text-xs text-slate-500 leading-relaxed max-w-xl">{label.desc}</p>
+                            <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-100">{label.title}</h4>
+                            <p className="text-xs text-slate-500 dark:text-slate-500 leading-relaxed max-w-xl">{label.desc}</p>
                           </div>
                           
                           {/* Toggle Switch */}
@@ -320,7 +320,7 @@ export default function NotificationsSettingsPage() {
                             }`}
                           >
                             <span
-                              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white dark:bg-dashboard-card shadow ring-0 transition duration-200 ease-in-out ${
                                 isChecked ? "translate-x-5" : "translate-x-0"
                               }`}
                             />
@@ -334,10 +334,10 @@ export default function NotificationsSettingsPage() {
             )}
 
             {/* Template Info Card */}
-            <div className="bg-slate-50 border border-dashboard-border rounded-xl p-5 flex gap-4">
+            <div className="bg-slate-50 dark:bg-dashboard-inset border border-dashboard-border rounded-xl p-5 flex gap-4">
               <MessageSquareCode className="w-8 h-8 text-slate-400 flex-shrink-0 mt-0.5" />
               <div className="space-y-1">
-                <h5 className="text-xs font-bold uppercase text-slate-500 tracking-wider">Templated Messaging</h5>
+                <h5 className="text-xs font-bold uppercase text-slate-500 dark:text-slate-500 tracking-wider">Templated Messaging</h5>
                 <p className="text-xs text-slate-400 leading-relaxed">
                   All alerts use pre-formatted country-code validated templates to optimize delivery success. Ensure your WhatsApp instance is correctly connected via the <a href="/dashboard/settings/integrations" className="text-brand-blue hover:underline">Integrations</a> page.
                 </p>

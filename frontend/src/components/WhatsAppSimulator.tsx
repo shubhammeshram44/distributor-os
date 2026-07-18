@@ -161,10 +161,10 @@ export default function WhatsAppSimulator({ activeTenantId, onSuccess }: WhatsAp
   return (
     <div className="fixed bottom-6 right-6 z-40 flex flex-col items-end">
       {isOpen && (
-        <div className="bg-white border border-slate-100 rounded-2xl shadow-2xl p-5 mb-3 w-96 text-slate-700 animate-in fade-in slide-in-from-bottom-4 duration-200">
-          <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
+        <div className="bg-white dark:bg-dashboard-card border border-slate-100 dark:border-white/5 rounded-2xl shadow-2xl p-5 mb-3 w-96 text-slate-700 dark:text-slate-300 animate-in fade-in slide-in-from-bottom-4 duration-200">
+          <div className="flex items-center gap-2 pb-3 border-b border-slate-100 dark:border-white/5">
             <Radio className="w-4 h-4 text-emerald-500 animate-pulse" />
-            <h3 className="text-xs font-bold tracking-tight text-slate-800">WhatsApp Ingestion Pipeline Simulator</h3>
+            <h3 className="text-xs font-bold tracking-tight text-slate-800 dark:text-slate-100">WhatsApp Ingestion Pipeline Simulator</h3>
           </div>
 
           <div className="mt-4 space-y-3.5">
@@ -174,7 +174,7 @@ export default function WhatsAppSimulator({ activeTenantId, onSuccess }: WhatsAp
               <select
                 value={selectedCustomerId}
                 onChange={(e) => handleCustomerSelection(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 outline-none focus:border-emerald-500 transition-all cursor-pointer"
+                className="w-full bg-slate-50 dark:bg-dashboard-inset border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 outline-none focus:border-emerald-500 transition-all cursor-pointer"
               >
                 <option value="custom">✨ Setup Custom Input Number Override...</option>
                 {isLoadingCustomers ? (
@@ -202,7 +202,7 @@ export default function WhatsAppSimulator({ activeTenantId, onSuccess }: WhatsAp
                   value={customName}
                   onChange={(e) => setCustomName(e.target.value)}
                   disabled={selectedCustomerId !== "custom"}
-                  className="w-full bg-slate-50/50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-600 disabled:opacity-60 disabled:cursor-not-allowed outline-none"
+                  className="w-full bg-slate-50/50 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2 text-xs font-semibold text-slate-600 dark:text-slate-400 disabled:opacity-60 disabled:cursor-not-allowed outline-none"
                 />
               </div>
               <div className="space-y-1">
@@ -214,7 +214,7 @@ export default function WhatsAppSimulator({ activeTenantId, onSuccess }: WhatsAp
                   value={customPhone}
                   onChange={(e) => setCustomPhone(e.target.value)}
                   disabled={selectedCustomerId !== "custom"}
-                  className="w-full bg-slate-50/50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-600 disabled:opacity-60 disabled:cursor-not-allowed outline-none"
+                  className="w-full bg-slate-50/50 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2 text-xs font-semibold text-slate-600 dark:text-slate-400 disabled:opacity-60 disabled:cursor-not-allowed outline-none"
                   placeholder="+91"
                 />
               </div>
@@ -228,7 +228,7 @@ export default function WhatsAppSimulator({ activeTenantId, onSuccess }: WhatsAp
                 value={messageText}
                 onChange={(e) => setMessageText(e.target.value)}
                 placeholder="Type unstructured order message text logs..."
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-medium text-slate-600 outline-none focus:border-emerald-500 transition-all resize-none leading-relaxed"
+                className="w-full bg-slate-50 dark:bg-dashboard-inset border border-slate-200 dark:border-white/10 rounded-xl p-3 text-xs font-medium text-slate-600 dark:text-slate-400 outline-none focus:border-emerald-500 transition-all resize-none leading-relaxed"
               />
             </div>
 

@@ -398,14 +398,14 @@ export default function MessagesPage() {
 
   if (!activeTenantId) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-slate-50">
+      <div className="flex items-center justify-center min-h-screen bg-slate-50 dark:bg-dashboard-inset">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-blue" />
       </div>
     );
   }
 
   return (
-    <div className="flex bg-slate-50 min-h-screen text-slate-800 font-figtree overflow-x-auto">
+    <div className="flex bg-slate-50 dark:bg-dashboard-inset min-h-screen text-slate-800 dark:text-slate-100 font-figtree overflow-x-auto">
       {/* Sidebar panel */}
       <Sidebar
         activeTab="Messages"
@@ -427,21 +427,21 @@ export default function MessagesPage() {
         <div className="flex flex-1 overflow-hidden mt-16 min-w-[1024px]">
           
           {/* Panel 1: Left Pane (Retailers List) */}
-          <div className="w-80 border-r border-slate-200 bg-white flex flex-col h-full shadow-sm">
-            <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-              <h2 className="font-bold text-lg text-slate-800 flex items-center gap-2">
+          <div className="w-80 border-r border-slate-200 dark:border-white/10 bg-white dark:bg-dashboard-card flex flex-col h-full shadow-sm">
+            <div className="p-4 border-b border-slate-100 dark:border-white/5 flex items-center justify-between">
+              <h2 className="font-bold text-lg text-slate-800 dark:text-slate-100 flex items-center gap-2">
                 <MessageSquare className="w-5 h-5 text-emerald-600" />
                 <span>Retailer Inbox</span>
               </h2>
               {customers.length > 0 && (
-                <span className="bg-slate-100 text-slate-600 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                <span className="bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-400 text-[10px] font-bold px-2 py-0.5 rounded-full">
                   {customers.length} shops
                 </span>
               )}
             </div>
 
             {/* Search Input */}
-            <div className="p-3 border-b border-slate-100 bg-slate-50/50">
+            <div className="p-3 border-b border-slate-100 dark:border-white/5 bg-slate-50/50">
               <div className="relative">
                 <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
                 <input
@@ -449,13 +449,13 @@ export default function MessagesPage() {
                   placeholder="Filter by shop name or phone..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-1 focus:ring-brand-blue focus:border-brand-blue transition-all"
+                  className="w-full pl-9 pr-4 py-2 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-medium focus:outline-none focus:ring-1 focus:ring-brand-blue focus:border-brand-blue transition-all"
                 />
               </div>
             </div>
 
             {/* Feed Tab Bar */}
-            <div className="flex border-b border-slate-100 bg-white">
+            <div className="flex border-b border-slate-100 dark:border-white/5 bg-white dark:bg-dashboard-card">
               <button
                 onClick={() => setActiveFeedTab("inbox")}
                 className={`flex-1 text-center py-2.5 text-xs font-bold border-b-2 transition-all ${
@@ -489,7 +489,7 @@ export default function MessagesPage() {
                 loading ? (
                   <div className="flex flex-col items-center justify-center py-12 gap-3">
                     <Loader2 className="w-6 h-6 text-brand-blue animate-spin" />
-                    <span className="text-xs text-slate-500 font-semibold">Loading Retailers...</span>
+                    <span className="text-xs text-slate-500 dark:text-slate-500 font-semibold">Loading Retailers...</span>
                   </div>
                 ) : filteredCustomers.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-12 text-slate-400">
@@ -510,19 +510,19 @@ export default function MessagesPage() {
                         onClick={() => handleSelectCustomer(c)}
                         className={`w-full text-left p-4 transition-all duration-200 flex gap-3 ${
                           isSelected 
-                            ? "bg-slate-50 border-l-4 border-brand-blue" 
+                            ? "bg-slate-50 dark:bg-dashboard-inset border-l-4 border-brand-blue" 
                             : "hover:bg-slate-50/60 border-l-4 border-transparent"
                         }`}
                       >
                         {/* Avatar */}
-                        <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center font-bold text-slate-600 text-sm border border-slate-200 shadow-sm flex-shrink-0">
+                        <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-white/5 flex items-center justify-center font-bold text-slate-600 dark:text-slate-400 text-sm border border-slate-200 dark:border-white/10 shadow-sm flex-shrink-0">
                           {c.retailer_name.substring(0, 2).toUpperCase()}
                         </div>
 
                         {/* Info & Last Msg */}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between">
-                            <h4 className="font-semibold text-xs text-slate-800 truncate">
+                            <h4 className="font-semibold text-xs text-slate-800 dark:text-slate-100 truncate">
                               {c.retailer_name}
                             </h4>
                             {unread > 0 && (
@@ -534,7 +534,7 @@ export default function MessagesPage() {
                           <p className="text-[10px] text-slate-400 font-semibold mt-0.5 truncate">
                             {c.phone}
                           </p>
-                          <p className="text-[11px] text-slate-500 font-medium mt-1 truncate">
+                          <p className="text-[11px] text-slate-500 dark:text-slate-500 font-medium mt-1 truncate">
                             {lastMessage}
                           </p>
                           <div className="flex items-center justify-between mt-1 text-[9px] font-semibold">
@@ -551,7 +551,7 @@ export default function MessagesPage() {
                 orders.filter(o => o.status === "Needs Review").length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-12 text-slate-400">
                     <CheckCircle2 className="w-8 h-8 mb-2 text-emerald-500" />
-                    <span className="text-xs font-semibold text-slate-500">Triage Queue is Clean!</span>
+                    <span className="text-xs font-semibold text-slate-500 dark:text-slate-500">Triage Queue is Clean!</span>
                   </div>
                 ) : (
                   orders.filter(o => o.status === "Needs Review").map((o) => {
@@ -572,7 +572,7 @@ export default function MessagesPage() {
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex justify-between items-center">
-                              <h4 className="font-bold text-xs text-slate-800 truncate">{o.customer}</h4>
+                              <h4 className="font-bold text-xs text-slate-800 dark:text-slate-100 truncate">{o.customer}</h4>
                               <span className="text-[9px] font-bold bg-rose-100 text-rose-800 px-1.5 py-0.5 rounded border border-rose-200">
                                 Review
                               </span>
@@ -580,7 +580,7 @@ export default function MessagesPage() {
                             <p className="text-[10px] text-brand-blue font-bold mt-1">
                               {o.order_id}
                             </p>
-                            <p className="text-[11px] text-slate-500 font-semibold mt-1">
+                            <p className="text-[11px] text-slate-500 dark:text-slate-500 font-semibold mt-1">
                               Amount: ₹{o.amount.toLocaleString([], { minimumFractionDigits: 2 })}
                             </p>
                             <p className="text-[9px] text-slate-400 font-semibold mt-1">
@@ -597,17 +597,17 @@ export default function MessagesPage() {
           </div>
 
           {/* Panel 2: Middle Pane (WhatsApp Chat Stream) */}
-          <div className="flex-1 bg-[#efeae2] flex flex-col h-full border-r border-slate-200 relative">
+          <div className="flex-1 bg-[#efeae2] flex flex-col h-full border-r border-slate-200 dark:border-white/10 relative">
             {selectedCustomer ? (
               <>
                 {/* Chat Header */}
-                <div className="bg-white border-b border-slate-200 p-4 flex items-center justify-between shadow-sm z-10">
+                <div className="bg-white dark:bg-dashboard-card border-b border-slate-200 dark:border-white/10 p-4 flex items-center justify-between shadow-sm z-10">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-brand-blue flex items-center justify-center font-bold text-white text-sm">
                       {selectedCustomer.retailer_name.substring(0, 2).toUpperCase()}
                     </div>
                     <div>
-                      <h3 className="font-bold text-sm text-slate-800">{selectedCustomer.retailer_name}</h3>
+                      <h3 className="font-bold text-sm text-slate-800 dark:text-slate-100">{selectedCustomer.retailer_name}</h3>
                       <div className="flex items-center gap-1.5 mt-0.5">
                         <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
                         <span className="text-[10px] text-slate-400 font-bold">Active Now</span>
@@ -615,7 +615,7 @@ export default function MessagesPage() {
                     </div>
                   </div>
                   <div className="text-right">
-                    <span className="text-[10px] bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full font-bold">
+                    <span className="text-[10px] bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-400 px-2.5 py-1 rounded-full font-bold">
                       {selectedCustomer.customer_id}
                     </span>
                   </div>
@@ -625,7 +625,7 @@ export default function MessagesPage() {
                 <div className="flex-1 overflow-y-auto p-4 space-y-3 flex flex-col">
                   {/* WhatsApp background pattern (represented by CSS styling of this div) */}
                   <div className="text-center my-2">
-                    <span className="bg-slate-200/80 text-slate-600 text-[10px] font-bold px-3 py-1 rounded-lg">
+                    <span className="bg-slate-200/80 text-slate-600 dark:text-slate-400 text-[10px] font-bold px-3 py-1 rounded-lg">
                       TODAY
                     </span>
                   </div>
@@ -644,13 +644,13 @@ export default function MessagesPage() {
                         key={msg.id || index}
                         className={`flex flex-col max-w-[70%] rounded-2xl p-3 text-xs shadow-sm relative transition-all duration-200 ${
                           isOp 
-                            ? "bg-[#d9fdd3] text-slate-800 self-end rounded-tr-none border border-emerald-100" 
-                            : "bg-white text-slate-800 self-start rounded-tl-none border border-slate-200"
+                            ? "bg-[#d9fdd3] text-slate-800 dark:text-slate-100 self-end rounded-tr-none border border-emerald-100" 
+                            : "bg-white dark:bg-dashboard-card text-slate-800 dark:text-slate-100 self-start rounded-tl-none border border-slate-200 dark:border-white/10"
                         }`}
                       >
                         {/* Sender Label */}
                         <span className={`text-[9px] font-bold mb-1 block uppercase tracking-wider ${
-                          isOp ? "text-emerald-700" : "text-slate-500"
+                          isOp ? "text-emerald-700" : "text-slate-500 dark:text-slate-500"
                         }`}>
                           {isOp ? "OPERATOR" : "CUSTOMER"}
                         </span>
@@ -673,14 +673,14 @@ export default function MessagesPage() {
                 {/* Chat Input panel */}
                 <form
                   onSubmit={handleSendMessage}
-                  className="bg-white border-t border-slate-200 p-4 flex items-center gap-3 shadow-md z-10"
+                  className="bg-white dark:bg-dashboard-card border-t border-slate-200 dark:border-white/10 p-4 flex items-center gap-3 shadow-md z-10"
                 >
                   <input
                     type="text"
                     placeholder="Type an operator message to B2B retailer..."
                     value={inputText}
                     onChange={(e) => setInputText(e.target.value)}
-                    className="flex-1 px-4 py-3 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-1 focus:ring-brand-blue"
+                    className="flex-1 px-4 py-3 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-medium focus:outline-none focus:ring-1 focus:ring-brand-blue"
                   />
                   <button
                     type="submit"
@@ -699,7 +699,7 @@ export default function MessagesPage() {
           </div>
 
           {/* Panel 3: Right Pane (AI Order Ingestion Engine) */}
-          <div className="w-96 bg-white flex flex-col h-full overflow-y-auto border-l border-slate-200">
+          <div className="w-96 bg-white dark:bg-dashboard-card flex flex-col h-full overflow-y-auto border-l border-slate-200 dark:border-white/10">
             {activeFeedTab === "triage" && selectedTriageOrderId ? (
               // Triage Resolution Pane
               <div className="flex flex-col h-full">
@@ -721,14 +721,14 @@ export default function MessagesPage() {
                   {loadingTriageDetails ? (
                     <div className="flex flex-col items-center justify-center py-20 space-y-3">
                       <Loader2 className="w-6 h-6 text-rose-500 animate-spin" />
-                      <span className="text-xs text-slate-500 font-semibold">Loading line items...</span>
+                      <span className="text-xs text-slate-500 dark:text-slate-500 font-semibold">Loading line items...</span>
                     </div>
                   ) : triageOrderDetails ? (
                     <div className="space-y-4">
-                      <div className="bg-slate-50 border border-slate-200/60 rounded-xl p-3.5 space-y-2">
+                      <div className="bg-slate-50 dark:bg-dashboard-inset border border-slate-200/60 rounded-xl p-3.5 space-y-2">
                         <div className="flex justify-between items-center text-xs">
                           <span className="font-semibold text-slate-400">Retailer</span>
-                          <span className="font-bold text-slate-700">{selectedCustomer?.retailer_name}</span>
+                          <span className="font-bold text-slate-700 dark:text-slate-300">{selectedCustomer?.retailer_name}</span>
                         </div>
                         <div className="flex justify-between items-center text-xs">
                           <span className="font-semibold text-slate-400">Order ID</span>
@@ -743,7 +743,7 @@ export default function MessagesPage() {
                         {triageOrderDetails.map((item, idx) => {
                           const isUnmatched = item.sku_id === "UNMATCHED_SKU" || item.sku_id === "UNMATCHED_TRIAGE_SKU";
                           return (
-                            <div key={idx} className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 flex flex-col gap-2">
+                            <div key={idx} className="p-4 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50/50 flex flex-col gap-2">
                               <div className="flex items-start justify-between">
                                 <div className="flex-1 pr-4">
                                   {isUnmatched ? (
@@ -752,8 +752,8 @@ export default function MessagesPage() {
                                         <AlertCircle className="w-4 h-4 shrink-0 animate-pulse" />
                                         <span>Unmatched Line Item</span>
                                       </p>
-                                      <p className="text-[10px] text-slate-500 font-semibold leading-relaxed">
-                                        Original Input: <span className="italic font-bold text-slate-700">"{item.brand}"</span>
+                                      <p className="text-[10px] text-slate-500 dark:text-slate-500 font-semibold leading-relaxed">
+                                        Original Input: <span className="italic font-bold text-slate-700 dark:text-slate-300">"{item.brand}"</span>
                                       </p>
                                       
                                       <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wide">Map to Catalog SKU</label>
@@ -764,7 +764,7 @@ export default function MessagesPage() {
                                             handleResolveTriageItem(item.id, e.target.value, item.quantity);
                                           }
                                         }}
-                                        className="w-full mt-1 p-2 border border-rose-200 rounded-lg text-xs bg-white text-slate-700 font-semibold focus:outline-none focus:ring-1 focus:ring-rose-500 cursor-pointer"
+                                        className="w-full mt-1 p-2 border border-rose-200 rounded-lg text-xs bg-white dark:bg-dashboard-card text-slate-700 dark:text-slate-300 font-semibold focus:outline-none focus:ring-1 focus:ring-rose-500 cursor-pointer"
                                       >
                                         <option value="">-- Select SKU --</option>
                                         {productsList.map((p) => (
@@ -776,14 +776,14 @@ export default function MessagesPage() {
                                     </div>
                                   ) : (
                                     <>
-                                      <p className="font-bold text-xs text-slate-800">{item.brand} SKU</p>
+                                      <p className="font-bold text-xs text-slate-800 dark:text-slate-100">{item.brand} SKU</p>
                                       <p className="text-[10px] text-slate-400 font-semibold">{item.sku_id} ({item.pack_size})</p>
-                                      <p className="text-xs font-extrabold text-slate-700 mt-1">₹{item.total_price.toLocaleString([], { minimumFractionDigits: 2 })}</p>
+                                      <p className="text-xs font-extrabold text-slate-700 dark:text-slate-300 mt-1">₹{item.total_price.toLocaleString([], { minimumFractionDigits: 2 })}</p>
                                     </>
                                   )}
                                 </div>
                                 <div className="flex flex-col items-end shrink-0">
-                                  <span className="text-[10px] font-extrabold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">Qty: {item.quantity}</span>
+                                  <span className="text-[10px] font-extrabold bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-400 px-2 py-0.5 rounded-full">Qty: {item.quantity}</span>
                                 </div>
                               </div>
                             </div>
@@ -824,10 +824,10 @@ export default function MessagesPage() {
                 <div className="p-4 space-y-5 flex-1">
                   
                   {/* Scope details */}
-                  <div className="bg-slate-50 border border-slate-100 rounded-xl p-3.5 space-y-2">
+                  <div className="bg-slate-50 dark:bg-dashboard-inset border border-slate-100 dark:border-white/5 rounded-xl p-3.5 space-y-2">
                     <div className="flex justify-between items-center text-xs">
                       <span className="font-semibold text-slate-400">Customer Shop</span>
-                      <span className="font-bold text-slate-700">{selectedCustomer.retailer_name}</span>
+                      <span className="font-bold text-slate-700 dark:text-slate-300">{selectedCustomer.retailer_name}</span>
                     </div>
                     <div className="flex justify-between items-center text-xs">
                       <span className="font-semibold text-slate-400">Ingestion Channel</span>
@@ -855,36 +855,36 @@ export default function MessagesPage() {
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
                       Extracted Order Line Items
                     </label>
-                    <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                    <div className="border border-slate-200 dark:border-white/10 rounded-xl overflow-hidden shadow-sm">
                       <table className="w-full text-left text-xs border-collapse">
                         <thead>
-                          <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold text-[10px] uppercase">
+                          <tr className="bg-slate-50 dark:bg-dashboard-inset border-b border-slate-200 dark:border-white/10 text-slate-500 dark:text-slate-500 font-bold text-[10px] uppercase">
                             <th className="py-2.5 px-3">Item / SKU</th>
                             <th className="py-2.5 px-2 text-center">Qty</th>
                             <th className="py-2.5 px-3 text-right">Price</th>
                             <th className="py-2.5 px-3 text-right">Subtotal</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-100">
+                        <tbody className="divide-y divide-slate-100 dark:divide-white/5">
                           {activeItems.map((item, index) => {
                             const isUnmatched = item.sku_id === "UNMATCHED_SKU" || item.sku_id === "UNMATCHED_TRIAGE_SKU";
                             return (
                               <tr key={item.id || index} className="hover:bg-slate-50/50 font-medium">
                                 <td className="py-2.5 px-3">
-                                  <p className={`font-bold ${isUnmatched ? "text-rose-600" : "text-slate-700"}`}>
+                                  <p className={`font-bold ${isUnmatched ? "text-rose-600" : "text-slate-700 dark:text-slate-300"}`}>
                                     {isUnmatched ? "Unmatched item" : item.product_name}
                                   </p>
                                   <p className="text-[9px] text-slate-400 font-semibold">
                                     {isUnmatched ? "Needs triage" : item.sku_id}
                                   </p>
                                 </td>
-                                <td className="py-2.5 px-2 text-center text-slate-600">
+                                <td className="py-2.5 px-2 text-center text-slate-600 dark:text-slate-400">
                                   {item.quantity}
                                 </td>
-                                <td className="py-2.5 px-3 text-right text-slate-500">
+                                <td className="py-2.5 px-3 text-right text-slate-500 dark:text-slate-500">
                                   ₹{item.unit_price.toFixed(2)}
                                 </td>
-                                <td className="py-2.5 px-3 text-right font-bold text-slate-700">
+                                <td className="py-2.5 px-3 text-right font-bold text-slate-700 dark:text-slate-300">
                                   ₹{item.total_price.toLocaleString([], { minimumFractionDigits: 2 })}
                                 </td>
                               </tr>
@@ -892,8 +892,8 @@ export default function MessagesPage() {
                           })}
                         </tbody>
                         <tfoot>
-                          <tr className="bg-slate-50/80 font-bold border-t border-slate-200">
-                            <td colSpan={3} className="py-3 px-3 text-slate-600">Total Extracted Value</td>
+                          <tr className="bg-slate-50/80 font-bold border-t border-slate-200 dark:border-white/10">
+                            <td colSpan={3} className="py-3 px-3 text-slate-600 dark:text-slate-400">Total Extracted Value</td>
                             <td className="py-3 px-3 text-right text-brand-blue font-extrabold text-sm">
                               ₹{orderTotal.toLocaleString([], { minimumFractionDigits: 2 })}
                             </td>
@@ -909,14 +909,14 @@ export default function MessagesPage() {
                       Catalog Resolution
                     </label>
                     <div className="space-y-2">
-                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex items-center justify-between text-xs font-semibold">
+                      <div className="bg-slate-50 dark:bg-dashboard-inset border border-slate-200 dark:border-white/10 rounded-xl p-3 flex items-center justify-between text-xs font-semibold">
                         <div className="flex items-center gap-2">
                           {thread?.has_unmatched ? (
                             <AlertCircle className="w-4 h-4 text-rose-600" />
                           ) : (
                             <ShieldCheck className="w-4 h-4 text-emerald-600" />
                           )}
-                          <span className="text-slate-600">SKU Catalog Match</span>
+                          <span className="text-slate-600 dark:text-slate-400">SKU Catalog Match</span>
                         </div>
                         <span className={`font-bold px-2 py-0.5 rounded border text-[10px] ${
                           thread?.has_unmatched
@@ -941,14 +941,14 @@ export default function MessagesPage() {
                 </div>
 
                 {/* Confirm action */}
-                <div className="p-4 border-t border-slate-100 bg-slate-50/50">
+                <div className="p-4 border-t border-slate-100 dark:border-white/5 bg-slate-50/50">
                   {isConfirmed ? (
-                    <div className="bg-slate-100 border border-slate-200 rounded-xl p-4 text-center space-y-3">
-                      <div className="flex items-center justify-center gap-2 text-slate-500 font-bold text-xs uppercase tracking-wide">
+                    <div className="bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl p-4 text-center space-y-3">
+                      <div className="flex items-center justify-center gap-2 text-slate-500 dark:text-slate-500 font-bold text-xs uppercase tracking-wide">
                         <CheckCircle2 className="w-5 h-5 text-emerald-500" />
                         <span>Order Confirmed</span>
                       </div>
-                      <div className="text-sm font-extrabold text-brand-blue bg-white p-2 rounded-lg border border-slate-200 shadow-sm flex items-center justify-center gap-2">
+                      <div className="text-sm font-extrabold text-brand-blue bg-white dark:bg-dashboard-card p-2 rounded-lg border border-slate-200 dark:border-white/10 shadow-sm flex items-center justify-center gap-2">
                         <span>{activeOrder.order_id}</span>
                         <Link href="/dashboard/orders" className="text-slate-400 hover:text-brand-blue" title="Go to Orders Grid">
                           <ExternalLink className="w-4 h-4" />
@@ -982,7 +982,7 @@ export default function MessagesPage() {
             ) : (
               <div className="h-full flex flex-col items-center justify-center text-slate-400 p-6 text-center gap-3">
                 <Bot className="w-12 h-12 text-slate-300" />
-                <h4 className="font-bold text-sm text-slate-600">No Ingested Order</h4>
+                <h4 className="font-bold text-sm text-slate-600 dark:text-slate-400">No Ingested Order</h4>
                 <p className="text-xs font-semibold leading-relaxed max-w-[200px]">
                   This retailer has no WhatsApp-ingested order yet. Orders captured via the WhatsApp webhook will appear here.
                 </p>

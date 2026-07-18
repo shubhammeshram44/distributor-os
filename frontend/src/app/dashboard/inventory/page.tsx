@@ -191,14 +191,14 @@ export default function InventoryPage() {
   const outOfStockCount = filteredInventory.filter(item => item.stock_quantity <= 0).length;
   if (!activeTenantId) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-slate-50">
+      <div className="flex items-center justify-center min-h-screen bg-slate-50 dark:bg-dashboard-inset">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-blue" />
       </div>
     );
   }
 
   return (
-    <div className="flex bg-dashboard-bg min-h-screen text-slate-800">
+    <div className="flex bg-dashboard-bg min-h-screen text-slate-800 dark:text-slate-100">
       {/* Sidebar navigation panel */}
       <Sidebar
         activeTab="Inventory"
@@ -218,7 +218,7 @@ export default function InventoryPage() {
           {/* Headline Controls */}
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-xl font-bold text-slate-800 tracking-tight flex items-center gap-2">
+              <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100 tracking-tight flex items-center gap-2">
                 <Box className="w-5 h-5 text-brand-blue" />
                 <span>Warehouse Inventory</span>
               </h1>
@@ -233,7 +233,7 @@ export default function InventoryPage() {
                   fetchInventory(activeTenantId);
                 }
               }}
-              className="flex items-center gap-1.5 px-3 py-2 border border-dashboard-border bg-white rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-all shadow-sm cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-2 border border-dashboard-border bg-white dark:bg-dashboard-card rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-white/5 transition-all shadow-sm cursor-pointer"
             >
               <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
               <span>Refresh Inventory</span>
@@ -245,37 +245,37 @@ export default function InventoryPage() {
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             {/* Metric Cards (Takes 3/4 width) */}
             <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-6 h-full">
-              <div className="bg-white p-5 rounded-xl border border-dashboard-border shadow-sm flex items-center justify-between h-full">
+              <div className="bg-white dark:bg-dashboard-card p-5 rounded-xl border border-dashboard-border shadow-sm flex items-center justify-between h-full">
                 <div>
                   <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Products Tracked</p>
-                  <h3 className="text-2xl font-extrabold text-slate-800 mt-1">{filteredInventory.length}</h3>
+                  <h3 className="text-2xl font-extrabold text-slate-800 dark:text-slate-100 mt-1">{filteredInventory.length}</h3>
                 </div>
-                <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 border border-slate-100 shadow-sm">
+                <div className="w-10 h-10 rounded-full bg-slate-50 dark:bg-dashboard-inset flex items-center justify-center text-slate-400 border border-slate-100 dark:border-white/5 shadow-sm">
                   <Box className="w-5 h-5" />
                 </div>
               </div>
 
-              <div className="bg-white p-5 rounded-xl border border-dashboard-border shadow-sm flex items-center justify-between h-full">
+              <div className="bg-white dark:bg-dashboard-card p-5 rounded-xl border border-dashboard-border shadow-sm flex items-center justify-between h-full">
                 <div>
                   <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Low Stock SKUs</p>
-                  <h3 className={`text-2xl font-extrabold mt-1 ${lowStockCount > 0 ? "text-amber-600" : "text-slate-800"}`}>
+                  <h3 className={`text-2xl font-extrabold mt-1 ${lowStockCount > 0 ? "text-amber-600" : "text-slate-800 dark:text-slate-100"}`}>
                     {lowStockCount}
                   </h3>
                 </div>
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center border shadow-sm ${lowStockCount > 0 ? "bg-amber-50 text-amber-600 border-amber-100 animate-pulse" : "bg-slate-50 text-slate-400 border-slate-100"
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center border shadow-sm ${lowStockCount > 0 ? "bg-amber-50 text-amber-600 border-amber-100 animate-pulse" : "bg-slate-50 dark:bg-dashboard-inset text-slate-400 border-slate-100 dark:border-white/5"
                   }`}>
                   <AlertTriangle className="w-5 h-5" />
                 </div>
               </div>
 
-              <div className="bg-white p-5 rounded-xl border border-dashboard-border shadow-sm flex items-center justify-between h-full">
+              <div className="bg-white dark:bg-dashboard-card p-5 rounded-xl border border-dashboard-border shadow-sm flex items-center justify-between h-full">
                 <div>
                   <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Out of Stock SKUs</p>
-                  <h3 className={`text-2xl font-extrabold mt-1 ${outOfStockCount > 0 ? "text-rose-600" : "text-slate-800"}`}>
+                  <h3 className={`text-2xl font-extrabold mt-1 ${outOfStockCount > 0 ? "text-rose-600" : "text-slate-800 dark:text-slate-100"}`}>
                     {outOfStockCount}
                   </h3>
                 </div>
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center border shadow-sm ${outOfStockCount > 0 ? "bg-rose-50 text-rose-600 border-rose-100 animate-pulse" : "bg-slate-50 text-slate-400 border-slate-100"
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center border shadow-sm ${outOfStockCount > 0 ? "bg-rose-50 text-rose-600 border-rose-100 animate-pulse" : "bg-slate-50 dark:bg-dashboard-inset text-slate-400 border-slate-100 dark:border-white/5"
                   }`}>
                   <AlertCircle className="w-5 h-5" />
                 </div>
@@ -283,11 +283,11 @@ export default function InventoryPage() {
             </div>
 
             {/* Inward Stock Adjustment Widget (Takes 1/4 width) */}
-            <div className="lg:col-span-1 bg-white p-5 rounded-xl border border-dashboard-border shadow-sm flex flex-col justify-between">
+            <div className="lg:col-span-1 bg-white dark:bg-dashboard-card p-5 rounded-xl border border-dashboard-border shadow-sm flex flex-col justify-between">
               <form onSubmit={handleInwardSubmit} className="space-y-3">
                 <div className="flex items-center gap-1.5 mb-1">
                   <span className="text-lg">📥</span>
-                  <h4 className="font-bold text-slate-800 text-xs uppercase tracking-wider">Inward Batch Arrival</h4>
+                  <h4 className="font-bold text-slate-800 dark:text-slate-100 text-xs uppercase tracking-wider">Inward Batch Arrival</h4>
                 </div>
 
                 <div>
@@ -295,7 +295,7 @@ export default function InventoryPage() {
                   <select
                     value={formData.sku_id}
                     onChange={(e) => setFormData(prev => ({ ...prev, sku_id: e.target.value }))}
-                    className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs text-slate-700 bg-white focus:outline-none focus:ring-1 focus:ring-brand-blue cursor-pointer"
+                    className="w-full px-2 py-1.5 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-slate-700 dark:text-slate-300 bg-white dark:bg-dashboard-card focus:outline-none focus:ring-1 focus:ring-brand-blue cursor-pointer"
                   >
                     <option value="">-- Choose SKU --</option>
                     {skuList.map((sku) => (
@@ -313,7 +313,7 @@ export default function InventoryPage() {
                     placeholder="e.g. 50"
                     value={formData.quantity_received}
                     onChange={(e) => setFormData(prev => ({ ...prev, quantity_received: e.target.value }))}
-                    className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-brand-blue bg-white"
+                    className="w-full px-2 py-1.5 border border-slate-200 dark:border-white/10 rounded-lg text-xs text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-brand-blue bg-white dark:bg-dashboard-card"
                   />
                 </div>
 
@@ -336,7 +336,7 @@ export default function InventoryPage() {
           </div>
 
           {/* Master Table / Ledger Panel */}
-          <div className="bg-white rounded-xl border border-dashboard-border shadow-sm flex flex-col min-h-[400px]">
+          <div className="bg-white dark:bg-dashboard-card rounded-xl border border-dashboard-border shadow-sm flex flex-col min-h-[400px]">
             {/* Search filter utility bar */}
             <div className="p-5 border-b border-dashboard-border flex items-center justify-between bg-slate-50/50 rounded-t-xl gap-4">
               <div className="relative max-w-sm w-full">
@@ -346,7 +346,7 @@ export default function InventoryPage() {
                   placeholder="Filter by SKU or Product name..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-dashboard-border rounded-lg text-sm bg-white focus:outline-none focus:ring-1 focus:ring-brand-blue focus:border-brand-blue transition-all text-slate-700"
+                  className="w-full pl-10 pr-4 py-2 border border-dashboard-border rounded-lg text-sm bg-white dark:bg-dashboard-card focus:outline-none focus:ring-1 focus:ring-brand-blue focus:border-brand-blue transition-all text-slate-700 dark:text-slate-300"
                 />
               </div>
 
@@ -363,7 +363,7 @@ export default function InventoryPage() {
               {loading ? (
                 <div className="flex flex-col items-center justify-center py-24 gap-3">
                   <Loader2 className="w-8 h-8 text-brand-blue animate-spin" />
-                  <span className="text-sm font-semibold text-slate-500">Loading inventory data...</span>
+                  <span className="text-sm font-semibold text-slate-500 dark:text-slate-500">Loading inventory data...</span>
                 </div>
               ) : error ? (
                 <div className="flex flex-col items-center justify-center py-24 gap-3 text-rose-600">
@@ -382,12 +382,12 @@ export default function InventoryPage() {
 
                 </div>
               ) : filteredInventory.length === 0 ? (
-                <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/40 text-center my-4">
-                  <div className="p-3 bg-slate-100 text-slate-400 rounded-full mb-3">
+                <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed border-slate-200 dark:border-white/10 rounded-xl bg-slate-50/40 text-center my-4">
+                  <div className="p-3 bg-slate-100 dark:bg-white/5 text-slate-400 rounded-full mb-3">
                     <Box className="w-6 h-6" />
                   </div>
-                  <h3 className="text-sm font-semibold text-slate-800">Your workspace is clean</h3>
-                  <p className="text-xs text-slate-500 max-w-xs mt-1">
+                  <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Your workspace is clean</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-500 max-w-xs mt-1">
                     Connect your warehouse stock or send your first WhatsApp text order to see live tracking metrics update instantly.
                   </p>
                 </div>
@@ -401,7 +401,7 @@ export default function InventoryPage() {
                       <th className="py-3 px-6 text-right">Available Stock Quantity</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody className="divide-y divide-slate-100 dark:divide-white/5">
                     {filteredInventory.map((item) => {
                       const threshold = item.low_stock_threshold ?? 10;
                       const status = getStockStatus(item.stock_quantity, threshold);
@@ -414,7 +414,7 @@ export default function InventoryPage() {
                           {status.label}
                         </span>
                       );
-                      let qtyClass = "text-slate-800 font-extrabold";
+                      let qtyClass = "text-slate-800 dark:text-slate-100 font-extrabold";
 
                       if (isOutOfStock) {
                         qtyClass = "text-rose-600 font-black animate-pulse";
@@ -424,10 +424,10 @@ export default function InventoryPage() {
 
                       return (
                         <tr key={item.id} className="hover:bg-slate-50/50 transition-colors group">
-                          <td className="py-4 px-6 font-bold text-slate-800 text-sm">
+                          <td className="py-4 px-6 font-bold text-slate-800 dark:text-slate-100 text-sm">
                             {item.sku_id}
                           </td>
-                          <td className="py-4 px-6 font-semibold text-slate-700">
+                          <td className="py-4 px-6 font-semibold text-slate-700 dark:text-slate-300">
                             {item.product_name}
                           </td>
                           <td className="py-4 px-6 text-center">
@@ -449,7 +449,7 @@ export default function InventoryPage() {
 
       {/* Sleek Floating Toast Notification */}
       {toast.show && (
-        <div className="fixed top-5 right-5 z-50 flex items-center gap-3 bg-white/95 backdrop-blur-md border border-slate-100 shadow-2xl px-4 py-3.5 rounded-xl animate-slide-in pointer-events-auto max-w-sm">
+        <div className="fixed top-5 right-5 z-50 flex items-center gap-3 bg-white/95 dark:bg-dashboard-card/95 backdrop-blur-md border border-slate-100 dark:border-white/5 shadow-2xl px-4 py-3.5 rounded-xl animate-slide-in pointer-events-auto max-w-sm">
           {toast.type === "success" ? (
             <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0 shadow-sm">
               <CheckCircle2 className="w-4.5 h-4.5" />
@@ -460,12 +460,12 @@ export default function InventoryPage() {
             </div>
           )}
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-bold text-slate-800">{toast.type === "success" ? "Success" : "Error"}</p>
-            <p className="text-[11px] text-slate-500 font-semibold mt-0.5 break-words">{toast.message}</p>
+            <p className="text-xs font-bold text-slate-800 dark:text-slate-100">{toast.type === "success" ? "Success" : "Error"}</p>
+            <p className="text-[11px] text-slate-500 dark:text-slate-500 font-semibold mt-0.5 break-words">{toast.message}</p>
           </div>
           <button
             onClick={() => setToast(prev => ({ ...prev, show: false }))}
-            className="text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-50 transition-all shrink-0"
+            className="text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-50 dark:hover:bg-white/5 transition-all shrink-0"
           >
             <X className="w-3.5 h-3.5" />
           </button>

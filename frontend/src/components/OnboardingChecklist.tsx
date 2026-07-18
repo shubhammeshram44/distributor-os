@@ -88,14 +88,14 @@ export default function OnboardingChecklist({ activeTenantId }: OnboardingCheckl
   const progressPct = Math.round((status.completed_count / status.total_count) * 100);
 
   return (
-    <div className="bg-white rounded-xl border border-dashboard-border shadow-sm overflow-hidden">
-      <div className="p-5 flex items-start justify-between gap-4 border-b border-slate-100">
+    <div className="bg-white dark:bg-dashboard-card rounded-xl border border-dashboard-border shadow-sm overflow-hidden">
+      <div className="p-5 flex items-start justify-between gap-4 border-b border-slate-100 dark:border-white/5">
         <div className="flex items-start gap-3">
           <div className="w-10 h-10 rounded-lg bg-blue-50 text-brand-blue flex items-center justify-center shrink-0">
             <Rocket className="w-5 h-5" />
           </div>
           <div>
-            <h2 className="text-sm font-bold text-slate-800">Getting Started</h2>
+            <h2 className="text-sm font-bold text-slate-800 dark:text-slate-100">Getting Started</h2>
             <p className="text-xs text-slate-400 font-semibold mt-0.5">
               {status.completed_count} of {status.total_count} steps complete — finish these to unlock your first order.
             </p>
@@ -103,7 +103,7 @@ export default function OnboardingChecklist({ activeTenantId }: OnboardingCheckl
         </div>
         <button
           onClick={handleDismiss}
-          className="text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-50 transition-all shrink-0"
+          className="text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-50 dark:hover:bg-white/5 transition-all shrink-0"
           title="Hide checklist"
         >
           <X className="w-4 h-4" />
@@ -111,7 +111,7 @@ export default function OnboardingChecklist({ activeTenantId }: OnboardingCheckl
       </div>
 
       <div className="px-5 pt-4">
-        <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+        <div className="w-full h-1.5 bg-slate-100 dark:bg-white/5 rounded-full overflow-hidden">
           <div
             className="h-full bg-brand-blue rounded-full transition-all"
             style={{ width: `${progressPct}%` }}
@@ -129,7 +129,7 @@ export default function OnboardingChecklist({ activeTenantId }: OnboardingCheckl
               className={`w-full flex items-center gap-3 p-2.5 rounded-lg text-left transition-all ${
                 step.done
                   ? "cursor-default"
-                  : "hover:bg-slate-50 cursor-pointer group"
+                  : "hover:bg-slate-50 dark:hover:bg-white/5 cursor-pointer group"
               }`}
             >
               {step.done ? (
@@ -137,7 +137,7 @@ export default function OnboardingChecklist({ activeTenantId }: OnboardingCheckl
               ) : (
                 <Circle className="w-5 h-5 text-slate-300 shrink-0" />
               )}
-              <span className={`text-sm font-semibold flex-1 ${step.done ? "text-slate-400 line-through" : "text-slate-700"}`}>
+              <span className={`text-sm font-semibold flex-1 ${step.done ? "text-slate-400 line-through" : "text-slate-700 dark:text-slate-300"}`}>
                 {step.label}
               </span>
               {!step.done && (

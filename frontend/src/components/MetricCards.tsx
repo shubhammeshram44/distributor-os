@@ -26,7 +26,7 @@ export default function MetricCards({ metrics }: MetricCardsProps) {
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="bg-white p-6 rounded-xl border border-dashboard-border shadow-sm animate-pulse h-32" />
+          <div key={i} className="bg-white dark:bg-dashboard-card p-6 rounded-xl border border-dashboard-border shadow-sm animate-pulse h-32" />
         ))}
       </div>
     );
@@ -84,7 +84,7 @@ export default function MetricCards({ metrics }: MetricCardsProps) {
       {cards.map((card, i) => {
         const Icon = card.icon;
         return (
-          <div key={i} className="bg-white p-5 rounded-xl border border-dashboard-border shadow-sm flex flex-col justify-between hover:shadow-md transition-all">
+          <div key={i} className="bg-white dark:bg-dashboard-card p-5 rounded-xl border border-dashboard-border shadow-sm flex flex-col justify-between hover:shadow-md transition-all">
             {/* Top Row */}
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center">
@@ -97,7 +97,7 @@ export default function MetricCards({ metrics }: MetricCardsProps) {
 
             {/* Value and Trend Indicator */}
             <div className="mt-3 flex items-baseline gap-2">
-              <h2 className="text-xl font-bold text-slate-800 tracking-tight">{card.value}</h2>
+              <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">{card.value}</h2>
               <div className={`flex items-center gap-0.5 text-xs font-bold ${
                 card.isPositive ? "text-emerald-600" : "text-rose-600"
               }`}>

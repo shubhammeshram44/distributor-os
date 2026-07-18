@@ -180,7 +180,7 @@ export default function PaymentsPage() {
         
         <main className="flex-1 p-6 space-y-6 max-w-4xl w-full mx-auto">
           <div>
-            <h1 className="text-xl font-bold text-slate-800 tracking-tight flex items-center gap-2">
+            <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100 tracking-tight flex items-center gap-2">
               <CreditCard className="w-5 h-5 text-brand-blue" />
               <span>Payment Gateway Settings</span>
             </h1>
@@ -196,10 +196,10 @@ export default function PaymentsPage() {
             </div>
           ) : (
             <div className="space-y-6">
-              <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+              <div className="bg-white dark:bg-dashboard-card rounded-xl border border-slate-200 dark:border-white/10 shadow-sm overflow-hidden">
+                <div className="p-6 border-b border-slate-100 dark:border-white/5 flex items-center justify-between">
                   <div>
-                    <h3 className="font-extrabold text-slate-800 text-base">Payment Collection</h3>
+                    <h3 className="font-extrabold text-slate-800 dark:text-slate-100 text-base">Payment Collection</h3>
                     <p className="text-xs text-slate-400 font-semibold mt-0.5">
                       Connect your Razorpay account to collect payments from retailers automatically.
                     </p>
@@ -229,22 +229,22 @@ export default function PaymentsPage() {
                 <div className="p-6 space-y-6">
                   {connected && !showUpdateForm ? (
                     <div className="space-y-4">
-                      <div className="bg-slate-50 border border-slate-200/60 rounded-xl p-4 flex flex-col gap-2 font-semibold">
+                      <div className="bg-slate-50 dark:bg-dashboard-inset border border-slate-200/60 rounded-xl p-4 flex flex-col gap-2 font-semibold">
                         <div className="flex justify-between items-center">
-                          <span className="text-xs text-slate-500 uppercase tracking-wide">Account Name</span>
-                          <span className="text-sm text-slate-800">{accountName || "—"}</span>
+                          <span className="text-xs text-slate-500 dark:text-slate-500 uppercase tracking-wide">Account Name</span>
+                          <span className="text-sm text-slate-800 dark:text-slate-100">{accountName || "—"}</span>
                         </div>
                         <div className="flex justify-between items-center border-t border-slate-200/60 pt-2 mt-1">
-                          <span className="text-xs text-slate-500 uppercase tracking-wide">Key ID</span>
-                          <span className="text-sm font-mono text-slate-800">{keyIdMasked}</span>
+                          <span className="text-xs text-slate-500 dark:text-slate-500 uppercase tracking-wide">Key ID</span>
+                          <span className="text-sm font-mono text-slate-800 dark:text-slate-100">{keyIdMasked}</span>
                         </div>
                       </div>
 
-                      <div className="flex justify-end gap-3 pt-2 border-t border-slate-100 mt-6">
+                      <div className="flex justify-end gap-3 pt-2 border-t border-slate-100 dark:border-white/5 mt-6">
                         <button
                           type="button"
                           onClick={() => setShowUpdateForm(true)}
-                          className="px-6 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-bold shadow-sm cursor-pointer transition-all"
+                          className="px-6 py-2.5 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-bold shadow-sm cursor-pointer transition-all"
                         >
                           Update Keys
                         </button>
@@ -259,11 +259,11 @@ export default function PaymentsPage() {
                     </div>
                   ) : (
                     <>
-                      <div className="bg-slate-50 border border-slate-200/60 rounded-xl p-4 flex gap-3 text-slate-600 text-xs leading-relaxed font-semibold">
+                      <div className="bg-slate-50 dark:bg-dashboard-inset border border-slate-200/60 rounded-xl p-4 flex gap-3 text-slate-600 dark:text-slate-400 text-xs leading-relaxed font-semibold">
                         <ShieldCheck className="w-5 h-5 text-brand-blue flex-shrink-0 mt-0.5" />
                         <div>
-                          <span className="text-slate-800 font-bold">Secure connection:</span>
-                          <ul className="list-disc pl-4 mt-1.5 space-y-1 text-slate-500 font-medium">
+                          <span className="text-slate-800 dark:text-slate-100 font-bold">Secure connection:</span>
+                          <ul className="list-disc pl-4 mt-1.5 space-y-1 text-slate-500 dark:text-slate-500 font-medium">
                             <li>Your secret key is encrypted with AES-256 and is never visible after saving.</li>
                             <li>Keys are used only to generate payment links for your retailers.</li>
                           </ul>
@@ -272,7 +272,7 @@ export default function PaymentsPage() {
 
                       <form onSubmit={handleConnect} className="space-y-5">
                         <div className="space-y-1.5">
-                          <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">
+                          <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wide">
                             Razorpay Key ID *
                           </label>
                           <input
@@ -280,12 +280,12 @@ export default function PaymentsPage() {
                             value={keyIdInput}
                             onChange={e => setKeyIdInput(e.target.value)}
                             placeholder="rzp_test_xxxxxxxxxxxx"
-                            className="w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm font-medium focus:ring-2 focus:ring-brand-blue/20 focus:border-brand-blue outline-none transition-all"
+                            className="w-full px-4 py-2.5 border border-slate-200 dark:border-white/10 rounded-lg text-sm font-medium focus:ring-2 focus:ring-brand-blue/20 focus:border-brand-blue outline-none transition-all"
                           />
                         </div>
 
                         <div className="space-y-1.5">
-                          <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">
+                          <label className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wide">
                             Razorpay Key Secret *
                           </label>
                           <div className="relative">
@@ -294,7 +294,7 @@ export default function PaymentsPage() {
                               value={keySecretInput}
                               onChange={e => setKeySecretInput(e.target.value)}
                               placeholder="••••••••••••••••••••••••••••••"
-                              className="w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm font-medium focus:ring-2 focus:ring-brand-blue/20 focus:border-brand-blue outline-none transition-all pr-12"
+                              className="w-full px-4 py-2.5 border border-slate-200 dark:border-white/10 rounded-lg text-sm font-medium focus:ring-2 focus:ring-brand-blue/20 focus:border-brand-blue outline-none transition-all pr-12"
                             />
                             <button
                               type="button"
@@ -313,7 +313,7 @@ export default function PaymentsPage() {
                           </div>
                         )}
 
-                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pt-2 border-t border-slate-100 mt-6 gap-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pt-2 border-t border-slate-100 dark:border-white/5 mt-6 gap-4">
                           <div className="flex flex-col gap-1.5">
                             <a
                               href="https://razorpay.com/"
@@ -345,7 +345,7 @@ export default function PaymentsPage() {
                                   setKeyIdInput("");
                                   setKeySecretInput("");
                                 }}
-                                className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-bold cursor-pointer transition-all"
+                                className="px-5 py-2.5 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-bold cursor-pointer transition-all"
                               >
                                 Cancel
                               </button>
@@ -378,24 +378,24 @@ export default function PaymentsPage() {
 
       {showDisconnectModal && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full border border-slate-100 p-6 space-y-6 animate-in fade-in zoom-in duration-200">
+          <div className="bg-white dark:bg-dashboard-card rounded-2xl shadow-xl max-w-md w-full border border-slate-100 dark:border-white/5 p-6 space-y-6 animate-in fade-in zoom-in duration-200">
             <div className="flex items-start gap-4">
               <div className="p-3 bg-rose-50 rounded-full text-rose-600">
                 <AlertCircle className="w-6 h-6" />
               </div>
               <div className="space-y-1.5">
                 <h3 className="text-base font-bold text-slate-950">Disconnect Razorpay</h3>
-                <p className="text-sm text-slate-500 font-semibold leading-relaxed font-semibold">
+                <p className="text-sm text-slate-500 dark:text-slate-500 font-semibold leading-relaxed font-semibold">
                   This will disconnect your Razorpay integration. Retailers will no longer be able to make online payments. Are you sure?
                 </p>
               </div>
             </div>
-            <div className="flex justify-end gap-3 pt-2 border-t border-slate-100">
+            <div className="flex justify-end gap-3 pt-2 border-t border-slate-100 dark:border-white/5">
               <button
                 type="button"
                 disabled={disconnecting}
                 onClick={() => setShowDisconnectModal(false)}
-                className="px-4 py-2 text-slate-600 hover:bg-slate-50 rounded-lg text-sm font-bold cursor-pointer transition-all"
+                className="px-4 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-white/5 rounded-lg text-sm font-bold cursor-pointer transition-all"
               >
                 Cancel
               </button>
@@ -422,7 +422,7 @@ export default function PaymentsPage() {
       {/* Elegant Toast Notifications */}
       {toast.show && (
         <div className="fixed bottom-5 right-5 z-50 animate-slide-in">
-          <div className={`flex items-center gap-3 px-5 py-3 rounded-lg border shadow-xl bg-white ${
+          <div className={`flex items-center gap-3 px-5 py-3 rounded-lg border shadow-xl bg-white dark:bg-dashboard-card ${
             toast.type === "success" 
               ? "border-emerald-200 text-emerald-800" 
               : "border-rose-200 text-rose-800"

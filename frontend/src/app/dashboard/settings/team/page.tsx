@@ -306,7 +306,7 @@ export default function TeamSettingsPage() {
       case "DRIVER":
         return "bg-amber-50 text-amber-700 border-amber-200";
       default:
-        return "bg-slate-50 text-slate-700 border-slate-200";
+        return "bg-slate-50 dark:bg-dashboard-inset text-slate-700 dark:text-slate-300 border-slate-200 dark:border-white/10";
     }
   };
 
@@ -323,14 +323,14 @@ export default function TeamSettingsPage() {
 
   if (!activeTenantId) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-slate-50">
+      <div className="flex items-center justify-center min-h-screen bg-slate-50 dark:bg-dashboard-inset">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-blue" />
       </div>
     );
   }
 
   return (
-    <div className="flex bg-dashboard-bg min-h-screen text-slate-800">
+    <div className="flex bg-dashboard-bg min-h-screen text-slate-800 dark:text-slate-100">
       <Sidebar
         activeTab="Team Settings"
         setActiveTab={() => { }}
@@ -347,7 +347,7 @@ export default function TeamSettingsPage() {
         <main className="flex-1 mt-16 p-6 overflow-y-auto space-y-6">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-xl font-bold text-slate-800 tracking-tight flex items-center gap-2">
+              <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100 tracking-tight flex items-center gap-2">
                 <Users className="w-5 h-5 text-brand-blue" />
                 <span>Distributor Team Directory</span>
               </h1>
@@ -385,7 +385,7 @@ export default function TeamSettingsPage() {
 
           {/* Tab Panel Content */}
           {activeTab === "directory" ? (
-            <div className="bg-white rounded-xl border border-dashboard-border shadow-sm flex flex-col min-h-[400px]">
+            <div className="bg-white dark:bg-dashboard-card rounded-xl border border-dashboard-border shadow-sm flex flex-col min-h-[400px]">
               <div className="p-5 border-b border-dashboard-border flex items-center justify-between bg-slate-50/50 rounded-t-xl gap-4">
                 <div className="relative max-w-sm w-full">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -394,12 +394,12 @@ export default function TeamSettingsPage() {
                     placeholder="Search by Name, Role, or Credential..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border border-dashboard-border rounded-lg text-sm bg-white focus:outline-none focus:ring-1 focus:ring-brand-blue focus:border-brand-blue transition-all text-slate-700 font-medium"
+                    className="w-full pl-10 pr-4 py-2 border border-dashboard-border rounded-lg text-sm bg-white dark:bg-dashboard-card focus:outline-none focus:ring-1 focus:ring-brand-blue focus:border-brand-blue transition-all text-slate-700 dark:text-slate-300 font-medium"
                   />
                 </div>
 
                 <div className="text-xs font-bold text-slate-400">
-                  Total Staff Logged: <span className="text-slate-700">{filteredUsers.length}</span>
+                  Total Staff Logged: <span className="text-slate-700 dark:text-slate-300">{filteredUsers.length}</span>
                 </div>
               </div>
 
@@ -407,7 +407,7 @@ export default function TeamSettingsPage() {
                 {loading ? (
                   <div className="flex flex-col items-center justify-center py-24 gap-3">
                     <Loader2 className="w-8 h-8 text-brand-blue animate-spin" />
-                    <span className="text-sm font-semibold text-slate-500">Loading active roster...</span>
+                    <span className="text-sm font-semibold text-slate-500 dark:text-slate-500">Loading active roster...</span>
                   </div>
                 ) : error ? (
                   <div className="flex flex-col items-center justify-center py-24 gap-3 text-rose-600">
@@ -436,10 +436,10 @@ export default function TeamSettingsPage() {
                         <th className="py-3 px-6 text-center">ACTIONS</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100">
+                    <tbody className="divide-y divide-slate-100 dark:divide-white/5">
                       {filteredUsers.map((u) => (
                         <tr key={u.id} className="hover:bg-slate-50/50 transition-colors">
-                          <td className="py-4 px-6 font-bold text-slate-800 text-sm">
+                          <td className="py-4 px-6 font-bold text-slate-800 dark:text-slate-100 text-sm">
                             {u.full_name}
                           </td>
                           <td className="py-4 px-6">
@@ -447,7 +447,7 @@ export default function TeamSettingsPage() {
                               {u.role.replace("_", " ")}
                             </span>
                           </td>
-                          <td className="py-4 px-6 font-semibold text-slate-500 text-xs">
+                          <td className="py-4 px-6 font-semibold text-slate-500 dark:text-slate-500 text-xs">
                             {u.email_or_phone || u.phone_number || "—"}
                           </td>
                           <td className="py-4 px-6 text-center">
@@ -468,7 +468,7 @@ export default function TeamSettingsPage() {
                                   setSelectedUserForEdit(u);
                                   setEditRole(u.role);
                                 }}
-                                className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-700 transition-all cursor-pointer border border-transparent hover:border-slate-200"
+                                className="p-1.5 hover:bg-slate-100 dark:hover:bg-white/5 rounded-lg text-slate-500 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 transition-all cursor-pointer border border-transparent hover:border-slate-200"
                                 title="Edit Role"
                               >
                                 <Edit2 className="w-3.5 h-3.5" />
@@ -502,11 +502,11 @@ export default function TeamSettingsPage() {
                     <button
                       key={r.role}
                       onClick={() => setSelectedRoleCode(r.role)}
-                      className={`w-full p-4 text-left border rounded-xl shadow-sm transition-all flex flex-col gap-1 cursor-pointer bg-white ${isSelected ? "border-brand-blue ring-1 ring-brand-blue" : "border-dashboard-border hover:bg-slate-50/50"
+                      className={`w-full p-4 text-left border rounded-xl shadow-sm transition-all flex flex-col gap-1 cursor-pointer bg-white dark:bg-dashboard-card ${isSelected ? "border-brand-blue ring-1 ring-brand-blue" : "border-dashboard-border hover:bg-slate-50/50"
                         }`}
                     >
                       <div className="flex items-center justify-between w-full">
-                        <span className="font-extrabold text-slate-800 text-sm tracking-tight">{r.title}</span>
+                        <span className="font-extrabold text-slate-800 dark:text-slate-100 text-sm tracking-tight">{r.title}</span>
                         <span className={`px-2 py-0.5 border rounded-full text-[9px] font-bold uppercase tracking-wider ${getRoleBadgeStyle(r.role)}`}>
                           {r.role}
                         </span>
@@ -520,9 +520,9 @@ export default function TeamSettingsPage() {
               </div>
 
               {/* Privilege Inspector Card */}
-              <div className="md:col-span-2 bg-white rounded-xl border border-dashboard-border shadow-sm p-6 space-y-6">
+              <div className="md:col-span-2 bg-white dark:bg-dashboard-card rounded-xl border border-dashboard-border shadow-sm p-6 space-y-6">
                 <div>
-                  <h3 className="font-extrabold text-slate-800 text-base flex items-center gap-2">
+                  <h3 className="font-extrabold text-slate-800 dark:text-slate-100 text-base flex items-center gap-2">
                     <Shield className="w-5 h-5 text-brand-blue" />
                     <span>Access Bounds: {activeRoleDetails.title}</span>
                   </h3>
@@ -531,11 +531,11 @@ export default function TeamSettingsPage() {
                   </p>
                 </div>
 
-                <div className="divide-y divide-slate-100 border border-slate-100 rounded-xl overflow-hidden">
+                <div className="divide-y divide-slate-100 dark:divide-white/5 border border-slate-100 dark:border-white/5 rounded-xl overflow-hidden">
                   {activeRoleDetails.permissions.map((p, idx) => (
                     <div key={idx} className="flex items-center justify-between p-4 hover:bg-slate-50/20 transition-colors">
                       <div>
-                        <p className="text-xs font-bold text-slate-800">{p.feature}</p>
+                        <p className="text-xs font-bold text-slate-800 dark:text-slate-100">{p.feature}</p>
                         <p className="text-[11px] text-slate-400 font-medium mt-0.5">{p.description}</p>
                       </div>
 
@@ -564,10 +564,10 @@ export default function TeamSettingsPage() {
       {/* Invite Staff Modal */}
       {isInviteModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm animate-fade-in" role="dialog" aria-modal="true" aria-labelledby="invite-modal-title">
-          <div className="bg-white rounded-xl border border-slate-200 shadow-2xl w-full max-w-md p-6 animate-scale-up relative mx-4 animate-slide-in">
+          <div className="bg-white dark:bg-dashboard-card rounded-xl border border-slate-200 dark:border-white/10 shadow-2xl w-full max-w-md p-6 animate-scale-up relative mx-4 animate-slide-in">
             <button
               onClick={() => setIsInviteModalOpen(false)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1.5 rounded-full hover:bg-slate-50 transition-all cursor-pointer"
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1.5 rounded-full hover:bg-slate-50 dark:hover:bg-white/5 transition-all cursor-pointer"
               aria-label="Close modal"
             >
               <X className="w-4 h-4" />
@@ -575,7 +575,7 @@ export default function TeamSettingsPage() {
 
             <div className="flex items-center gap-2 mb-4">
               <span className="text-xl">👤</span>
-              <h3 id="invite-modal-title" className="font-bold text-slate-800 text-lg">Add Team Member</h3>
+              <h3 id="invite-modal-title" className="font-bold text-slate-800 dark:text-slate-100 text-lg">Add Team Member</h3>
             </div>
 
             <p className="text-xs text-slate-400 font-semibold mb-6">
@@ -584,35 +584,35 @@ export default function TeamSettingsPage() {
 
             <form onSubmit={handleInviteSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">Full Name *</label>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-500 mb-1.5 uppercase">Full Name *</label>
                 <input
                   type="text"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
-                  className="w-full p-2.5 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-1 focus:ring-brand-blue bg-white font-semibold"
+                  className="w-full p-2.5 border border-slate-200 dark:border-white/10 rounded-lg text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-brand-blue bg-white dark:bg-dashboard-card font-semibold"
                   placeholder="e.g. Anand Sharma"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">Credential Locator (Email or Phone) *</label>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-500 mb-1.5 uppercase">Credential Locator (Email or Phone) *</label>
                 <input
                   type="text"
                   value={emailOrPhone}
                   onChange={(e) => setEmailOrPhone(e.target.value)}
-                  className="w-full p-2.5 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-1 focus:ring-brand-blue bg-white font-semibold"
+                  className="w-full p-2.5 border border-slate-200 dark:border-white/10 rounded-lg text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-brand-blue bg-white dark:bg-dashboard-card font-semibold"
                   placeholder="e.g. anand@svdistributors.com or +919876500111"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">Assigned Privilege Role *</label>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-500 mb-1.5 uppercase">Assigned Privilege Role *</label>
                 <select
                   value={role}
                   onChange={(e) => setRole(e.target.value)}
-                  className="w-full p-2.5 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-1 focus:ring-brand-blue bg-white font-semibold cursor-pointer"
+                  className="w-full p-2.5 border border-slate-200 dark:border-white/10 rounded-lg text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-brand-blue bg-white dark:bg-dashboard-card font-semibold cursor-pointer"
                   required
                 >
                   <option value="SUPER_ADMIN">Super Administrator (SUPER_ADMIN)</option>
@@ -623,22 +623,22 @@ export default function TeamSettingsPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">Account Password *</label>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-500 mb-1.5 uppercase">Account Password *</label>
                 <input
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full p-2.5 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-1 focus:ring-brand-blue bg-white font-semibold"
+                  className="w-full p-2.5 border border-slate-200 dark:border-white/10 rounded-lg text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-brand-blue bg-white dark:bg-dashboard-card font-semibold"
                   placeholder="At least 6 characters"
                   required
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 mt-6">
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-white/5 mt-6">
                 <button
                   type="button"
                   onClick={() => setIsInviteModalOpen(false)}
-                  className="px-4 py-2 border border-slate-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-50 transition-all cursor-pointer"
+                  className="px-4 py-2 border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400 rounded-lg text-xs font-bold hover:bg-slate-50 dark:hover:bg-white/5 transition-all cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -665,10 +665,10 @@ export default function TeamSettingsPage() {
       {/* Edit Role Modal */}
       {selectedUserForEdit && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm animate-fade-in" role="dialog" aria-modal="true" aria-labelledby="edit-role-modal-title">
-          <div className="bg-white rounded-xl border border-slate-200 shadow-2xl w-full max-w-md p-6 animate-scale-up relative mx-4 animate-slide-in">
+          <div className="bg-white dark:bg-dashboard-card rounded-xl border border-slate-200 dark:border-white/10 shadow-2xl w-full max-w-md p-6 animate-scale-up relative mx-4 animate-slide-in">
             <button
               onClick={() => setSelectedUserForEdit(null)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1.5 rounded-full hover:bg-slate-50 transition-all cursor-pointer"
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1.5 rounded-full hover:bg-slate-50 dark:hover:bg-white/5 transition-all cursor-pointer"
               aria-label="Close modal"
             >
               <X className="w-4 h-4" />
@@ -676,20 +676,20 @@ export default function TeamSettingsPage() {
 
             <div className="flex items-center gap-2 mb-4">
               <span className="text-xl">✏️</span>
-              <h3 id="edit-role-modal-title" className="font-bold text-slate-800 text-lg">Modify User Role</h3>
+              <h3 id="edit-role-modal-title" className="font-bold text-slate-800 dark:text-slate-100 text-lg">Modify User Role</h3>
             </div>
 
             <p className="text-xs text-slate-400 font-semibold mb-6">
-              Update the privilege role tier for <span className="text-slate-700 font-bold">{selectedUserForEdit.full_name}</span>.
+              Update the privilege role tier for <span className="text-slate-700 dark:text-slate-300 font-bold">{selectedUserForEdit.full_name}</span>.
             </p>
 
             <form onSubmit={handleEditSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">Assigned Privilege Role *</label>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-500 mb-1.5 uppercase">Assigned Privilege Role *</label>
                 <select
                   value={editRole}
                   onChange={(e) => setEditRole(e.target.value)}
-                  className="w-full p-2.5 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-1 focus:ring-brand-blue bg-white font-semibold cursor-pointer"
+                  className="w-full p-2.5 border border-slate-200 dark:border-white/10 rounded-lg text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-brand-blue bg-white dark:bg-dashboard-card font-semibold cursor-pointer"
                   required
                 >
                   <option value="SUPER_ADMIN">Super Administrator (SUPER_ADMIN)</option>
@@ -699,11 +699,11 @@ export default function TeamSettingsPage() {
                 </select>
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 mt-6">
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-white/5 mt-6">
                 <button
                   type="button"
                   onClick={() => setSelectedUserForEdit(null)}
-                  className="px-4 py-2 border border-slate-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-50 transition-all cursor-pointer"
+                  className="px-4 py-2 border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400 rounded-lg text-xs font-bold hover:bg-slate-50 dark:hover:bg-white/5 transition-all cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -729,7 +729,7 @@ export default function TeamSettingsPage() {
 
       {/* Sleek Floating Toast Notification */}
       {toast.show && (
-        <div className="fixed top-5 right-5 z-50 flex items-center gap-3 bg-white/95 backdrop-blur-md border border-slate-100 shadow-2xl px-4 py-3.5 rounded-xl animate-slide-in pointer-events-auto max-w-sm">
+        <div className="fixed top-5 right-5 z-50 flex items-center gap-3 bg-white/95 dark:bg-dashboard-card/95 backdrop-blur-md border border-slate-100 dark:border-white/5 shadow-2xl px-4 py-3.5 rounded-xl animate-slide-in pointer-events-auto max-w-sm">
           {toast.type === "success" ? (
             <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0 shadow-sm">
               <CheckCircle2 className="w-4.5 h-4.5" />
@@ -740,12 +740,12 @@ export default function TeamSettingsPage() {
             </div>
           )}
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-bold text-slate-800">{toast.type === "success" ? "Success" : "Error"}</p>
-            <p className="text-[11px] text-slate-500 font-semibold mt-0.5 break-words">{toast.message}</p>
+            <p className="text-xs font-bold text-slate-800 dark:text-slate-100">{toast.type === "success" ? "Success" : "Error"}</p>
+            <p className="text-[11px] text-slate-500 dark:text-slate-500 font-semibold mt-0.5 break-words">{toast.message}</p>
           </div>
           <button
             onClick={() => setToast(prev => ({ ...prev, show: false }))}
-            className="text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-50 transition-all shrink-0 cursor-pointer"
+            className="text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-50 dark:hover:bg-white/5 transition-all shrink-0 cursor-pointer"
           >
             <X className="w-3.5 h-3.5" />
           </button>
