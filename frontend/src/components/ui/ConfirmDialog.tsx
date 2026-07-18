@@ -47,14 +47,14 @@ export default function ConfirmDialog({
       aria-modal="true"
       aria-labelledby="confirm-dialog-title"
     >
-      <div className="bg-white rounded-2xl shadow-2xl border border-dashboard-border p-6 w-full max-w-sm mx-4 animate-scale-in">
+      <div className="bg-white dark:bg-dashboard-card rounded-2xl shadow-2xl border border-dashboard-border p-6 w-full max-w-sm mx-4 animate-scale-in">
         {/* Header */}
         <div className="flex items-start justify-between gap-3 mb-4">
           <div className="flex items-center gap-3">
             <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${iconStyles[variant]}`}>
               <AlertTriangle className="w-5 h-5" />
             </div>
-            <h3 id="confirm-dialog-title" className="text-base font-bold text-slate-800">
+            <h3 id="confirm-dialog-title" className="text-base font-bold text-slate-800 dark:text-slate-100">
               {title}
             </h3>
           </div>
@@ -68,14 +68,14 @@ export default function ConfirmDialog({
         </div>
 
         {/* Message */}
-        <p className="text-sm text-slate-600 mb-6 leading-relaxed">{message}</p>
+        <p className="text-sm text-slate-600 dark:text-slate-400 mb-6 leading-relaxed">{message}</p>
 
         {/* Actions */}
         <div className="flex gap-3 justify-end">
           <button
             onClick={onCancel}
             disabled={loading}
-            className="px-4 py-2 text-sm font-semibold text-slate-700 bg-white border border-dashboard-border rounded-lg hover:bg-slate-50 transition-all disabled:opacity-50"
+            className="px-4 py-2 text-sm font-semibold text-slate-700 dark:text-slate-300 bg-white dark:bg-dashboard-card border border-dashboard-border rounded-lg hover:bg-slate-50 dark:hover:bg-white/5 transition-all disabled:opacity-50"
           >
             {cancelLabel}
           </button>

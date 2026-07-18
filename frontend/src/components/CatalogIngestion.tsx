@@ -120,11 +120,11 @@ export default function CatalogIngestion({
   };
 
   return (
-    <div className="bg-white p-5 rounded-xl border border-dashboard-border shadow-sm flex flex-col justify-between h-full">
+    <div className="bg-white dark:bg-dashboard-card p-5 rounded-xl border border-dashboard-border shadow-sm flex flex-col justify-between h-full">
       {/* Header */}
       <div className="flex items-center justify-between pb-3 border-b border-dashboard-border mb-4">
         <div>
-          <h3 className="font-bold text-slate-800 text-base">Product Pricing Ingestion</h3>
+          <h3 className="font-bold text-slate-800 dark:text-slate-100 text-base">Product Pricing Ingestion</h3>
           <p className="text-[11px] text-slate-400 font-semibold mt-0.5">Bulk catalog updates via CSV sheet</p>
         </div>
       </div>
@@ -144,7 +144,7 @@ export default function CatalogIngestion({
           <div
             className={`flex-1 border-2 border-dashed rounded-xl p-6 flex flex-col items-center justify-center gap-2 cursor-pointer transition-all ${dragActive
                 ? "border-brand-blue bg-blue-50/20"
-                : "border-slate-200 hover:border-brand-blue hover:bg-slate-50/30"
+                : "border-slate-200 dark:border-white/10 hover:border-brand-blue hover:bg-slate-50/30"
               }`}
             onDragEnter={handleDrag}
             onDragLeave={handleDrag}
@@ -152,29 +152,29 @@ export default function CatalogIngestion({
             onDrop={handleDrop}
             onClick={onButtonClick}
           >
-            <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 shadow-sm border border-slate-100">
+            <div className="w-10 h-10 rounded-full bg-slate-50 dark:bg-dashboard-inset flex items-center justify-center text-slate-400 shadow-sm border border-slate-100 dark:border-white/5">
               <UploadCloud className="w-5 h-5" />
             </div>
-            <p className="text-xs font-bold text-slate-700 mt-1">
+            <p className="text-xs font-bold text-slate-700 dark:text-slate-300 mt-1">
               Drag & drop CSV file or <span className="text-brand-blue hover:underline">browse</span>
             </p>
             <p className="text-[10px] text-slate-400 font-medium">Supported file type: .csv</p>
           </div>
         ) : (
-          <div className="flex-1 border border-slate-200 bg-slate-50/40 rounded-xl p-4 flex flex-col justify-between gap-4">
+          <div className="flex-1 border border-slate-200 dark:border-white/10 bg-slate-50/40 rounded-xl p-4 flex flex-col justify-between gap-4">
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-2.5 min-w-0">
                 <div className="w-9 h-9 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-500 shrink-0">
                   <FileText className="w-5 h-5" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-xs font-bold text-slate-800 truncate">{selectedFile.name}</p>
+                  <p className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">{selectedFile.name}</p>
                   <p className="text-[10px] text-slate-400 font-semibold mt-0.5">{formatFileSize(selectedFile.size)}</p>
                 </div>
               </div>
               <button
                 onClick={clearFile}
-                className="text-slate-400 hover:text-slate-600 p-1 hover:bg-slate-100 rounded-full transition-all shrink-0"
+                className="text-slate-400 hover:text-slate-600 p-1 hover:bg-slate-100 dark:hover:bg-white/5 rounded-full transition-all shrink-0"
                 aria-label="Clear selected file"
               >
                 <X className="w-4 h-4" />
@@ -199,11 +199,11 @@ export default function CatalogIngestion({
         )}
 
         {/* Reference Format Info Box */}
-        <div className="p-3 bg-slate-50 border border-slate-200/60 rounded-xl text-[10px] flex gap-2">
+        <div className="p-3 bg-slate-50 dark:bg-dashboard-inset border border-slate-200/60 rounded-xl text-[10px] flex gap-2">
           <Info className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
           <div className="space-y-1">
-            <p className="font-bold text-slate-700">Required CSV Columns:</p>
-            <code className="block bg-slate-100 px-2 py-1 rounded text-slate-600 font-semibold border border-slate-200/50">
+            <p className="font-bold text-slate-700 dark:text-slate-300">Required CSV Columns:</p>
+            <code className="block bg-slate-100 dark:bg-white/5 px-2 py-1 rounded text-slate-600 dark:text-slate-400 font-semibold border border-slate-200/50">
               sku_id, brand, category, pack_size, base_price
             </code>
             <p className="text-slate-400 font-semibold mt-1">Updates price if SKU exists, otherwise inserts a new SKU row.</p>

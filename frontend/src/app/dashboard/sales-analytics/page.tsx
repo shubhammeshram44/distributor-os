@@ -137,14 +137,14 @@ export default function SalesAnalyticsPage() {
 
   if (!activeTenantId) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-slate-50">
+      <div className="flex items-center justify-center min-h-screen bg-slate-50 dark:bg-dashboard-inset">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-blue" />
       </div>
     );
   }
 
   return (
-    <div className="flex bg-dashboard-bg min-h-screen text-slate-800">
+    <div className="flex bg-dashboard-bg min-h-screen text-slate-800 dark:text-slate-100">
       <Sidebar
         activeTab="Sales Analytics"
         setActiveTab={() => {}}
@@ -161,7 +161,7 @@ export default function SalesAnalyticsPage() {
         <main className="flex-1 mt-16 p-6 overflow-y-auto space-y-6">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-xl font-bold text-slate-800 tracking-tight flex items-center gap-2">
+              <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100 tracking-tight flex items-center gap-2">
                 <BarChart3 className="w-5 h-5 text-brand-blue" />
                 <span>Sales Analytics Workspace</span>
               </h1>
@@ -174,7 +174,7 @@ export default function SalesAnalyticsPage() {
             <select
               value={timeframe}
               onChange={(e) => setTimeframe(e.target.value)}
-              className="border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 outline-none focus:border-emerald-500 bg-white cursor-pointer shadow-sm"
+              className="border border-slate-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-slate-700 dark:text-slate-300 outline-none focus:border-emerald-500 bg-white dark:bg-dashboard-card cursor-pointer shadow-sm"
             >
               <option value="7d">Last 7 Days</option>
               <option value="30d">Last 30 Days</option>
@@ -205,14 +205,14 @@ export default function SalesAnalyticsPage() {
                   icon: "📊"
                 }
               ].map((card) => (
-                <div key={card.label} className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+                <div key={card.label} className="bg-white dark:bg-dashboard-card rounded-xl border border-slate-200 dark:border-white/10 p-5 shadow-sm">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs font-bold text-slate-400 uppercase tracking-wide">
                       {card.label}
                     </span>
                     <span className="text-lg">{card.icon}</span>
                   </div>
-                  <div className="text-2xl font-bold text-slate-800">{card.value}</div>
+                  <div className="text-2xl font-bold text-slate-800 dark:text-slate-100">{card.value}</div>
                   <div className={`text-xs font-semibold mt-1 ${
                     card.change >= 0 ? "text-emerald-600" : "text-red-500"
                   }`}>
@@ -226,7 +226,7 @@ export default function SalesAnalyticsPage() {
           {loading ? (
             <div className="flex flex-col items-center justify-center py-32 gap-3">
               <Loader2 className="w-8 h-8 text-brand-blue animate-spin" />
-              <span className="text-sm font-semibold text-slate-500">Aggregating database sales metrics...</span>
+              <span className="text-sm font-semibold text-slate-500 dark:text-slate-500">Aggregating database sales metrics...</span>
             </div>
           ) : error ? (
             <div className="flex flex-col items-center justify-center py-32 gap-3 text-rose-600">
@@ -243,10 +243,10 @@ export default function SalesAnalyticsPage() {
             <div className="space-y-6">
               {/* Analytics Summary Banners */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="bg-white p-6 rounded-xl border border-dashboard-border shadow-sm flex items-center justify-between">
+                <div className="bg-white dark:bg-dashboard-card p-6 rounded-xl border border-dashboard-border shadow-sm flex items-center justify-between">
                   <div>
                     <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Sales Orders</p>
-                    <h3 className="text-2xl font-extrabold text-slate-800 mt-1">{data?.total_orders}</h3>
+                    <h3 className="text-2xl font-extrabold text-slate-800 dark:text-slate-100 mt-1">{data?.total_orders}</h3>
                     <p className="text-[10px] text-slate-400 font-semibold mt-1">Processed in current tenant context</p>
                   </div>
                   <div className="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center text-brand-blue shadow-sm">
@@ -254,10 +254,10 @@ export default function SalesAnalyticsPage() {
                   </div>
                 </div>
 
-                <div className="bg-white p-6 rounded-xl border border-dashboard-border shadow-sm flex items-center justify-between">
+                <div className="bg-white dark:bg-dashboard-card p-6 rounded-xl border border-dashboard-border shadow-sm flex items-center justify-between">
                   <div>
                     <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Top Brand Volume</p>
-                    <h3 className="text-2xl font-extrabold text-slate-800 mt-1">
+                    <h3 className="text-2xl font-extrabold text-slate-800 dark:text-slate-100 mt-1">
                       {data?.top_moving_skus[0]?.brand || "N/A"}
                     </h3>
                     <p className="text-[10px] text-slate-400 font-semibold mt-1">Leading product catalog manufacturer</p>
@@ -271,8 +271,8 @@ export default function SalesAnalyticsPage() {
               {/* Data Visualization Sections */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Top Moving SKUs */}
-                <div className="bg-white p-6 rounded-xl border border-dashboard-border shadow-sm flex flex-col h-[400px]">
-                  <h3 className="text-sm font-bold text-slate-700 mb-4 flex items-center gap-1.5">
+                <div className="bg-white dark:bg-dashboard-card p-6 rounded-xl border border-dashboard-border shadow-sm flex flex-col h-[400px]">
+                  <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-4 flex items-center gap-1.5">
                     <Layers className="w-4 h-4 text-brand-blue" />
                     <span>Top-Moving SKUs (By Quantity)</span>
                   </h3>
@@ -287,8 +287,8 @@ export default function SalesAnalyticsPage() {
                           <XAxis type="number" stroke="#94a3b8" fontSize={10} />
                           <YAxis dataKey="sku_code" type="category" stroke="#94a3b8" fontSize={10} width={100} />
                           <Tooltip
-                            contentStyle={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "8px" }}
-                            labelStyle={{ fontWeight: "bold", color: "#1e293b" }}
+                            contentStyle={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "8px", color: "var(--color-text)" }}
+                            labelStyle={{ fontWeight: "bold", color: "var(--color-text)" }}
                           />
                           <Bar dataKey="total_quantity" fill="#3b82f6" radius={[0, 4, 4, 0]} barSize={15} />
                         </BarChart>
@@ -302,8 +302,8 @@ export default function SalesAnalyticsPage() {
                 </div>
 
                 {/* Pipeline Velocity Breakdown */}
-                <div className="bg-white p-6 rounded-xl border border-dashboard-border shadow-sm flex flex-col h-[400px]">
-                  <h3 className="text-sm font-bold text-slate-700 mb-4 flex items-center gap-1.5">
+                <div className="bg-white dark:bg-dashboard-card p-6 rounded-xl border border-dashboard-border shadow-sm flex flex-col h-[400px]">
+                  <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-4 flex items-center gap-1.5">
                     <TrendingUp className="w-4 h-4 text-brand-blue" />
                     <span>Order Pipeline Velocity Breakdown</span>
                   </h3>
@@ -325,7 +325,7 @@ export default function SalesAnalyticsPage() {
                             ))}
                           </Pie>
                           <Tooltip
-                            contentStyle={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "8px" }}
+                            contentStyle={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "8px", color: "var(--color-text)" }}
                           />
                           <Legend verticalAlign="bottom" height={36} iconType="circle" />
                         </PieChart>

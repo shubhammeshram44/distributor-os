@@ -6,6 +6,7 @@ import { Phone, Loader2, ArrowRight, ShieldCheck, AlertCircle } from "lucide-rea
 import { RecaptchaVerifier, signInWithPhoneNumber, ConfirmationResult } from "firebase/auth";
 import { auth, isFirebaseConfigured } from "@/lib/firebase";
 import OtpInput from "@/components/ui/OtpInput";
+import ThemeToggle from "@/components/ui/ThemeToggle";
 
 function cleanAndNormalizePhone(input: string): string | null {
   const trimmed = input.trim();
@@ -235,15 +236,18 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="flex min-h-screen bg-slate-50 items-center justify-center p-4">
+    <div className="flex min-h-screen bg-slate-50 dark:bg-dashboard-inset items-center justify-center p-4 relative">
+      <div className="absolute top-4 right-4">
+        <ThemeToggle />
+      </div>
       <div id="recaptcha-container" />
-      <div className="w-full max-w-md bg-white border border-slate-200 rounded-2xl shadow-xl p-8 flex flex-col justify-between">
+      <div className="w-full max-w-md bg-white dark:bg-dashboard-card border border-slate-200 dark:border-white/10 rounded-2xl shadow-xl p-8 flex flex-col justify-between">
 
         <div className="text-center mb-8">
           <div className="w-12 h-12 rounded-2xl bg-blue-600 flex items-center justify-center mx-auto mb-4 text-white text-xl font-black shadow-md shadow-blue-200">
             D
           </div>
-          <h2 className="text-2xl font-bold text-slate-800 tracking-tight">Distributor OS</h2>
+          <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">Distributor OS</h2>
           <p className="text-xs text-slate-400 font-semibold mt-1">
             Secure workspace authentication & verification portal
           </p>
@@ -262,7 +266,7 @@ export default function AuthPage() {
         {step === 1 ? (
           <form onSubmit={handleRequestOtp} className="space-y-5">
             <div>
-              <label className="block text-[11px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
+              <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-500 mb-1.5 uppercase tracking-wider">
                 Mobile Number
               </label>
               <div className="relative">
@@ -271,7 +275,7 @@ export default function AuthPage() {
                   placeholder="e.g. +91 98765 43210"
                   value={mobileNumber}
                   onChange={(e) => setMobileNumber(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500 bg-slate-50/20 text-slate-700"
+                  className="w-full pl-10 pr-4 py-3 border border-slate-200 dark:border-white/10 rounded-xl text-sm font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500 bg-slate-50/20 text-slate-700 dark:text-slate-300"
                   disabled={loading}
                   required
                 />
@@ -307,7 +311,7 @@ export default function AuthPage() {
         ) : (
           <form onSubmit={handleVerifyOtp} className="space-y-5">
             <div>
-              <label className="block text-[11px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
+              <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-500 mb-1.5 uppercase tracking-wider">
                 Verification Code
               </label>
               <OtpInput
@@ -372,7 +376,7 @@ export default function AuthPage() {
               <button
                 type="button"
                 onClick={handleChangePhone}
-                className="w-full py-2 bg-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                className="w-full py-2 bg-transparent text-slate-500 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/5 rounded-xl text-xs font-bold transition-all cursor-pointer"
                 disabled={loading}
               >
                 Change Phone Number

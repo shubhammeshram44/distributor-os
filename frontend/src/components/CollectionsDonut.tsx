@@ -32,12 +32,12 @@ export default function CollectionsDonut({ data, viewReportHref, overdue60Count 
   const chartData = hasData ? data : [{ name: "No Outstanding", value: 1 }];
 
   return (
-    <div className="bg-white p-4 rounded-xl border border-dashboard-border shadow-sm flex flex-col justify-between h-full">
+    <div className="bg-white dark:bg-dashboard-card p-4 rounded-xl border border-dashboard-border shadow-sm flex flex-col justify-between h-full">
       {/* Header */}
       <div className="flex items-center justify-between pb-3 border-b border-dashboard-border mb-3">
         <div>
           <div className="flex items-center gap-2">
-            <h3 className="font-bold text-slate-800 text-base">Collections Overview</h3>
+            <h3 className="font-bold text-slate-800 dark:text-slate-100 text-base">Collections Overview</h3>
           </div>
           <p className="text-[10px] text-slate-400 font-semibold mt-0.5">Current Portfolio Snapshot</p>
         </div>
@@ -78,7 +78,7 @@ export default function CollectionsDonut({ data, viewReportHref, overdue60Count 
           {/* Centered label */}
           <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center px-2">
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Outstanding</span>
-            <span className="text-sm font-extrabold text-slate-800 mt-0.5 break-all">
+            <span className="text-sm font-extrabold text-slate-800 dark:text-slate-100 mt-0.5 break-all">
               {totalOutstanding === 0 ? "₹0" : formatAmount(totalOutstanding)}
             </span>
           </div>
@@ -93,9 +93,9 @@ export default function CollectionsDonut({ data, viewReportHref, overdue60Count 
                   className="w-2.5 h-2.5 rounded-full"
                   style={{ backgroundColor: COLORS[index % COLORS.length] }}
                 />
-                <span className="text-slate-600 font-semibold">{item.name}</span>
+                <span className="text-slate-600 dark:text-slate-400 font-semibold">{item.name}</span>
               </div>
-              <span className="font-bold text-slate-800">
+              <span className="font-bold text-slate-800 dark:text-slate-100">
                 {formatAmount(item.value)} <span className="text-[10px] text-slate-400 font-normal">({item.percentage}%)</span>
               </span>
             </div>

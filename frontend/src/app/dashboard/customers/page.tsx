@@ -386,14 +386,14 @@ function CustomersContent() {
   };
   if (!activeTenantId) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-slate-50">
+      <div className="flex items-center justify-center min-h-screen bg-slate-50 dark:bg-dashboard-inset">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-blue" />
       </div>
     );
   }
 
   return (
-    <div className="flex bg-dashboard-bg min-h-screen text-slate-800">
+    <div className="flex bg-dashboard-bg min-h-screen text-slate-800 dark:text-slate-100">
       <Sidebar
         activeTab="Customers"
         setActiveTab={() => { }}
@@ -411,7 +411,7 @@ function CustomersContent() {
           {/* Header Controls */}
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-xl font-bold text-slate-800 tracking-tight flex items-center gap-2">
+              <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100 tracking-tight flex items-center gap-2">
                 <Users className="w-5 h-5 text-brand-blue" />
                 <span>Customers Hub</span>
               </h1>
@@ -434,7 +434,7 @@ function CustomersContent() {
                     fetchCustomers(activeTenantId);
                   }
                 }}
-                className="flex items-center gap-1.5 px-3 py-2 border border-dashboard-border bg-white rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-all shadow-sm cursor-pointer"
+                className="flex items-center gap-1.5 px-3 py-2 border border-dashboard-border bg-white dark:bg-dashboard-card rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-white/5 transition-all shadow-sm cursor-pointer"
               >
                 <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
                 <span>Refresh Ledger</span>
@@ -445,10 +445,10 @@ function CustomersContent() {
           {/* Quick Metrics Banners */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {/* Total Customers */}
-            <div className="bg-white p-5 rounded-xl border border-dashboard-border shadow-sm flex items-center justify-between">
+            <div className="bg-white dark:bg-dashboard-card p-5 rounded-xl border border-dashboard-border shadow-sm flex items-center justify-between">
               <div>
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Retailers</p>
-                <h3 className="text-2xl font-extrabold text-slate-800 mt-1">{totalCustomersCount}</h3>
+                <h3 className="text-2xl font-extrabold text-slate-800 dark:text-slate-100 mt-1">{totalCustomersCount}</h3>
                 <p className="text-[10px] text-slate-400 font-semibold mt-1">Active billing relationships</p>
               </div>
               <div className="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center text-brand-blue shadow-sm">
@@ -457,10 +457,10 @@ function CustomersContent() {
             </div>
 
             {/* Total Outstanding */}
-            <div className="bg-white p-5 rounded-xl border border-dashboard-border shadow-sm flex items-center justify-between">
+            <div className="bg-white dark:bg-dashboard-card p-5 rounded-xl border border-dashboard-border shadow-sm flex items-center justify-between">
               <div>
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Outstanding</p>
-                <h3 className="text-2xl font-extrabold text-slate-800 mt-1">{formatCurrency(totalOutstanding)}</h3>
+                <h3 className="text-2xl font-extrabold text-slate-800 dark:text-slate-100 mt-1">{formatCurrency(totalOutstanding)}</h3>
                 <p className="text-[10px] text-slate-400 font-semibold mt-1">Uncollected receivables balance</p>
               </div>
               <div className="w-12 h-12 rounded-xl bg-amber-50 flex items-center justify-center text-amber-600 shadow-sm">
@@ -469,22 +469,22 @@ function CustomersContent() {
             </div>
 
             {/* Credit At Risk */}
-            <div className="bg-white p-5 rounded-xl border border-dashboard-border shadow-sm flex items-center justify-between">
+            <div className="bg-white dark:bg-dashboard-card p-5 rounded-xl border border-dashboard-border shadow-sm flex items-center justify-between">
               <div>
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Ceiling Risk Accounts</p>
-                <h3 className={`text-2xl font-extrabold mt-1 ${atRiskCount > 0 ? "text-rose-600" : "text-slate-800"}`}>
+                <h3 className={`text-2xl font-extrabold mt-1 ${atRiskCount > 0 ? "text-rose-600" : "text-slate-800 dark:text-slate-100"}`}>
                   {atRiskCount}
                 </h3>
                 <p className="text-[10px] text-rose-500 font-semibold mt-1">Balances at &gt;= 90% of credit ceiling</p>
               </div>
-              <div className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-sm ${atRiskCount > 0 ? "bg-rose-50 text-rose-600" : "bg-slate-50 text-slate-400"}`}>
+              <div className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-sm ${atRiskCount > 0 ? "bg-rose-50 text-rose-600" : "bg-slate-50 dark:bg-dashboard-inset text-slate-400"}`}>
                 <AlertTriangle className="w-5 h-5" />
               </div>
             </div>
           </div>
 
           {/* Financial Ledger Grid Table Card */}
-          <div className="bg-white rounded-xl border border-dashboard-border shadow-sm flex flex-col min-h-[400px]">
+          <div className="bg-white dark:bg-dashboard-card rounded-xl border border-dashboard-border shadow-sm flex flex-col min-h-[400px]">
             {/* Search filter utility bar */}
             <div className="p-5 border-b border-dashboard-border flex items-center justify-between bg-slate-50/50 rounded-t-xl gap-4">
               <div className="relative max-w-sm w-full">
@@ -494,12 +494,12 @@ function CustomersContent() {
                   placeholder="Filter by Store Name, Customer ID, Address..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-dashboard-border rounded-lg text-sm bg-white focus:outline-none focus:ring-1 focus:ring-brand-blue focus:border-brand-blue transition-all text-slate-700"
+                  className="w-full pl-10 pr-4 py-2 border border-dashboard-border rounded-lg text-sm bg-white dark:bg-dashboard-card focus:outline-none focus:ring-1 focus:ring-brand-blue focus:border-brand-blue transition-all text-slate-700 dark:text-slate-300"
                 />
               </div>
 
               <div className="text-xs font-bold text-slate-400">
-                Total Retailers Listed: <span className="text-slate-700">{filteredCustomers.length}</span>
+                Total Retailers Listed: <span className="text-slate-700 dark:text-slate-300">{filteredCustomers.length}</span>
               </div>
             </div>
 
@@ -508,7 +508,7 @@ function CustomersContent() {
               {loading ? (
                 <div className="flex flex-col items-center justify-center py-24 gap-3">
                   <Loader2 className="w-8 h-8 text-brand-blue animate-spin" />
-                  <span className="text-sm font-semibold text-slate-500">Loading customers ledger...</span>
+                  <span className="text-sm font-semibold text-slate-500 dark:text-slate-500">Loading customers ledger...</span>
                 </div>
               ) : error ? (
                 <div className="flex flex-col items-center justify-center py-24 gap-3 text-rose-600">
@@ -544,41 +544,41 @@ function CustomersContent() {
                       <th className="py-3 px-6 text-center">Statement</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody className="divide-y divide-slate-100 dark:divide-white/5">
                     {filteredCustomers.map((c) => {
                       const isRisk = c.credit_limit > 0 && (c.outstanding_balance / c.credit_limit) >= 0.9;
                       return (
                         <tr key={c.id} className="hover:bg-slate-50/50 transition-colors group">
-                          <td className="py-4 px-6 font-bold text-slate-800 text-sm">
+                          <td className="py-4 px-6 font-bold text-slate-800 dark:text-slate-100 text-sm">
                             {c.customer_id}
                           </td>
-                          <td className="py-4 px-6 font-semibold text-slate-700">
+                          <td className="py-4 px-6 font-semibold text-slate-700 dark:text-slate-300">
                             <div>
-                              <p className="font-bold text-slate-800 text-sm">{c.retailer_name}</p>
+                              <p className="font-bold text-slate-800 dark:text-slate-100 text-sm">{c.retailer_name}</p>
                               <p className="text-[10px] text-slate-400 font-semibold mt-0.5">{c.address_text}</p>
                             </div>
                           </td>
-                          <td className="py-4 px-6 font-medium text-slate-500">
+                          <td className="py-4 px-6 font-medium text-slate-500 dark:text-slate-500">
                             {c.phone}
                           </td>
-                          <td className="py-4 px-6 text-xs font-semibold text-slate-500">
-                            <span className="bg-slate-100 px-2 py-1 rounded border border-slate-200/50">
+                          <td className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-500">
+                            <span className="bg-slate-100 dark:bg-white/5 px-2 py-1 rounded border border-slate-200/50">
                               {(c as any).payment_terms || "Net 30"}
                             </span>
                           </td>
-                          <td className="py-4 px-6 text-right font-extrabold text-slate-800">
+                          <td className="py-4 px-6 text-right font-extrabold text-slate-800 dark:text-slate-100">
                             <div className="flex items-center justify-end gap-1.5">
                               <span>{formatCurrency(c.credit_limit)}</span>
                               <button
                                 onClick={() => handleOpenEditModal(c)}
-                                className="text-slate-400 hover:text-blue-600 p-1 rounded hover:bg-slate-100 transition-all cursor-pointer"
+                                className="text-slate-400 hover:text-blue-600 p-1 rounded hover:bg-slate-100 dark:hover:bg-white/5 transition-all cursor-pointer"
                                 title="Edit Settings"
                               >
                                 <Edit3 className="w-3.5 h-3.5" />
                               </button>
                             </div>
                           </td>
-                          <td className="py-4 px-6 text-right font-extrabold text-slate-800">
+                          <td className="py-4 px-6 text-right font-extrabold text-slate-800 dark:text-slate-100">
                             {formatCurrency(c.outstanding_balance)}
                           </td>
                           <td className="py-4 px-6 text-center">
@@ -633,7 +633,7 @@ function CustomersContent() {
       {/* Payment History Drawer */}
       {isPaymentDrawerOpen && (
         <div className="fixed inset-y-0 right-0 z-50 flex justify-end pointer-events-none" role="dialog" aria-modal="true" aria-labelledby="payment-drawer-title">
-          <div className="w-[420px] bg-white h-screen shadow-2xl flex flex-col animate-slide-in border-l border-slate-200 pointer-events-auto">
+          <div className="w-[420px] bg-white dark:bg-dashboard-card h-screen shadow-2xl flex flex-col animate-slide-in border-l border-slate-200 dark:border-white/10 pointer-events-auto">
             <div className="p-5 border-b border-dashboard-border flex items-center justify-between bg-brand-dark text-white">
               <div>
                 <h3 id="payment-drawer-title" className="font-bold text-base">Payment History</h3>
@@ -645,21 +645,21 @@ function CustomersContent() {
             </div>
             <div className="flex-1 overflow-y-auto p-5 space-y-3">
               {loadingPayments ? (
-                [1, 2, 3].map(i => <div key={i} className="animate-pulse h-14 bg-slate-100 rounded-xl" />)
+                [1, 2, 3].map(i => <div key={i} className="animate-pulse h-14 bg-slate-100 dark:bg-white/5 rounded-xl" />)
               ) : paymentHistory.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-40 text-center gap-2">
                   <CreditCard className="w-8 h-8 text-slate-300" />
-                  <p className="text-sm font-semibold text-slate-500">No payments recorded</p>
+                  <p className="text-sm font-semibold text-slate-500 dark:text-slate-500">No payments recorded</p>
                   <p className="text-xs text-slate-400">Payments will appear here once recorded</p>
                 </div>
               ) : (
                 paymentHistory.map((p: any, i: number) => (
                   <div key={i} className="p-3 rounded-xl border border-dashboard-border bg-slate-50/50 flex flex-col gap-1.5">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold font-mono text-slate-700">{p.payment_code || p.id?.slice(0, 8)}</span>
+                      <span className="text-xs font-bold font-mono text-slate-700 dark:text-slate-300">{p.payment_code || p.id?.slice(0, 8)}</span>
                       <span className="text-xs font-extrabold text-emerald-700">₹{Number(p.total_amount ?? p.amount ?? 0).toLocaleString("en-IN")}</span>
                     </div>
-                    <div className="flex items-center justify-between text-[11px] text-slate-500">
+                    <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-500">
                       <span>{p.method || p.payment_method || "—"}</span>
                       <span>{p.created_at ? formatDateTime(p.created_at, "date") : "—"}</span>
                     </div>
@@ -675,10 +675,10 @@ function CustomersContent() {
       {/* Edit Configuration Modal */}
       {isEditModalOpen && selectedCustomer && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm animate-fade-in" role="dialog" aria-modal="true" aria-labelledby="edit-config-modal-title">
-          <div className="bg-white rounded-xl border border-slate-200 shadow-2xl w-full max-w-md p-6 animate-scale-up relative mx-4 animate-slide-in">
+          <div className="bg-white dark:bg-dashboard-card rounded-xl border border-slate-200 dark:border-white/10 shadow-2xl w-full max-w-md p-6 animate-scale-up relative mx-4 animate-slide-in">
             <button
               onClick={() => setIsEditModalOpen(false)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1.5 rounded-full hover:bg-slate-50 transition-all cursor-pointer"
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1.5 rounded-full hover:bg-slate-50 dark:hover:bg-white/5 transition-all cursor-pointer"
               aria-label="Close modal"
             >
               <X className="w-4 h-4" />
@@ -686,33 +686,33 @@ function CustomersContent() {
 
             <div className="flex items-center gap-2 mb-4">
               <span className="text-xl">⚙️</span>
-              <h3 id="edit-config-modal-title" className="font-bold text-slate-800 text-lg">Configure Store Account</h3>
+              <h3 id="edit-config-modal-title" className="font-bold text-slate-800 dark:text-slate-100 text-lg">Configure Store Account</h3>
             </div>
 
             <p className="text-xs text-slate-400 font-semibold mb-6">
-              Adjust parameters for <span className="text-slate-700 font-bold">{selectedCustomer.retailer_name}</span> ({selectedCustomer.customer_id})
+              Adjust parameters for <span className="text-slate-700 dark:text-slate-300 font-bold">{selectedCustomer.retailer_name}</span> ({selectedCustomer.customer_id})
             </p>
 
             <form onSubmit={handleEditSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">Credit Limit (₹)</label>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-500 mb-1.5 uppercase">Credit Limit (₹)</label>
                 <input
                   type="number"
                   step="1"
                   value={updatedLimit}
                   onChange={(e) => setUpdatedLimit(e.target.value)}
-                  className="w-full p-2.5 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-1 focus:ring-brand-blue bg-white font-semibold"
+                  className="w-full p-2.5 border border-slate-200 dark:border-white/10 rounded-lg text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-brand-blue bg-white dark:bg-dashboard-card font-semibold"
                   placeholder="e.g. 100000"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">Billing / Payment Terms</label>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-500 mb-1.5 uppercase">Billing / Payment Terms</label>
                 <select
                   value={updatedTerms}
                   onChange={(e) => setUpdatedTerms(e.target.value)}
-                  className="w-full p-2.5 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-1 focus:ring-brand-blue bg-white font-semibold cursor-pointer"
+                  className="w-full p-2.5 border border-slate-200 dark:border-white/10 rounded-lg text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-brand-blue bg-white dark:bg-dashboard-card font-semibold cursor-pointer"
                   required
                 >
                   <option value="0-15 Days">0-15 Days</option>
@@ -725,9 +725,9 @@ function CustomersContent() {
                 </select>
               </div>
 
-              <div className="flex items-center justify-between py-2 border-t border-slate-100 pt-4">
+              <div className="flex items-center justify-between py-2 border-t border-slate-100 dark:border-white/5 pt-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase">WhatsApp Notifications</label>
+                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-500 uppercase">WhatsApp Notifications</label>
                   <p className="text-[10px] text-slate-400">Receive automated order updates via WhatsApp.</p>
                 </div>
                 <button
@@ -737,17 +737,17 @@ function CustomersContent() {
                     }`}
                 >
                   <span
-                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${whatsappNotificationsEnabled ? "translate-x-5" : "translate-x-0"
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white dark:bg-dashboard-card shadow ring-0 transition duration-200 ease-in-out ${whatsappNotificationsEnabled ? "translate-x-5" : "translate-x-0"
                       }`}
                   />
                 </button>
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 mt-6">
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-white/5 mt-6">
                 <button
                   type="button"
                   onClick={() => setIsEditModalOpen(false)}
-                  className="px-4 py-2 border border-slate-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-50 transition-all cursor-pointer"
+                  className="px-4 py-2 border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400 rounded-lg text-xs font-bold hover:bg-slate-50 dark:hover:bg-white/5 transition-all cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -774,7 +774,7 @@ function CustomersContent() {
       {/* Onboard New Retailer Modal */}
       {isOnboardModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm animate-fade-in" role="dialog" aria-modal="true" aria-labelledby="onboard-modal-title">
-          <div className="bg-white rounded-xl border border-slate-200 shadow-2xl w-full max-w-md p-6 animate-scale-up relative mx-4 animate-slide-in">
+          <div className="bg-white dark:bg-dashboard-card rounded-xl border border-slate-200 dark:border-white/10 shadow-2xl w-full max-w-md p-6 animate-scale-up relative mx-4 animate-slide-in">
             <button
               onClick={() => {
                 setIsOnboardModalOpen(false);
@@ -784,7 +784,7 @@ function CustomersContent() {
                 setCreditLimit("100000");
                 setBillingTerms("Net 30");
               }}
-              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1.5 rounded-full hover:bg-slate-50 transition-all cursor-pointer"
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1.5 rounded-full hover:bg-slate-50 dark:hover:bg-white/5 transition-all cursor-pointer"
               aria-label="Close modal"
             >
               <X className="w-4 h-4" />
@@ -792,7 +792,7 @@ function CustomersContent() {
 
             <div className="flex items-center gap-2 mb-4">
               <span className="text-xl">🏪</span>
-              <h3 id="onboard-modal-title" className="font-bold text-slate-800 text-lg">Onboard New Retailer</h3>
+              <h3 id="onboard-modal-title" className="font-bold text-slate-800 dark:text-slate-100 text-lg">Onboard New Retailer</h3>
             </div>
 
             <p className="text-xs text-slate-400 font-semibold mb-6">
@@ -801,59 +801,59 @@ function CustomersContent() {
 
             <form onSubmit={handleOnboardSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">Store Name</label>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-500 mb-1.5 uppercase">Store Name</label>
                 <input
                   type="text"
                   value={storeName}
                   onChange={(e) => setStoreName(e.target.value)}
-                  className="w-full p-2.5 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-1 focus:ring-brand-blue bg-white font-semibold"
+                  className="w-full p-2.5 border border-slate-200 dark:border-white/10 rounded-lg text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-brand-blue bg-white dark:bg-dashboard-card font-semibold"
                   placeholder="e.g. Kaveri Provision Store"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">Contact Phone</label>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-500 mb-1.5 uppercase">Contact Phone</label>
                 <input
                   type="text"
                   value={contactNumber}
                   onChange={(e) => setContactNumber(e.target.value)}
-                  className="w-full p-2.5 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-1 focus:ring-brand-blue bg-white font-semibold"
+                  className="w-full p-2.5 border border-slate-200 dark:border-white/10 rounded-lg text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-brand-blue bg-white dark:bg-dashboard-card font-semibold"
                   placeholder="e.g. +919999888877"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">Delivery Address</label>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-500 mb-1.5 uppercase">Delivery Address</label>
                 <textarea
                   value={deliveryAddress}
                   onChange={(e) => setDeliveryAddress(e.target.value)}
-                  className="w-full p-2.5 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-1 focus:ring-brand-blue bg-white font-semibold h-20 resize-none"
+                  className="w-full p-2.5 border border-slate-200 dark:border-white/10 rounded-lg text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-brand-blue bg-white dark:bg-dashboard-card font-semibold h-20 resize-none"
                   placeholder="e.g. Bengaluru, Indiranagar"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">Initial Credit Ceiling Limit (₹)</label>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-500 mb-1.5 uppercase">Initial Credit Ceiling Limit (₹)</label>
                 <input
                   type="number"
                   step="1"
                   value={creditLimit}
                   onChange={(e) => setCreditLimit(e.target.value)}
-                  className="w-full p-2.5 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-1 focus:ring-brand-blue bg-white font-semibold"
+                  className="w-full p-2.5 border border-slate-200 dark:border-white/10 rounded-lg text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-brand-blue bg-white dark:bg-dashboard-card font-semibold"
                   placeholder="e.g. 100000"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">Billing Terms</label>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-500 mb-1.5 uppercase">Billing Terms</label>
                 <select
                   value={billingTerms}
                   onChange={(e) => setBillingTerms(e.target.value)}
-                  className="w-full p-2.5 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-1 focus:ring-brand-blue bg-white font-semibold cursor-pointer"
+                  className="w-full p-2.5 border border-slate-200 dark:border-white/10 rounded-lg text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-brand-blue bg-white dark:bg-dashboard-card font-semibold cursor-pointer"
                   required
                 >
                   <option value="0-15 Days">0-15 Days</option>
@@ -866,7 +866,7 @@ function CustomersContent() {
                 </select>
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 mt-6">
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-white/5 mt-6">
                 <button
                   type="button"
                   onClick={() => {
@@ -877,7 +877,7 @@ function CustomersContent() {
                     setCreditLimit("100000");
                     setBillingTerms("Net 30");
                   }}
-                  className="px-4 py-2 border border-slate-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-50 transition-all cursor-pointer"
+                  className="px-4 py-2 border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400 rounded-lg text-xs font-bold hover:bg-slate-50 dark:hover:bg-white/5 transition-all cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -906,7 +906,7 @@ function CustomersContent() {
         <div className="fixed inset-y-0 right-0 z-50 flex justify-end pointer-events-none">
           <div className="flex-1 pointer-events-none"></div>
 
-          <div className="w-[600px] bg-white h-screen shadow-2xl flex flex-col animate-slide-in relative border-l border-slate-200 pointer-events-auto">
+          <div className="w-[600px] bg-white dark:bg-dashboard-card h-screen shadow-2xl flex flex-col animate-slide-in relative border-l border-slate-200 dark:border-white/10 pointer-events-auto">
             {/* Drawer Header */}
             <div className="p-6 border-b border-dashboard-border flex items-center justify-between bg-brand-dark text-white">
               <div>
@@ -928,7 +928,7 @@ function CustomersContent() {
               {loadingStatement ? (
                 <div className="flex flex-col items-center justify-center h-48 gap-3">
                   <Loader2 className="w-8 h-8 text-brand-blue animate-spin" />
-                  <span className="text-sm font-semibold text-slate-500">Retrieving statement history...</span>
+                  <span className="text-sm font-semibold text-slate-500 dark:text-slate-500">Retrieving statement history...</span>
                 </div>
               ) : activeStatementRows.length === 0 ? (
                 <div className="text-center text-slate-400 py-12 font-medium text-xs">
@@ -937,17 +937,17 @@ function CustomersContent() {
               ) : (
                 <div className="space-y-6">
                   {/* Summary Metric inside Statement Drawer */}
-                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/50 flex justify-between items-center">
-                    <span className="text-xs font-bold text-slate-500 uppercase">Current Account Balance</span>
-                    <span className="text-base font-extrabold text-slate-800">
+                  <div className="bg-slate-50 dark:bg-dashboard-inset p-4 rounded-xl border border-slate-200/50 flex justify-between items-center">
+                    <span className="text-xs font-bold text-slate-500 dark:text-slate-500 uppercase">Current Account Balance</span>
+                    <span className="text-base font-extrabold text-slate-800 dark:text-slate-100">
                       {formatCurrency(activeStatementRows[activeStatementRows.length - 1].running_balance)}
                     </span>
                   </div>
 
-                  <div className="border border-slate-100 rounded-xl overflow-hidden shadow-sm">
+                  <div className="border border-slate-100 dark:border-white/5 rounded-xl overflow-hidden shadow-sm">
                     <table className="w-full text-left text-xs border-collapse">
                       <thead>
-                        <tr className="text-slate-400 font-bold border-b border-dashboard-border bg-slate-50">
+                        <tr className="text-slate-400 font-bold border-b border-dashboard-border bg-slate-50 dark:bg-dashboard-inset">
                           <th className="py-2.5 px-4">Date</th>
                           <th className="py-2.5 px-4">Reference</th>
                           <th className="py-2.5 px-4 text-right">Debit (+)</th>
@@ -955,13 +955,13 @@ function CustomersContent() {
                           <th className="py-2.5 px-4 text-right">Balance</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
+                      <tbody className="divide-y divide-slate-100 dark:divide-white/5 font-semibold text-slate-700 dark:text-slate-300">
                         {activeStatementRows.map((row) => (
                           <tr key={row.id} className="hover:bg-slate-50/50">
-                            <td className="py-3 px-4 text-slate-500 text-[10px] whitespace-nowrap">
+                            <td className="py-3 px-4 text-slate-500 dark:text-slate-500 text-[10px] whitespace-nowrap">
                               {formatDateTime(row.created_at, "datetime")}
                             </td>
-                            <td className="py-3 px-4 text-slate-800 text-[11px] font-bold">
+                            <td className="py-3 px-4 text-slate-800 dark:text-slate-100 text-[11px] font-bold">
                               {row.reference_id.startsWith("ORD-") ? `Invoice #${row.reference_id}` : `Payment ${row.reference_id}`}
                             </td>
                             <td className="py-3 px-4 text-right font-bold text-rose-600">
@@ -970,7 +970,7 @@ function CustomersContent() {
                             <td className="py-3 px-4 text-right font-bold text-emerald-600">
                               {row.type === "CREDIT" ? formatCurrency(row.amount) : "—"}
                             </td>
-                            <td className="py-3 px-4 text-right font-bold text-slate-800">
+                            <td className="py-3 px-4 text-right font-bold text-slate-800 dark:text-slate-100">
                               {formatCurrency(row.running_balance)}
                             </td>
                           </tr>
@@ -983,7 +983,7 @@ function CustomersContent() {
             </div>
 
             {/* Footer */}
-            <div className="p-6 border-t border-dashboard-border bg-slate-50 flex items-center justify-end">
+            <div className="p-6 border-t border-dashboard-border bg-slate-50 dark:bg-dashboard-inset flex items-center justify-end">
               <button
                 onClick={() => setIsStatementOpen(false)}
                 className="px-5 py-2.5 bg-slate-800 text-white hover:bg-slate-700 text-xs font-bold rounded-lg transition-all cursor-pointer shadow-sm"
@@ -997,7 +997,7 @@ function CustomersContent() {
 
       {/* Sleek Floating Toast Notification */}
       {toast.show && (
-        <div className="fixed top-5 right-5 z-50 flex items-center gap-3 bg-white/95 backdrop-blur-md border border-slate-100 shadow-2xl px-4 py-3.5 rounded-xl animate-slide-in pointer-events-auto max-w-sm">
+        <div className="fixed top-5 right-5 z-50 flex items-center gap-3 bg-white/95 dark:bg-dashboard-card/95 backdrop-blur-md border border-slate-100 dark:border-white/5 shadow-2xl px-4 py-3.5 rounded-xl animate-slide-in pointer-events-auto max-w-sm">
           {toast.type === "success" ? (
             <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0 shadow-sm">
               <CheckCircle2 className="w-4.5 h-4.5" />
@@ -1008,12 +1008,12 @@ function CustomersContent() {
             </div>
           )}
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-bold text-slate-800">{toast.type === "success" ? "Success" : "Error"}</p>
-            <p className="text-[11px] text-slate-500 font-semibold mt-0.5 break-words">{toast.message}</p>
+            <p className="text-xs font-bold text-slate-800 dark:text-slate-100">{toast.type === "success" ? "Success" : "Error"}</p>
+            <p className="text-[11px] text-slate-500 dark:text-slate-500 font-semibold mt-0.5 break-words">{toast.message}</p>
           </div>
           <button
             onClick={() => setToast(prev => ({ ...prev, show: false }))}
-            className="text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-50 transition-all shrink-0 cursor-pointer"
+            className="text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-50 dark:hover:bg-white/5 transition-all shrink-0 cursor-pointer"
           >
             <X className="w-3.5 h-3.5" />
           </button>

@@ -130,10 +130,10 @@ export default function RecentOrders({
   };
 
   return (
-    <div className="bg-white p-5 rounded-xl border border-dashboard-border shadow-sm h-full w-full flex flex-col justify-between">
+    <div className="bg-white dark:bg-dashboard-card p-5 rounded-xl border border-dashboard-border shadow-sm h-full w-full flex flex-col justify-between">
       {/* Table Header */}
       <div className="flex items-center justify-between pb-4 border-b border-dashboard-border mb-4">
-        <h3 className="font-bold text-slate-800 text-base">Recent Orders</h3>
+        <h3 className="font-bold text-slate-800 dark:text-slate-100 text-base">Recent Orders</h3>
         {viewAllHref ? (
           <Link href={viewAllHref} className="text-xs font-semibold text-brand-blue hover:text-brand-blueHover hover:underline flex items-center gap-1">
             <span>View all</span>
@@ -163,7 +163,7 @@ export default function RecentOrders({
                   <th className="py-3 px-4">ETA</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-slate-100 dark:divide-white/5">
                 {orders.map((order) => (
                   <tr key={order.id} className="hover:bg-slate-50/70 transition-colors group">
                     <td className="py-3.5 px-4 font-semibold text-brand-blue hover:text-brand-blueHover">
@@ -174,7 +174,7 @@ export default function RecentOrders({
                         {order.order_id}
                       </button>
                     </td>
-                    <td className="py-3.5 px-4 font-medium text-slate-700 max-w-[180px] truncate">
+                    <td className="py-3.5 px-4 font-medium text-slate-700 dark:text-slate-300 max-w-[180px] truncate">
                       {order.customer}
                     </td>
                     <td className="py-3.5 px-4 text-center">
@@ -190,7 +190,7 @@ export default function RecentOrders({
                         )}
                       </div>
                     </td>
-                    <td className="py-3.5 px-4 text-right font-bold text-slate-800">
+                    <td className="py-3.5 px-4 text-right font-bold text-slate-800 dark:text-slate-100">
                       {formatCurrency(order.amount)}
                     </td>
                     <td className="py-3.5 px-4 text-center">
@@ -216,10 +216,10 @@ export default function RecentOrders({
                         );
                       })()}
                     </td>
-                    <td className="py-3.5 px-4 text-xs font-semibold text-slate-500">
+                    <td className="py-3.5 px-4 text-xs font-semibold text-slate-500 dark:text-slate-500">
                       {formatDateTime(order.created_on, "datetime")}
                     </td>
-                    <td className="py-3.5 px-4 text-xs font-semibold text-slate-500">
+                    <td className="py-3.5 px-4 text-xs font-semibold text-slate-500 dark:text-slate-500">
                       {formatDateTime(order.eta, "datetime")}
                     </td>
                   </tr>
@@ -229,10 +229,10 @@ export default function RecentOrders({
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
-            <div className="w-12 h-12 rounded-full bg-slate-50 flex items-center justify-center mb-3 text-slate-400">
+            <div className="w-12 h-12 rounded-full bg-slate-50 dark:bg-dashboard-inset flex items-center justify-center mb-3 text-slate-400">
               <ShoppingBag className="w-6 h-6" />
             </div>
-            <p className="text-sm font-semibold text-slate-600">No recent orders found</p>
+            <p className="text-sm font-semibold text-slate-600 dark:text-slate-400">No recent orders found</p>
             <p className="text-xs text-slate-400 mt-1 max-w-[250px]">
               Orders received via WhatsApp or the portal will populate here.
             </p>
@@ -247,7 +247,7 @@ export default function RecentOrders({
           <div className="flex-1 pointer-events-none"></div>
 
           {/* Drawer Content */}
-          <div className="w-[500px] bg-white h-screen shadow-2xl flex flex-col animate-slide-in relative border-l border-slate-200 pointer-events-auto">
+          <div className="w-[500px] bg-white dark:bg-dashboard-card h-screen shadow-2xl flex flex-col animate-slide-in relative border-l border-slate-200 dark:border-white/10 pointer-events-auto">
             {/* Drawer Header */}
             <div className="p-6 border-b border-dashboard-border flex items-center justify-between bg-brand-dark text-white">
               <div>
@@ -267,11 +267,11 @@ export default function RecentOrders({
               {loadingDetails ? (
                 <div className="flex flex-col items-center justify-center h-48 gap-3">
                   <Loader2 className="w-8 h-8 text-brand-blue animate-spin" />
-                  <span className="text-sm font-semibold text-slate-500">Loading line items...</span>
+                  <span className="text-sm font-semibold text-slate-500 dark:text-slate-500">Loading line items...</span>
                 </div>
               ) : selectedOrderDetails ? (
                 <>
-                  <h4 className="font-bold text-slate-800 text-sm border-b pb-2 mb-3">Line Items</h4>
+                  <h4 className="font-bold text-slate-800 dark:text-slate-100 text-sm border-b pb-2 mb-3">Line Items</h4>
                   {selectedOrderDetails.map((item, idx) => {
                     const isUnmatched = item.sku_id === "UNMATCHED_SKU" || item.sku_id === "UNMATCHED_TRIAGE_SKU";
                     return (
@@ -295,7 +295,7 @@ export default function RecentOrders({
                                       handleResolveItem(item.id, e.target.value, item.quantity);
                                     }
                                   }}
-                                  className="w-full mt-1 p-2 border border-rose-200 rounded-lg text-xs bg-white text-slate-700 font-semibold focus:outline-none focus:ring-1 focus:ring-rose-500 cursor-pointer animate-pulse"
+                                  className="w-full mt-1 p-2 border border-rose-200 rounded-lg text-xs bg-white dark:bg-dashboard-card text-slate-700 dark:text-slate-300 font-semibold focus:outline-none focus:ring-1 focus:ring-rose-500 cursor-pointer animate-pulse"
                                 >
                                   <option value="">-- Select SKU --</option>
                                   {productsList.map((p) => (
@@ -307,7 +307,7 @@ export default function RecentOrders({
                               </div>
                             ) : (
                               <>
-                                <p className="font-bold text-sm text-slate-800">{item.brand} SKU</p>
+                                <p className="font-bold text-sm text-slate-800 dark:text-slate-100">{item.brand} SKU</p>
                                 <p className="text-xs text-slate-400 font-semibold">{item.sku_id} ({item.pack_size})</p>
                               </>
                             )}
@@ -319,30 +319,30 @@ export default function RecentOrders({
                                 <span className="text-xs font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-100 mt-0.5">{item.allocated_quantity} units allocated</span>
                               </>
                             ) : (
-                              <span className="text-xs font-bold text-slate-500">Qty: {item.quantity}</span>
+                              <span className="text-xs font-bold text-slate-500 dark:text-slate-500">Qty: {item.quantity}</span>
                             )}
                           </div>
                         </div>
                         
-                        <div className="flex items-center justify-between border-t border-dashed border-slate-200 pt-2 mt-1">
+                        <div className="flex items-center justify-between border-t border-dashed border-slate-200 dark:border-white/10 pt-2 mt-1">
                           <span className="text-xs text-slate-400">Rate: {formatCurrency(item.unit_price)}</span>
-                          <span className="text-sm font-bold text-slate-800">{formatCurrency(item.total_price)}</span>
+                          <span className="text-sm font-bold text-slate-800 dark:text-slate-100">{formatCurrency(item.total_price)}</span>
                         </div>
                       </div>
                     );
                   })}
 
                   {/* Financial Summary */}
-                  <div className="border-t border-slate-200 pt-4 mt-6 space-y-2 text-sm">
-                    <div className="flex justify-between text-slate-500 font-medium">
+                  <div className="border-t border-slate-200 dark:border-white/10 pt-4 mt-6 space-y-2 text-sm">
+                    <div className="flex justify-between text-slate-500 dark:text-slate-500 font-medium">
                       <span>Subtotal</span>
                       <span>{formatCurrency(selectedOrderDetails.reduce((a, b) => a + b.total_price, 0) / 1.18)}</span>
                     </div>
-                    <div className="flex justify-between text-slate-500 font-medium">
+                    <div className="flex justify-between text-slate-500 dark:text-slate-500 font-medium">
                       <span>GST (18%)</span>
                       <span>{formatCurrency(selectedOrderDetails.reduce((a, b) => a + b.total_price, 0) * 0.18 / 1.18)}</span>
                     </div>
-                    <div className="flex justify-between text-base font-extrabold text-slate-800 pt-2 border-t border-dashed">
+                    <div className="flex justify-between text-base font-extrabold text-slate-800 dark:text-slate-100 pt-2 border-t border-dashed">
                       <span>Total Amount</span>
                       <span>{formatCurrency(selectedOrderDetails.reduce((a, b) => a + b.total_price, 0))}</span>
                     </div>
@@ -354,7 +354,7 @@ export default function RecentOrders({
             </div>
 
             {/* Close footer button */}
-            <div className="p-6 border-t border-dashboard-border bg-slate-50 flex items-center justify-between">
+            <div className="p-6 border-t border-dashboard-border bg-slate-50 dark:bg-dashboard-inset flex items-center justify-between">
               {selectedOrder && selectedOrder.status === "Pending" ? (
                 <button
                   onClick={handleConfirmOrder}

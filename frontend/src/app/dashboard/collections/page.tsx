@@ -229,14 +229,14 @@ export default function CollectionsPage() {
 
   if (!activeTenantId) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-slate-50">
+      <div className="flex items-center justify-center min-h-screen bg-slate-50 dark:bg-dashboard-inset">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-blue" />
       </div>
     );
   }
 
   return (
-    <div className="flex bg-dashboard-bg min-h-screen text-slate-800">
+    <div className="flex bg-dashboard-bg min-h-screen text-slate-800 dark:text-slate-100">
       <Sidebar
         activeTab="Collections"
         setActiveTab={() => {}}
@@ -253,7 +253,7 @@ export default function CollectionsPage() {
         <main className="flex-1 mt-16 p-6 overflow-y-auto space-y-6">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-xl font-bold text-slate-800 tracking-tight flex items-center gap-2">
+              <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100 tracking-tight flex items-center gap-2">
                 <CreditCard className="w-5 h-5 text-brand-blue" />
                 <span>Collections Manager</span>
               </h1>
@@ -273,7 +273,7 @@ export default function CollectionsPage() {
 
               <button
                 onClick={() => fetchCustomers(activeTenantId)}
-                className="flex items-center gap-1.5 px-3 py-2 border border-dashboard-border bg-white rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-all shadow-sm cursor-pointer"
+                className="flex items-center gap-1.5 px-3 py-2 border border-dashboard-border bg-white dark:bg-dashboard-card rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-white/5 transition-all shadow-sm cursor-pointer"
               >
                 <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
                 <span>Refresh Registry</span>
@@ -282,7 +282,7 @@ export default function CollectionsPage() {
           </div>
 
           {/* Grid Layout of Debtors */}
-          <div className="bg-white rounded-xl border border-dashboard-border shadow-sm flex flex-col min-h-[400px]">
+          <div className="bg-white dark:bg-dashboard-card rounded-xl border border-dashboard-border shadow-sm flex flex-col min-h-[400px]">
             <div className="p-5 border-b border-dashboard-border flex items-center justify-between bg-slate-50/50 rounded-t-xl gap-4">
               <div className="relative max-w-sm w-full">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -291,12 +291,12 @@ export default function CollectionsPage() {
                   placeholder="Filter by Store Name or Customer ID..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-dashboard-border rounded-lg text-sm bg-white focus:outline-none focus:ring-1 focus:ring-brand-blue focus:border-brand-blue transition-all text-slate-700 font-medium"
+                  className="w-full pl-10 pr-4 py-2 border border-dashboard-border rounded-lg text-sm bg-white dark:bg-dashboard-card focus:outline-none focus:ring-1 focus:ring-brand-blue focus:border-brand-blue transition-all text-slate-700 dark:text-slate-300 font-medium"
                 />
               </div>
 
               <div className="text-xs font-bold text-slate-400">
-                Active Debtors: <span className="text-slate-700">{total > 0 ? total : filteredCustomers.length}</span>
+                Active Debtors: <span className="text-slate-700 dark:text-slate-300">{total > 0 ? total : filteredCustomers.length}</span>
               </div>
             </div>
 
@@ -304,7 +304,7 @@ export default function CollectionsPage() {
               {loading ? (
                 <div className="flex flex-col items-center justify-center py-24 gap-3">
                   <Loader2 className="w-8 h-8 text-brand-blue animate-spin" />
-                  <span className="text-sm font-semibold text-slate-500">Loading collection records...</span>
+                  <span className="text-sm font-semibold text-slate-500 dark:text-slate-500">Loading collection records...</span>
                 </div>
               ) : error ? (
                 <div className="flex flex-col items-center justify-center py-24 gap-3 text-rose-600">
@@ -334,24 +334,24 @@ export default function CollectionsPage() {
                       <th className="py-3 px-6 text-center">History</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody className="divide-y divide-slate-100 dark:divide-white/5">
                     {filteredCustomers.map((c) => {
                       const percentage = c.credit_limit > 0 ? (c.outstanding_balance / c.credit_limit) * 100 : 0;
                       return (
                         <tr key={c.id} className="hover:bg-slate-50/50 transition-colors group">
-                          <td className="py-4 px-6 font-bold text-slate-800 text-sm">
+                          <td className="py-4 px-6 font-bold text-slate-800 dark:text-slate-100 text-sm">
                             {c.customer_id}
                           </td>
-                          <td className="py-4 px-6 font-bold text-slate-700">
+                          <td className="py-4 px-6 font-bold text-slate-700 dark:text-slate-300">
                             <div>
-                              <p className="font-bold text-slate-800 text-sm">{c.retailer_name}</p>
+                              <p className="font-bold text-slate-800 dark:text-slate-100 text-sm">{c.retailer_name}</p>
                               <p className="text-[10px] text-slate-400 font-semibold mt-0.5">{c.address_text}</p>
                             </div>
                           </td>
-                          <td className="py-4 px-6 text-right font-extrabold text-slate-800">
+                          <td className="py-4 px-6 text-right font-extrabold text-slate-800 dark:text-slate-100">
                             {formatCurrency(c.credit_limit)}
                           </td>
-                          <td className="py-4 px-6 text-right font-extrabold text-slate-800">
+                          <td className="py-4 px-6 text-right font-extrabold text-slate-800 dark:text-slate-100">
                             <span className={c.outstanding_balance > 0 ? "text-rose-600" : "text-emerald-600"}>
                               {formatCurrency(c.outstanding_balance)}
                             </span>
@@ -402,7 +402,7 @@ export default function CollectionsPage() {
       {/* Payment History Side Drawer */}
       {isPaymentDrawerOpen && (
         <div className="fixed inset-y-0 right-0 z-50 flex justify-end pointer-events-none">
-          <div className="w-[420px] bg-white h-screen shadow-2xl flex flex-col animate-slide-in border-l border-slate-200 pointer-events-auto">
+          <div className="w-[420px] bg-white dark:bg-dashboard-card h-screen shadow-2xl flex flex-col animate-slide-in border-l border-slate-200 dark:border-white/10 pointer-events-auto">
             <div className="p-5 border-b border-dashboard-border flex items-center justify-between bg-brand-dark text-white">
               <div>
                 <h3 className="font-bold text-base">Payment History</h3>
@@ -418,26 +418,26 @@ export default function CollectionsPage() {
             <div className="flex-1 overflow-y-auto p-5 space-y-3">
               {loadingPayments ? (
                 [1, 2, 3].map((i) => (
-                  <div key={i} className="animate-pulse h-14 bg-slate-100 rounded-xl" />
+                  <div key={i} className="animate-pulse h-14 bg-slate-100 dark:bg-white/5 rounded-xl" />
                 ))
               ) : paymentHistory.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-40 text-center gap-2">
                   <CreditCard className="w-8 h-8 text-slate-300" />
-                  <p className="text-sm font-semibold text-slate-500">No payments recorded</p>
+                  <p className="text-sm font-semibold text-slate-500 dark:text-slate-500">No payments recorded</p>
                   <p className="text-xs text-slate-400">Vouchers will appear here once recorded</p>
                 </div>
               ) : (
                 paymentHistory.map((p: any, i: number) => (
                   <div key={i} className="p-3 rounded-xl border border-dashboard-border bg-slate-50/50 flex flex-col gap-1.5">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold font-mono text-slate-700">
+                      <span className="text-xs font-bold font-mono text-slate-700 dark:text-slate-300">
                         {p.payment_code || p.id?.slice(0, 8)}
                       </span>
                       <span className="text-xs font-extrabold text-emerald-700">
                         ₹{Number(p.total_amount ?? p.amount ?? 0).toLocaleString("en-IN")}
                       </span>
                     </div>
-                    <div className="flex items-center justify-between text-[11px] text-slate-500">
+                    <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-500">
                       <span>{p.method || p.payment_method || "—"}</span>
                       <span>
                         {p.created_at
@@ -461,17 +461,17 @@ export default function CollectionsPage() {
       {/* Record Collection Voucher Modal */}
       {isVoucherModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white rounded-xl border border-slate-200 shadow-2xl w-full max-w-md p-6 animate-scale-up relative mx-4 animate-slide-in">
+          <div className="bg-white dark:bg-dashboard-card rounded-xl border border-slate-200 dark:border-white/10 shadow-2xl w-full max-w-md p-6 animate-scale-up relative mx-4 animate-slide-in">
             <button
               onClick={() => setIsVoucherModalOpen(false)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1.5 rounded-full hover:bg-slate-50 transition-all cursor-pointer"
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1.5 rounded-full hover:bg-slate-50 dark:hover:bg-white/5 transition-all cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
 
             <div className="flex items-center gap-2 mb-4">
               <span className="text-xl">💳</span>
-              <h3 className="font-bold text-slate-800 text-lg">Record Collection Voucher</h3>
+              <h3 className="font-bold text-slate-800 dark:text-slate-100 text-lg">Record Collection Voucher</h3>
             </div>
 
             <p className="text-xs text-slate-400 font-semibold mb-6">
@@ -480,11 +480,11 @@ export default function CollectionsPage() {
 
             <form onSubmit={handleVoucherSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">Select Customer *</label>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-500 mb-1.5 uppercase">Select Customer *</label>
                 <select
                   value={selectedCustomerId}
                   onChange={(e) => setSelectedCustomerId(e.target.value)}
-                  className="w-full p-2.5 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-1 focus:ring-brand-blue bg-white font-semibold cursor-pointer"
+                  className="w-full p-2.5 border border-slate-200 dark:border-white/10 rounded-lg text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-brand-blue bg-white dark:bg-dashboard-card font-semibold cursor-pointer"
                   required
                 >
                   <option value="">-- Choose Debtor Retailer --</option>
@@ -497,11 +497,11 @@ export default function CollectionsPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">Payment Method *</label>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-500 mb-1.5 uppercase">Payment Method *</label>
                 <select
                   value={paymentMethod}
                   onChange={(e) => setPaymentMethod(e.target.value)}
-                  className="w-full p-2.5 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-1 focus:ring-brand-blue bg-white font-semibold cursor-pointer"
+                  className="w-full p-2.5 border border-slate-200 dark:border-white/10 rounded-lg text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-brand-blue bg-white dark:bg-dashboard-card font-semibold cursor-pointer"
                   required
                 >
                   <option value="CASH">CASH</option>
@@ -512,34 +512,34 @@ export default function CollectionsPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">Amount Received (₹) *</label>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-500 mb-1.5 uppercase">Amount Received (₹) *</label>
                 <input
                   type="number"
                   step="0.01"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
-                  className="w-full p-2.5 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-1 focus:ring-brand-blue bg-white font-semibold"
+                  className="w-full p-2.5 border border-slate-200 dark:border-white/10 rounded-lg text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-brand-blue bg-white dark:bg-dashboard-card font-semibold"
                   placeholder="e.g. 5000.00"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">Reference Number (Optional)</label>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-500 mb-1.5 uppercase">Reference Number (Optional)</label>
                 <input
                   type="text"
                   value={referenceNumber}
                   onChange={(e) => setReferenceNumber(e.target.value)}
-                  className="w-full p-2.5 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-1 focus:ring-brand-blue bg-white font-semibold"
+                  className="w-full p-2.5 border border-slate-200 dark:border-white/10 rounded-lg text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-brand-blue bg-white dark:bg-dashboard-card font-semibold"
                   placeholder="e.g. Cheque No / UPI Txn ID"
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 mt-6">
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-white/5 mt-6">
                 <button
                   type="button"
                   onClick={() => setIsVoucherModalOpen(false)}
-                  className="px-4 py-2 border border-slate-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-50 transition-all cursor-pointer"
+                  className="px-4 py-2 border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400 rounded-lg text-xs font-bold hover:bg-slate-50 dark:hover:bg-white/5 transition-all cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -565,7 +565,7 @@ export default function CollectionsPage() {
 
       {/* Sleek Floating Toast Notification */}
       {toast.show && (
-        <div className="fixed top-5 right-5 z-50 flex items-center gap-3 bg-white/95 backdrop-blur-md border border-slate-100 shadow-2xl px-4 py-3.5 rounded-xl animate-slide-in pointer-events-auto max-w-sm">
+        <div className="fixed top-5 right-5 z-50 flex items-center gap-3 bg-white/95 dark:bg-dashboard-card/95 backdrop-blur-md border border-slate-100 dark:border-white/5 shadow-2xl px-4 py-3.5 rounded-xl animate-slide-in pointer-events-auto max-w-sm">
           {toast.type === "success" ? (
             <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0 shadow-sm">
               <CheckCircle2 className="w-4.5 h-4.5" />
@@ -576,12 +576,12 @@ export default function CollectionsPage() {
             </div>
           )}
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-bold text-slate-800">{toast.type === "success" ? "Success" : "Error"}</p>
-            <p className="text-[11px] text-slate-500 font-semibold mt-0.5 break-words">{toast.message}</p>
+            <p className="text-xs font-bold text-slate-800 dark:text-slate-100">{toast.type === "success" ? "Success" : "Error"}</p>
+            <p className="text-[11px] text-slate-500 dark:text-slate-500 font-semibold mt-0.5 break-words">{toast.message}</p>
           </div>
           <button
             onClick={() => setToast(prev => ({ ...prev, show: false }))}
-            className="text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-50 transition-all shrink-0 cursor-pointer"
+            className="text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-50 dark:hover:bg-white/5 transition-all shrink-0 cursor-pointer"
           >
             <X className="w-3.5 h-3.5" />
           </button>

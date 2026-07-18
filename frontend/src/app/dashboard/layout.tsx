@@ -90,7 +90,7 @@ export default function DashboardLayout({
 
   if (authState !== "authenticated") {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50">
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 dark:bg-dashboard-inset">
         <div className="h-10 w-10 animate-spin rounded-full border-4 border-blue-200 border-t-blue-600" />
       </div>
     );

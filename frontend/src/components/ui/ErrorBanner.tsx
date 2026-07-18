@@ -18,13 +18,13 @@ export default function ErrorBanner({ message, onRetry }: ErrorBannerProps) {
         <AlertCircle className="w-6 h-6 text-rose-500" />
       </div>
       <div className="text-center">
-        <p className="text-sm font-semibold text-slate-700">{message}</p>
+        <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">{message}</p>
         <p className="text-xs text-slate-400 mt-1">Check your connection and try again.</p>
       </div>
       {onRetry && (
         <button
           onClick={onRetry}
-          className="flex items-center gap-2 px-4 py-2 bg-white border border-dashboard-border rounded-lg text-sm font-semibold text-slate-700 hover:bg-slate-50 hover:border-brand-blue hover:text-brand-blue transition-all shadow-sm"
+          className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-dashboard-card border border-dashboard-border rounded-lg text-sm font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 hover:border-brand-blue hover:text-brand-blue transition-all shadow-sm"
         >
           <RefreshCw className="w-3.5 h-3.5" />
           Try again

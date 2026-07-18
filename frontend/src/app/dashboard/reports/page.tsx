@@ -91,14 +91,14 @@ export default function ReportsPage() {
 
   if (!activeTenantId) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-slate-50">
+      <div className="flex items-center justify-center min-h-screen bg-slate-50 dark:bg-dashboard-inset">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-blue" />
       </div>
     );
   }
 
   return (
-    <div className="flex bg-dashboard-bg min-h-screen text-slate-800">
+    <div className="flex bg-dashboard-bg min-h-screen text-slate-800 dark:text-slate-100">
       <Sidebar
         activeTab="Reports"
         setActiveTab={() => {}}
@@ -114,7 +114,7 @@ export default function ReportsPage() {
 
         <main className="flex-1 mt-16 p-6 overflow-y-auto space-y-6">
           <div>
-            <h1 className="text-xl font-bold text-slate-800 tracking-tight flex items-center gap-2">
+            <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100 tracking-tight flex items-center gap-2">
               <FileText className="w-5 h-5 text-brand-blue" />
               <span>Financial Reports Workspace</span>
             </h1>
@@ -126,7 +126,7 @@ export default function ReportsPage() {
           {loading ? (
             <div className="flex flex-col items-center justify-center py-32 gap-3">
               <Loader2 className="w-8 h-8 text-brand-blue animate-spin" />
-              <span className="text-sm font-semibold text-slate-500">Aggregating database financial metrics...</span>
+              <span className="text-sm font-semibold text-slate-500 dark:text-slate-500">Aggregating database financial metrics...</span>
             </div>
           ) : error ? (
             <div className="flex flex-col items-center justify-center py-32 gap-3 text-rose-600">
@@ -143,10 +143,10 @@ export default function ReportsPage() {
             <div className="space-y-6">
               {/* Financial Accounting Grid Banners */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="bg-white p-6 rounded-xl border border-dashboard-border shadow-sm flex items-center justify-between">
+                <div className="bg-white dark:bg-dashboard-card p-6 rounded-xl border border-dashboard-border shadow-sm flex items-center justify-between">
                   <div>
                     <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Gross Revenue</p>
-                    <h3 className="text-2xl font-extrabold text-slate-800 mt-1">
+                    <h3 className="text-2xl font-extrabold text-slate-800 dark:text-slate-100 mt-1">
                       {formatCurrency(data?.total_revenue || 0)}
                     </h3>
                     <p className="text-[10px] text-slate-400 font-semibold mt-1">Confirmed orders billing sum</p>
@@ -156,7 +156,7 @@ export default function ReportsPage() {
                   </div>
                 </div>
 
-                <div className="bg-white p-6 rounded-xl border border-dashboard-border shadow-sm flex items-center justify-between">
+                <div className="bg-white dark:bg-dashboard-card p-6 rounded-xl border border-dashboard-border shadow-sm flex items-center justify-between">
                   <div>
                     <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Outstanding Receivables</p>
                     <h3 className="text-2xl font-extrabold text-amber-600 mt-1">
@@ -171,8 +171,8 @@ export default function ReportsPage() {
               </div>
 
               {/* Area Time-Series Chart */}
-              <div className="bg-white p-6 rounded-xl border border-dashboard-border shadow-sm flex flex-col h-[400px]">
-                <h3 className="text-sm font-bold text-slate-700 mb-4 flex items-center gap-1.5">
+              <div className="bg-white dark:bg-dashboard-card p-6 rounded-xl border border-dashboard-border shadow-sm flex flex-col h-[400px]">
+                <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-4 flex items-center gap-1.5">
                   <LineChart className="w-4 h-4 text-brand-blue" />
                   <span>Revenue Trend over Time (Daily Sales Volume)</span>
                 </h3>
@@ -192,7 +192,7 @@ export default function ReportsPage() {
                         <XAxis dataKey="date" stroke="#94a3b8" fontSize={10} />
                         <YAxis stroke="#94a3b8" fontSize={10} tickFormatter={(tick) => `₹${tick/1000}k`} />
                         <Tooltip
-                          contentStyle={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "8px" }}
+                          contentStyle={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "8px", color: "var(--color-text)" }}
                           formatter={(value: any) => [formatCurrency(value), "Sales"]}
                         />
                         <Area type="monotone" dataKey="sales" stroke="#3b82f6" strokeWidth={2} fillOpacity={1} fill="url(#colorSales)" />

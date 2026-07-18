@@ -23,9 +23,9 @@ function ToastItem({ toast, onRemove }: ToastItemProps) {
   }, [toast.id, onRemove]);
 
   const styles = {
-    success: "bg-white border-success-500 text-success-700",
-    error: "bg-white border-danger-500 text-danger-700",
-    info: "bg-white border-brand-blue text-brand-blue",
+    success: "bg-white dark:bg-dashboard-card border-success-500 text-success-700",
+    error: "bg-white dark:bg-dashboard-card border-danger-500 text-danger-700",
+    info: "bg-white dark:bg-dashboard-card border-brand-blue text-brand-blue",
   };
 
   const icons = {
@@ -41,10 +41,10 @@ function ToastItem({ toast, onRemove }: ToastItemProps) {
       aria-live="polite"
     >
       {icons[toast.type]}
-      <span className="text-sm font-semibold flex-1 text-slate-700">{toast.message}</span>
+      <span className="text-sm font-semibold flex-1 text-slate-700 dark:text-slate-300">{toast.message}</span>
       <button
         onClick={() => onRemove(toast.id)}
-        className="text-slate-400 hover:text-slate-600 transition-colors ml-1"
+        className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors ml-1"
         aria-label="Dismiss notification"
       >
         <X className="w-3.5 h-3.5" />
