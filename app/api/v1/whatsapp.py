@@ -296,11 +296,28 @@ async def handle_whatsapp_webhook(
                                 if new_db.query(DistributorTenant).count() == 1:
                                     tenant = new_db.query(DistributorTenant).first()
                             if tenant:
-                                tenant.whatsapp_order_phone = normalized_phone
+                                normalized_owner = normalize_phone_number(owner_phone) if owner_phone else None
+
+                                if tenant.whatsapp_order_phone is None:
+                                    # First time — set the phone
+                                    tenant.whatsapp_order_phone = normalized_owner
+                                    logger.info("Set whatsapp_order_phone to %s for tenant %s", normalized_owner, tenant.id)
+                                elif normalized_owner and normalized_owner != tenant.whatsapp_order_phone:
+                                    # Different phone trying to connect — log warning, don't overwrite
+                                    logger.warning(
+                                        "Phone mismatch for tenant %s: stored=%s new=%s — NOT overwriting",
+                                        tenant.id, tenant.whatsapp_order_phone, normalized_owner
+                                    )
+                                    # Still update connection status and phone_id — just not the phone number
+                                else:
+                                    # Same phone reconnecting — update normally
+                                    tenant.whatsapp_order_phone = normalized_owner
+
                                 tenant.whatsapp_phone_id = instance_name
                                 tenant.whatsapp_connection_status = "connected"
                                 tenant.whatsapp_disconnected_at = None
                                 tenant.whatsapp_disconnect_reason = None
+                                tenant.whatsapp_disconnect_notified = False
                                 new_db.commit()
                                 from app.services.ingestion_service import IngestionService
                                 IngestionService.invalidate_tenant_cache(tenant.id)

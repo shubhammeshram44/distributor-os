@@ -104,7 +104,7 @@ def test_evolution_provision_endpoint_optional_instance_name(monkeypatch):
         mock_init.return_value = {"status": "created"}
         mock_webhook.return_value = {"status": "webhook_set"}
         mock_qr.return_value = "data:image/png;base64,mockqr"
-        mock_status.return_value = "open"
+        mock_status.return_value = "close"
         
         # Mock resolve_tenant_id to return a fixed UUID
         fake_uuid = "7e8bed10-8339-446f-b851-de96ab5f0cad"
@@ -122,6 +122,27 @@ def test_evolution_provision_endpoint_optional_instance_name(monkeypatch):
         assert data["status"] == "success"
         assert data["instance_name"] == "dist-7e8bed10"
         assert data["qr_code"] == "data:image/png;base64,mockqr"
+
+
+def test_evolution_provision_endpoint_already_connected(monkeypatch):
+    with patch("app.services.gateway_service.EvolutionGatewayService.get_connection_status", new_callable=AsyncMock) as mock_status:
+        mock_status.return_value = "open"
+        
+        fake_uuid = "7e8bed10-8339-446f-b851-de96ab5f0cad"
+        from app.services import tenant_service
+        monkeypatch.setattr(tenant_service, "resolve_tenant_id", lambda *args, **kwargs: fake_uuid)
+
+        response = client.post(
+            "/api/v1/evolution/provision",
+            json={}
+        )
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "already_connected"
+        assert data["instance_name"] == "dist-7e8bed10"
+        assert data["qr_code"] is None
+        assert data["connection_status"] == "open"
 
 
 def test_evolution_disconnect_endpoint_success(monkeypatch, db_session):
