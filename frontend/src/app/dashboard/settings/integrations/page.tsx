@@ -34,7 +34,7 @@ export default function IntegrationsPage() {
 
   // Evolution API provisioning states
   const [instanceName, setInstanceName] = useState("");
-  const [provisioningStatus, setProvisioningStatus] = useState<"idle" | "provisioning" | "connecting" | "connected" | "error">("idle");
+  const [provisioningStatus, setProvisioningStatus] = useState<"idle" | "provisioning" | "connecting" | "connected" | "disconnected" | "error">("idle");
   const [qrCodeBase64, setQrCodeBase64] = useState("");
   const [evolutionError, setEvolutionError] = useState("");
 
@@ -166,20 +166,24 @@ export default function IntegrationsPage() {
             setInstanceName(data.whatsapp_phone_id);
             // Verify connection status
             try {
-              const statusResp = await fetch(`${apiBase}/api/v1/evolution/status?instance_name=${data.whatsapp_phone_id}`);
-              if (statusResp.ok) {
-                const statusData = await statusResp.json();
-                if (statusData.status === "open") {
-                  setProvisioningStatus("connected");
-                  if (statusData.ownerJid) {
-                    setOwnerJid(statusData.ownerJid);
-                  }
-                } else {
-                  setProvisioningStatus("idle");
+            const statusResp = await fetch(
+              `${apiBase}/api/v1/evolution/status?instance_name=${data.whatsapp_phone_id}&tenant_id=${activeTenantId}`
+            );
+            if (statusResp.ok) {
+              const statusData = await statusResp.json();
+              if (statusData.connected === true || statusData.status === "open") {
+                setProvisioningStatus("connected");
+                if (statusData.owner_phone) {
+                  setWhatsappOrderPhone(statusData.owner_phone);
                 }
               } else {
-                setProvisioningStatus("idle");
+                // Was previously connected (phone_id exists) but now disconnected
+                setProvisioningStatus("disconnected");
               }
+            } else {
+              // API call failed — assume disconnected if phone_id existed
+              setProvisioningStatus("disconnected");
+            }
             } catch (err) {
               console.error("Error fetching connection status on mount:", err);
               setProvisioningStatus("idle");
@@ -574,6 +578,11 @@ export default function IntegrationsPage() {
                         <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
                         <span>Provisioning...</span>
                       </span>
+                    ) : provisioningStatus === "disconnected" ? (
+                      <span className="inline-flex items-center gap-1.5 bg-red-50 text-red-700 border border-red-200 px-3 py-1 rounded-full text-xs font-bold shadow-sm">
+                        <XCircle className="w-4 h-4 text-red-600" />
+                        <span>Disconnected</span>
+                      </span>
                     ) : (
                       <span className="inline-flex items-center gap-1.5 bg-rose-50 text-rose-700 border border-rose-200 px-3 py-1 rounded-full text-xs font-bold shadow-sm">
                         <XCircle className="w-4 h-4 text-rose-600" />
@@ -608,6 +617,55 @@ export default function IntegrationsPage() {
                           className="px-6 py-2.5 bg-rose-600 text-white rounded-lg text-sm font-bold shadow-md hover:bg-rose-700 cursor-pointer transition-all animate-in fade-in duration-200"
                         >
                           Disconnect
+                        </button>
+                      </div>
+                    </div>
+                  ) : provisioningStatus === "disconnected" ? (
+                    <div className="space-y-4">
+                      <div className="bg-red-50 border border-red-200 rounded-xl p-5">
+                        <div className="flex items-start gap-3">
+                          <XCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                          <div>
+                            <p className="text-sm font-bold text-red-700">
+                              WhatsApp Disconnected
+                            </p>
+                            <p className="text-xs text-red-500 mt-1 leading-relaxed">
+                              Your WhatsApp connection was lost. Orders from retailers are 
+                              NOT being received until you reconnect.
+                            </p>
+                            {whatsappOrderPhone && (
+                              <p className="text-xs text-red-400 mt-2">
+                                Last connected: {whatsappOrderPhone}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="bg-slate-50 border border-slate-200/60 rounded-xl p-4 text-xs text-slate-500 leading-relaxed font-semibold">
+                        <p className="font-semibold text-slate-700 mb-1">To reconnect:</p>
+                        <ol className="list-decimal pl-4 space-y-1 text-slate-500 font-medium">
+                          <li>Click "Reconnect WhatsApp" below</li>
+                          <li>Scan the QR code with your WhatsApp</li>
+                          <li>Orders will resume automatically</li>
+                        </ol>
+                      </div>
+
+                      {evolutionError && (
+                        <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl text-xs font-semibold text-rose-800 flex items-center gap-2">
+                          <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                          <span>{evolutionError}</span>
+                        </div>
+                      )}
+
+                      <div className="flex justify-end pt-2 border-t border-slate-100 mt-6">
+                        <button
+                          type="button"
+                          onClick={handleProvisionEvolution}
+                          disabled={provisioningStatus === "provisioning"}
+                          className="px-6 py-2.5 bg-red-600 text-white rounded-lg text-sm font-bold shadow-md hover:bg-red-700 disabled:opacity-55 flex items-center gap-2 cursor-pointer transition-all"
+                        >
+                          <span>Reconnect WhatsApp</span>
                         </button>
                       </div>
                     </div>
