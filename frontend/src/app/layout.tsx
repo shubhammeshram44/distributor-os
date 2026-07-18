@@ -1,6 +1,8 @@
 import { Figtree } from "next/font/google";
 import "./globals.css";
 import type { Metadata } from "next";
+import CommandPalette from "@/components/CommandPalette";
+import ErrorBoundary from "@/components/ErrorBoundary";
 
 const figtree = Figtree({
   subsets: ["latin"],
@@ -21,7 +23,10 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${figtree.className} ${figtree.variable}`}>
       <body className="antialiased bg-slate-50 text-slate-900 overflow-hidden">
-        {children}
+        <ErrorBoundary>
+          {children}
+          <CommandPalette />
+        </ErrorBoundary>
       </body>
     </html>
   );

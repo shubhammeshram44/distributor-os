@@ -3,255 +3,256 @@
 import React, { useState, useEffect, useCallback } from "react";
 import Sidebar from "@/components/Sidebar";
 import DashboardHeader from "@/components/DashboardHeader";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  Legend
-} from "recharts";
-import { Loader2, AlertCircle, BarChart3, TrendingUp, ShoppingBag, Layers } from "lucide-react";
-
-interface SKUData {
-  sku_code: string;
-  brand: string;
-  category: string;
-  total_quantity: number;
-}
-
-interface AnalyticsData {
-  total_orders: number;
-  status_distribution: {
-    [key: string]: number;
-  };
-  top_moving_skus: SKUData[];
-}
+import { ChartSkeleton } from "@/components/Skeletons";
+import ErrorBoundary from "@/components/ErrorBoundary";
+import { AlertCircle, TrendingUp, DollarSign, Users, ShoppingCart } from "lucide-react";
+import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
 export default function SalesAnalyticsPage() {
-  const [activeTenantId, setActiveTenantId] = useState("");
+  const [tenantId, setTenantId] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [data, setData] = useState<AnalyticsData | null>(null);
+  const [timeRange, setTimeRange] = useState("30");
+  const [analyticsData, setAnalyticsData] = useState<any>(null);
 
-  // Sync tenant from localStorage on load
+  const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+  const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
+
   useEffect(() => {
-    const currentWorkspace = localStorage.getItem("tenant_id");
-    if (currentWorkspace) {
-      setActiveTenantId(currentWorkspace);
-    }
+    const storedTenant = localStorage.getItem("tenant_id");
+    if (storedTenant) setTenantId(storedTenant);
   }, []);
 
-  const handleTenantChange = (id: string) => {
-    setActiveTenantId(id);
-    localStorage.setItem("tenant_id", id);
-  };
+  const fetchAnalytics = useCallback(async () => {
+    if (!tenantId) return;
 
-  const getTenantName = () => {
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem("tenant_name");
-      if (stored) return stored;
-    }
-    return "Loading Workspace...";
-  };
-
-  const fetchSalesAnalytics = useCallback(async (tenantId?: string) => {
-    const targetTenant = tenantId || activeTenantId;
-    if (!targetTenant) {
-      setLoading(false);
-      return;
-    }
     setLoading(true);
+    setError(null);
+
     try {
-      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-      const resp = await fetch(`${apiBase}/api/v1/analytics/sales-overview?tenant_id=${targetTenant}`, {
-        credentials: "include"
+      const params = new URLSearchParams({
+        tenant_id: tenantId,
+        days: timeRange
       });
-      if (!resp.ok) throw new Error("Failed to fetch sales analytics");
-      const resData = await resp.json();
-      setData(resData);
-      setError(null);
-    } catch (err: any) {
+
+      const response = await fetch(`${apiBase}/api/v1/analytics/sales?${params}`, {
+        credentials: "include",
+        headers: {
+          "Accept": "application/json",
+          ...(token && { "Authorization": `Bearer ${token}` })
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setAnalyticsData(data);
+      } else {
+        setError("Failed to load analytics");
+      }
+    } catch (err) {
+      setError("Network error");
       console.error(err);
-      setError(err.message || "Failed to load sales analytics");
     } finally {
       setLoading(false);
     }
-  }, [activeTenantId]);
+  }, [tenantId, apiBase, token, timeRange]);
 
   useEffect(() => {
-    if (activeTenantId) {
-      fetchSalesAnalytics(activeTenantId);
+    fetchAnalytics();
+  }, [fetchAnalytics]);
+
+  // Mock data for visualization
+  const salesTrendData = [
+    { date: "Mon", sales: 4000, orders: 24 },
+    { date: "Tue", sales: 3000, orders: 13 },
+    { date: "Wed", sales: 2000, orders: 9 },
+    { date: "Thu", sales: 2780, orders: 39 },
+    { date: "Fri", sales: 1890, orders: 22 },
+    { date: "Sat", sales: 2390, orders: 22 },
+    { date: "Sun", sales: 3490, orders: 20 }
+  ];
+
+  const categorySalesData = [
+    { name: "Electronics", value: 35 },
+    { name: "Grocery", value: 25 },
+    { name: "Apparel", value: 20 },
+    { name: "Others", value: 20 }
+  ];
+
+  const colors = ["#1e62ec", "#10b981", "#f59e0b", "#ef4444"];
+
+  const kpiCards = [
+    {
+      title: "Total Sales",
+      value: "₹45.2L",
+      change: "+12.5%",
+      icon: DollarSign,
+      color: "emerald"
+    },
+    {
+      title: "Total Orders",
+      value: "1,234",
+      change: "+8.2%",
+      icon: ShoppingCart,
+      color: "blue"
+    },
+    {
+      title: "Avg Order Value",
+      value: "₹3,670",
+      change: "+2.1%",
+      icon: TrendingUp,
+      color: "purple"
+    },
+    {
+      title: "Unique Customers",
+      value: "456",
+      change: "+5.3%",
+      icon: Users,
+      color: "amber"
     }
-  }, [activeTenantId, fetchSalesAnalytics]);
-
-  // Transform pie data
-  const pieData = data
-    ? Object.entries(data.status_distribution).map(([name, value]) => ({
-        name,
-        value
-      }))
-    : [];
-
-  const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"];
-
-  if (!activeTenantId) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-slate-50">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-blue" />
-      </div>
-    );
-  }
+  ];
 
   return (
-    <div className="flex bg-dashboard-bg min-h-screen text-slate-800">
-      <Sidebar
-        activeTab="Sales Analytics"
-        setActiveTab={() => {}}
-        tenantName={getTenantName()}
-      />
+    <ErrorBoundary>
+      <div className="flex bg-dashboard-bg min-h-screen text-slate-800">
+        <Sidebar activeTab="Sales Analytics" setActiveTab={() => {}} tenantName="Workspace" />
 
-      <div className="flex-1 pl-64 flex flex-col h-screen overflow-hidden">
-        <DashboardHeader
-          activeTenantId={activeTenantId}
-          setActiveTenantId={handleTenantChange}
-          tenantName={getTenantName()}
-        />
+        <div className="flex-1 pl-64 flex flex-col h-screen overflow-hidden">
+          <DashboardHeader activeTenantId={tenantId} setActiveTenantId={() => {}} tenantName="Workspace" userProfile={null} />
 
-        <main className="flex-1 mt-16 p-6 overflow-y-auto space-y-6">
-          <div>
-            <h1 className="text-xl font-bold text-slate-800 tracking-tight flex items-center gap-2">
-              <BarChart3 className="w-5 h-5 text-brand-blue" />
-              <span>Sales Analytics Workspace</span>
-            </h1>
-            <p className="text-xs text-slate-400 font-semibold mt-0.5">
-              Analyze product performance rankings, sales velocities, and dynamic pipeline fulfillment statuses
-            </p>
-          </div>
-
-          {loading ? (
-            <div className="flex flex-col items-center justify-center py-32 gap-3">
-              <Loader2 className="w-8 h-8 text-brand-blue animate-spin" />
-              <span className="text-sm font-semibold text-slate-500">Aggregating database sales metrics...</span>
-            </div>
-          ) : error ? (
-            <div className="flex flex-col items-center justify-center py-32 gap-3 text-rose-600">
-              <AlertCircle className="w-8 h-8" />
-              <span className="text-sm font-semibold">{error}</span>
-              <button
-                onClick={() => fetchSalesAnalytics(activeTenantId)}
-                className="mt-2 px-4 py-2 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg text-xs font-bold hover:bg-rose-100 transition-all cursor-pointer"
+          <main className="flex-1 mt-16 p-6 overflow-y-auto space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-2xl font-bold text-slate-800">Sales Analytics</h1>
+                <p className="text-xs text-slate-400 font-semibold mt-1">Track sales performance and trends</p>
+              </div>
+              <select
+                value={timeRange}
+                onChange={(e) => setTimeRange(e.target.value)}
+                className="px-4 py-2.5 border border-dashboard-border rounded-lg text-sm bg-white hover:bg-slate-50 cursor-pointer outline-none"
               >
-                Try Again
-              </button>
+                <option value="7">Last 7 Days</option>
+                <option value="30">Last 30 Days</option>
+                <option value="90">Last 90 Days</option>
+              </select>
             </div>
-          ) : (
-            <div className="space-y-6">
-              {/* Analytics Summary Banners */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="bg-white p-6 rounded-xl border border-dashboard-border shadow-sm flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Sales Orders</p>
-                    <h3 className="text-2xl font-extrabold text-slate-800 mt-1">{data?.total_orders}</h3>
-                    <p className="text-[10px] text-slate-400 font-semibold mt-1">Processed in current tenant context</p>
-                  </div>
-                  <div className="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center text-brand-blue shadow-sm">
-                    <ShoppingBag className="w-5 h-5" />
-                  </div>
-                </div>
 
-                <div className="bg-white p-6 rounded-xl border border-dashboard-border shadow-sm flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Top Brand Volume</p>
-                    <h3 className="text-2xl font-extrabold text-slate-800 mt-1">
-                      {data?.top_moving_skus[0]?.brand || "N/A"}
-                    </h3>
-                    <p className="text-[10px] text-slate-400 font-semibold mt-1">Leading product catalog manufacturer</p>
-                  </div>
-                  <div className="w-12 h-12 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600 shadow-sm">
-                    <TrendingUp className="w-5 h-5" />
-                  </div>
+            {error && (
+              <div className="p-4 bg-rose-50 border border-rose-200 rounded-lg flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-rose-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-semibold text-rose-800">{error}</p>
+                  <button onClick={fetchAnalytics} className="text-xs font-semibold text-rose-600 hover:text-rose-700 mt-1 underline">
+                    Try again
+                  </button>
                 </div>
               </div>
+            )}
 
-              {/* Data Visualization Sections */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Top Moving SKUs */}
-                <div className="bg-white p-6 rounded-xl border border-dashboard-border shadow-sm flex flex-col h-[400px]">
-                  <h3 className="text-sm font-bold text-slate-700 mb-4 flex items-center gap-1.5">
-                    <Layers className="w-4 h-4 text-brand-blue" />
-                    <span>Top-Moving SKUs (By Quantity)</span>
-                  </h3>
-                  <div className="flex-1 w-full min-h-0">
-                    {data && data.top_moving_skus.length > 0 ? (
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart
-                          data={data.top_moving_skus}
-                          layout="vertical"
-                          margin={{ top: 5, right: 20, left: 20, bottom: 5 }}
-                        >
-                          <XAxis type="number" stroke="#94a3b8" fontSize={10} />
-                          <YAxis dataKey="sku_code" type="category" stroke="#94a3b8" fontSize={10} width={100} />
-                          <Tooltip
-                            contentStyle={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "8px" }}
-                            labelStyle={{ fontWeight: "bold", color: "#1e293b" }}
-                          />
-                          <Bar dataKey="total_quantity" fill="#3b82f6" radius={[0, 4, 4, 0]} barSize={15} />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    ) : (
-                      <div className="flex items-center justify-center h-full text-slate-400 text-xs font-semibold">
-                        No products moved yet.
-                      </div>
-                    )}
-                  </div>
-                </div>
+            {/* KPI Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {kpiCards.map((card, idx) => {
+                const Icon = card.icon;
+                const colorClasses = {
+                  emerald: "bg-emerald-50 text-emerald-600",
+                  blue: "bg-blue-50 text-blue-600",
+                  purple: "bg-purple-50 text-purple-600",
+                  amber: "bg-amber-50 text-amber-600"
+                };
 
-                {/* Pipeline Velocity Breakdown */}
-                <div className="bg-white p-6 rounded-xl border border-dashboard-border shadow-sm flex flex-col h-[400px]">
-                  <h3 className="text-sm font-bold text-slate-700 mb-4 flex items-center gap-1.5">
-                    <TrendingUp className="w-4 h-4 text-brand-blue" />
-                    <span>Order Pipeline Velocity Breakdown</span>
-                  </h3>
-                  <div className="flex-1 w-full min-h-0 flex items-center justify-center">
-                    {pieData.length > 0 && pieData.some(d => d.value > 0) ? (
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          <Pie
-                            data={pieData}
-                            cx="50%"
-                            cy="50%"
-                            innerRadius={60}
-                            outerRadius={100}
-                            paddingAngle={3}
-                            dataKey="value"
-                          >
-                            {pieData.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                            ))}
-                          </Pie>
-                          <Tooltip
-                            contentStyle={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "8px" }}
-                          />
-                          <Legend verticalAlign="bottom" height={36} iconType="circle" />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    ) : (
-                      <div className="flex items-center justify-center h-full text-slate-400 text-xs font-semibold">
-                        No orders in the pipeline.
+                return (
+                  <div key={idx} className="bg-white p-6 rounded-lg border border-dashboard-border shadow-sm">
+                    <div className="flex items-center justify-between mb-4">
+                      <span className="text-xs font-semibold text-slate-400 uppercase">{card.title}</span>
+                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${colorClasses[card.color as keyof typeof colorClasses]}`}>
+                        <Icon className="w-5 h-5" />
                       </div>
-                    )}
+                    </div>
+                    <p className="text-2xl font-bold text-slate-800">{card.value}</p>
+                    <p className="text-xs text-emerald-600 font-semibold mt-2">{card.change} from last period</p>
                   </div>
-                </div>
-              </div>
+                );
+              })}
             </div>
-          )}
-        </main>
+
+            {/* Sales Trend Chart */}
+            {loading ? (
+              <ChartSkeleton />
+            ) : (
+              <div className="bg-white rounded-lg border border-dashboard-border shadow-sm p-6">
+                <h2 className="text-lg font-bold text-slate-800 mb-4">Sales Trend</h2>
+                <ResponsiveContainer width="100%" height={300}>
+                  <LineChart data={salesTrendData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                    <XAxis dataKey="date" />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend />
+                    <Line type="monotone" dataKey="sales" stroke="#1e62ec" strokeWidth={2} dot={{ fill: "#1e62ec" }} />
+                    <Line type="monotone" dataKey="orders" stroke="#10b981" strokeWidth={2} dot={{ fill: "#10b981" }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+
+            {/* Sales by Category & Top Products */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Category Breakdown */}
+              {loading ? (
+                <ChartSkeleton />
+              ) : (
+                <div className="bg-white rounded-lg border border-dashboard-border shadow-sm p-6">
+                  <h2 className="text-lg font-bold text-slate-800 mb-4">Sales by Category</h2>
+                  <ResponsiveContainer width="100%" height={250}>
+                    <PieChart>
+                      <Pie
+                        data={categorySalesData}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={false}
+                        label={(entry) => `${entry.name}: ${entry.value}%`}
+                        outerRadius={80}
+                        fill="#8884d8"
+                        dataKey="value"
+                      >
+                        {categorySalesData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(value) => `${value}%`} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+
+              {/* Top Products Table */}
+              {loading ? (
+                <ChartSkeleton />
+              ) : (
+                <div className="bg-white rounded-lg border border-dashboard-border shadow-sm p-6">
+                  <h2 className="text-lg font-bold text-slate-800 mb-4">Top Products</h2>
+                  <div className="space-y-3">
+                    {[
+                      { name: "Product A", sales: "₹12.5L", orders: 156 },
+                      { name: "Product B", sales: "₹10.2L", orders: 128 },
+                      { name: "Product C", sales: "₹8.9L", orders: 95 },
+                      { name: "Product D", sales: "₹7.6L", orders: 82 }
+                    ].map((product, idx) => (
+                      <div key={idx} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-800">{product.name}</p>
+                          <p className="text-xs text-slate-500">{product.orders} orders</p>
+                        </div>
+                        <p className="text-sm font-bold text-slate-800">{product.sales}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </main>
+        </div>
       </div>
-    </div>
+    </ErrorBoundary>
   );
 }
