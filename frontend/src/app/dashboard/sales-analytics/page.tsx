@@ -40,11 +40,11 @@ export default function SalesAnalyticsPage() {
   const [timeframe, setTimeframe] = useState("7d");
   const [perfMetrics, setPerfMetrics] = useState<{
     total_sales: number;
+    total_sales_change: number;
     orders_count: number;
-    avg_order_value: number;
-    sales_change_pct: number;
-    orders_change_pct: number;
-    avg_order_change_pct: number;
+    orders_count_change: number;
+    average_order_value: number;
+    average_order_value_change: number;
   } | null>(null);
 
   // Sync tenant from localStorage on load
@@ -188,20 +188,20 @@ export default function SalesAnalyticsPage() {
               {[
                 {
                   label: "Total Sales",
-                  value: `₹${perfMetrics.total_sales.toLocaleString("en-IN")}`,
-                  change: perfMetrics.sales_change_pct,
+                  value: `₹${(perfMetrics.total_sales || 0).toLocaleString("en-IN")}`,
+                  change: perfMetrics.total_sales_change || 0,
                   icon: "₹"
                 },
                 {
                   label: "Orders Count",
-                  value: perfMetrics.orders_count.toString(),
-                  change: perfMetrics.orders_change_pct,
+                  value: (perfMetrics.orders_count || 0).toString(),
+                  change: perfMetrics.orders_count_change || 0,
                   icon: "🛒"
                 },
                 {
                   label: "Average Order Value",
-                  value: `₹${perfMetrics.avg_order_value.toLocaleString("en-IN")}`,
-                  change: perfMetrics.avg_order_change_pct,
+                  value: `₹${(perfMetrics.average_order_value || 0).toLocaleString("en-IN")}`,
+                  change: perfMetrics.average_order_value_change || 0,
                   icon: "📊"
                 }
               ].map((card) => (
