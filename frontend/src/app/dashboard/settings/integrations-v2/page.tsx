@@ -118,7 +118,7 @@ export default function IntegrationsPageV2() {
 
     try {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-      const resp = await fetch(`${apiBase}/api/v1/evolution/provision`, {
+      const resp = await fetch(`${apiBase}/api/v1/evolution/provision?tenant_id=${activeTenantId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({})
