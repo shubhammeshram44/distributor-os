@@ -2,9 +2,10 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Phone, KeyRound, Loader2, ArrowRight, ShieldCheck, AlertCircle } from "lucide-react";
+import { Phone, Loader2, ArrowRight, ShieldCheck, AlertCircle } from "lucide-react";
 import { RecaptchaVerifier, signInWithPhoneNumber, ConfirmationResult } from "firebase/auth";
 import { auth, isFirebaseConfigured } from "@/lib/firebase";
+import OtpInput from "@/components/ui/OtpInput";
 
 function cleanAndNormalizePhone(input: string): string | null {
   const trimmed = input.trim();
@@ -155,12 +156,11 @@ export default function AuthPage() {
     }
   };
 
-  const handleVerifyOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const verifyOtp = async (code: string) => {
     setError(null);
     setSuccessMessage(null);
 
-    if (otpCode.length !== 6) {
+    if (code.length !== 6) {
       setError("Please enter the 6-digit verification code.");
       return;
     }
@@ -173,7 +173,7 @@ export default function AuthPage() {
 
     setLoading(true);
     try {
-      const credential = await confirmationRef.current.confirm(otpCode);
+      const credential = await confirmationRef.current.confirm(code);
       const firebaseToken = await credential.user.getIdToken();
 
       const response = await fetch(`${apiBase}/api/v1/auth/firebase-login`, {
@@ -218,6 +218,11 @@ export default function AuthPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await verifyOtp(otpCode);
   };
 
   const handleChangePhone = () => {
@@ -305,19 +310,12 @@ export default function AuthPage() {
               <label className="block text-[11px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
                 Verification Code
               </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  placeholder="Enter 6-digit OTP code"
-                  maxLength={6}
-                  value={otpCode}
-                  onChange={(e) => setOtpCode(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl text-sm font-semibold tracking-widest text-center focus:outline-none focus:ring-1 focus:ring-blue-500 bg-slate-50/20 text-slate-700"
-                  disabled={loading}
-                  required
-                />
-                <KeyRound className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              </div>
+              <OtpInput
+                value={otpCode}
+                onChange={setOtpCode}
+                onComplete={(code) => verifyOtp(code)}
+                disabled={loading}
+              />
             </div>
 
             {error && (

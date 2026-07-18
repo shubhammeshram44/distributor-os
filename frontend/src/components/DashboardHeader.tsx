@@ -128,9 +128,9 @@ export default function DashboardHeader({
   })();
 
   return (
-    <header className="h-16 bg-white border-b border-dashboard-border flex items-center justify-between px-8 fixed top-0 right-0 left-64 z-10 shadow-sm">
+    <header className="h-16 bg-white border-b border-dashboard-border flex items-center justify-between pl-16 pr-4 md:px-8 fixed top-0 right-0 left-64 z-10 shadow-sm">
       {/* Search Input with Dropdown */}
-      <div className="flex items-center gap-4 flex-1 max-w-lg" data-search-container>
+      <div className="hidden sm:flex items-center gap-4 flex-1 max-w-lg" data-search-container>
         <div className="relative w-full">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input
@@ -189,9 +189,9 @@ export default function DashboardHeader({
       </div>
 
       {/* Right Actions & User Area */}
-      <div className="flex items-center gap-6">
+      <div className="flex items-center gap-3 md:gap-6">
         {/* Workspace Label — static (single-tenant per user today). Not a dropdown: don't imply switching that doesn't exist. */}
-        <div className="flex items-center gap-2 border-r border-dashboard-border pr-6">
+        <div className="hidden md:flex items-center gap-2 border-r border-dashboard-border pr-6">
           <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Workspace</span>
           <span
             className="px-3 py-1.5 border border-dashboard-border rounded-lg text-xs font-semibold text-slate-700 bg-slate-50 truncate max-w-[160px]"

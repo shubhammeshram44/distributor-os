@@ -218,11 +218,11 @@ function CustomersContent() {
     if (!selectedCustomer) return;
     const targetId = selectedCustomer.id;
     const nextVal = !whatsappNotificationsEnabled;
-    
+
     // Optimistic UI updates
     setWhatsappNotificationsEnabled(nextVal);
     setCustomers(prev => prev.map(c => c.id === targetId ? { ...c, whatsapp_notifications_enabled: nextVal } as any : c));
-    
+
     try {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
       const resp = await fetch(`${apiBase}/api/v1/customers/${targetId}/notification-prefs`, {
@@ -632,14 +632,14 @@ function CustomersContent() {
 
       {/* Payment History Drawer */}
       {isPaymentDrawerOpen && (
-        <div className="fixed inset-y-0 right-0 z-50 flex justify-end pointer-events-none">
+        <div className="fixed inset-y-0 right-0 z-50 flex justify-end pointer-events-none" role="dialog" aria-modal="true" aria-labelledby="payment-drawer-title">
           <div className="w-[420px] bg-white h-screen shadow-2xl flex flex-col animate-slide-in border-l border-slate-200 pointer-events-auto">
             <div className="p-5 border-b border-dashboard-border flex items-center justify-between bg-brand-dark text-white">
               <div>
-                <h3 className="font-bold text-base">Payment History</h3>
+                <h3 id="payment-drawer-title" className="font-bold text-base">Payment History</h3>
                 <p className="text-xs text-brand-textMuted mt-0.5">{paymentDrawerCustomer}</p>
               </div>
-              <button onClick={() => setIsPaymentDrawerOpen(false)} className="p-1.5 rounded-full hover:bg-brand-darkHover transition-all cursor-pointer">
+              <button onClick={() => setIsPaymentDrawerOpen(false)} className="p-1.5 rounded-full hover:bg-brand-darkHover transition-all cursor-pointer" aria-label="Close payment history">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -674,18 +674,19 @@ function CustomersContent() {
 
       {/* Edit Configuration Modal */}
       {isEditModalOpen && selectedCustomer && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm animate-fade-in" role="dialog" aria-modal="true" aria-labelledby="edit-config-modal-title">
           <div className="bg-white rounded-xl border border-slate-200 shadow-2xl w-full max-w-md p-6 animate-scale-up relative mx-4 animate-slide-in">
             <button
               onClick={() => setIsEditModalOpen(false)}
               className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1.5 rounded-full hover:bg-slate-50 transition-all cursor-pointer"
+              aria-label="Close modal"
             >
               <X className="w-4 h-4" />
             </button>
 
             <div className="flex items-center gap-2 mb-4">
               <span className="text-xl">⚙️</span>
-              <h3 className="font-bold text-slate-800 text-lg">Configure Store Account</h3>
+              <h3 id="edit-config-modal-title" className="font-bold text-slate-800 text-lg">Configure Store Account</h3>
             </div>
 
             <p className="text-xs text-slate-400 font-semibold mb-6">
@@ -732,14 +733,12 @@ function CustomersContent() {
                 <button
                   type="button"
                   onClick={toggleCustomerWhatsappPrefs}
-                  className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                    whatsappNotificationsEnabled ? "bg-emerald-500" : "bg-slate-300"
-                  }`}
+                  className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${whatsappNotificationsEnabled ? "bg-emerald-500" : "bg-slate-300"
+                    }`}
                 >
                   <span
-                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                      whatsappNotificationsEnabled ? "translate-x-5" : "translate-x-0"
-                    }`}
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${whatsappNotificationsEnabled ? "translate-x-5" : "translate-x-0"
+                      }`}
                   />
                 </button>
               </div>
@@ -774,7 +773,7 @@ function CustomersContent() {
 
       {/* Onboard New Retailer Modal */}
       {isOnboardModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm animate-fade-in" role="dialog" aria-modal="true" aria-labelledby="onboard-modal-title">
           <div className="bg-white rounded-xl border border-slate-200 shadow-2xl w-full max-w-md p-6 animate-scale-up relative mx-4 animate-slide-in">
             <button
               onClick={() => {
@@ -786,13 +785,14 @@ function CustomersContent() {
                 setBillingTerms("Net 30");
               }}
               className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1.5 rounded-full hover:bg-slate-50 transition-all cursor-pointer"
+              aria-label="Close modal"
             >
               <X className="w-4 h-4" />
             </button>
 
             <div className="flex items-center gap-2 mb-4">
               <span className="text-xl">🏪</span>
-              <h3 className="font-bold text-slate-800 text-lg">Onboard New Retailer</h3>
+              <h3 id="onboard-modal-title" className="font-bold text-slate-800 text-lg">Onboard New Retailer</h3>
             </div>
 
             <p className="text-xs text-slate-400 font-semibold mb-6">

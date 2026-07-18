@@ -142,11 +142,10 @@ export default function CatalogIngestion({
         {/* Drag and Drop Zone */}
         {!selectedFile ? (
           <div
-            className={`flex-1 border-2 border-dashed rounded-xl p-6 flex flex-col items-center justify-center gap-2 cursor-pointer transition-all ${
-              dragActive
+            className={`flex-1 border-2 border-dashed rounded-xl p-6 flex flex-col items-center justify-center gap-2 cursor-pointer transition-all ${dragActive
                 ? "border-brand-blue bg-blue-50/20"
                 : "border-slate-200 hover:border-brand-blue hover:bg-slate-50/30"
-            }`}
+              }`}
             onDragEnter={handleDrag}
             onDragLeave={handleDrag}
             onDragOver={handleDrag}
@@ -176,6 +175,7 @@ export default function CatalogIngestion({
               <button
                 onClick={clearFile}
                 className="text-slate-400 hover:text-slate-600 p-1 hover:bg-slate-100 rounded-full transition-all shrink-0"
+                aria-label="Clear selected file"
               >
                 <X className="w-4 h-4" />
               </button>

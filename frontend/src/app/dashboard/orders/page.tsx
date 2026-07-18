@@ -8,6 +8,7 @@ import Pagination from "@/components/ui/Pagination";
 import { formatDateTime } from "@/utils/datetime";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import { ToastContainer, useToast } from "@/components/ui/Toast";
+import { SkeletonTable } from "@/components/ui/Skeleton";
 import PlaceOrderModal from "@/components/PlaceOrderModal";
 import { useDebounce, fetchWithTimeout } from "@/lib/debounce";
 import {
@@ -780,10 +781,22 @@ export default function OrdersPage() {
           <div className="bg-white rounded-xl border border-dashboard-border shadow-sm overflow-hidden flex flex-col min-h-[400px]">
             <div className="flex-1 overflow-x-auto">
               {loading ? (
-                <div className="flex flex-col items-center justify-center py-24 gap-3">
-                  <Loader2 className="w-8 h-8 text-brand-blue animate-spin" />
-                  <span className="text-sm font-semibold text-slate-500">Loading orders catalog...</span>
-                </div>
+                <table className="w-full text-left text-sm border-collapse">
+                  <thead>
+                    <tr className="text-slate-400 font-semibold text-xs border-b border-dashboard-border bg-slate-50/50">
+                      <th className="py-3 px-6">Order ID</th>
+                      <th className="py-3 px-6">Customer</th>
+                      <th className="py-3 px-6 text-center">Channel</th>
+                      <th className="py-3 px-6 text-right">Amount</th>
+                      <th className="py-3 px-6 text-center">Status</th>
+                      <th className="py-3 px-6 text-center">PAYMENT</th>
+                      <th className="py-3 px-6 text-center">Invoice Type</th>
+                      <th className="py-3 px-6">Created On</th>
+                      <th className="py-3 px-6 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <SkeletonTable rows={8} cols={9} />
+                </table>
               ) : error ? (
                 <div className="flex flex-col items-center justify-center py-24 gap-3 text-rose-600">
                   <AlertCircle className="w-8 h-8" />
@@ -801,15 +814,42 @@ export default function OrdersPage() {
 
                 </div>
               ) : filteredOrders.length === 0 ? (
-                <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/40 text-center my-4">
-                  <div className="p-3 bg-slate-100 text-slate-400 rounded-full mb-3">
-                    <Search className="w-6 h-6" />
+                orders.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/40 text-center my-4">
+                    <div className="p-3 bg-slate-100 text-slate-400 rounded-full mb-3">
+                      <MessageSquare className="w-6 h-6" />
+                    </div>
+                    <h3 className="text-sm font-semibold text-slate-800">No orders yet</h3>
+                    <p className="text-xs text-slate-500 max-w-xs mt-1">
+                      Orders placed via WhatsApp or the portal will show up here in real time.
+                    </p>
+                    <button
+                      onClick={() => setIsPlaceOrderOpen(true)}
+                      className="mt-4 px-4 py-2 bg-brand-blue hover:bg-brand-blueHover text-white rounded-lg text-xs font-bold transition-all cursor-pointer"
+                    >
+                      Place your first order
+                    </button>
                   </div>
-                  <h3 className="text-sm font-semibold text-slate-800">Your workspace is clean</h3>
-                  <p className="text-xs text-slate-500 max-w-xs mt-1">
-                    Connect your warehouse stock or send your first WhatsApp text order to see live tracking metrics update instantly.
-                  </p>
-                </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/40 text-center my-4">
+                    <div className="p-3 bg-slate-100 text-slate-400 rounded-full mb-3">
+                      <Search className="w-6 h-6" />
+                    </div>
+                    <h3 className="text-sm font-semibold text-slate-800">No orders match your filters</h3>
+                    <p className="text-xs text-slate-500 max-w-xs mt-1">
+                      Try a different search term or reset the status filter to see everything.
+                    </p>
+                    <button
+                      onClick={() => {
+                        setSearchQuery("");
+                        setSelectedStatus("All");
+                      }}
+                      className="mt-4 px-4 py-2 border border-dashboard-border text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-50 transition-all cursor-pointer"
+                    >
+                      Clear filters
+                    </button>
+                  </div>
+                )
               ) : (
                 <table className="w-full text-left text-sm border-collapse">
                   <thead>
@@ -925,19 +965,20 @@ export default function OrdersPage() {
 
       {/* Details Side Panel Drawer */}
       {selectedOrderId && (
-        <div className="fixed inset-y-0 right-0 z-50 flex justify-end pointer-events-none">
+        <div className="fixed inset-y-0 right-0 z-50 flex justify-end pointer-events-none" role="dialog" aria-modal="true" aria-labelledby="order-details-title">
           <div className="flex-1 pointer-events-none"></div>
 
           <div className="w-[500px] bg-white h-screen shadow-2xl flex flex-col animate-slide-in relative border-l border-slate-200 pointer-events-auto">
             {/* Drawer Header */}
             <div className="p-6 border-b border-dashboard-border flex items-center justify-between bg-brand-dark text-white">
               <div>
-                <h3 className="font-bold text-lg">Order Details</h3>
+                <h3 id="order-details-title" className="font-bold text-lg">Order Details</h3>
                 <p className="text-xs text-brand-textMuted mt-0.5">ID: {selectedOrderNo}</p>
               </div>
               <button
                 onClick={handleCloseDetails}
                 className="p-1.5 rounded-full hover:bg-brand-darkHover text-brand-textMuted hover:text-white transition-all cursor-pointer"
+                aria-label="Close order details"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1314,13 +1355,14 @@ export default function OrdersPage() {
 
       {/* Tally Export Date Range Modal */}
       {showTallyExportModal && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="tally-export-title">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 animate-fade-in">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-bold text-slate-800">Export to Tally</h3>
+              <h3 id="tally-export-title" className="text-sm font-bold text-slate-800">Export to Tally</h3>
               <button
                 onClick={() => setShowTallyExportModal(false)}
                 className="text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-50 transition-all"
+                aria-label="Close export modal"
               >
                 <X className="w-4 h-4" />
               </button>

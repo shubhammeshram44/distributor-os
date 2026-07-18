@@ -19,7 +19,9 @@ import {
   MessageSquare,
   Settings,
   Link2,
-  Bell
+  Bell,
+  Menu,
+  X
 } from "lucide-react";
 
 
@@ -32,6 +34,20 @@ interface SidebarProps {
 export default function Sidebar({ activeTab, setActiveTab, tenantName }: SidebarProps) {
   const pathname = usePathname();
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(true);
+
+  // Track viewport so the icon-only "collapsed" style only ever applies at desktop widths —
+  // the mobile drawer always shows full labels regardless of the desktop collapse preference.
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 768px)");
+    const update = () => setIsDesktop(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+
+  const effectiveCollapsed = isCollapsed && isDesktop;
 
   // Sync with localStorage and body classes on load
   useEffect(() => {
@@ -43,6 +59,11 @@ export default function Sidebar({ activeTab, setActiveTab, tenantName }: Sidebar
       document.body.classList.remove("sidebar-collapsed");
     }
   }, []);
+
+  // Close the mobile drawer automatically on route change
+  useEffect(() => {
+    setIsMobileOpen(false);
+  }, [pathname]);
 
   const toggleCollapse = () => {
     const nextVal = !isCollapsed;
@@ -62,45 +83,79 @@ export default function Sidebar({ activeTab, setActiveTab, tenantName }: Sidebar
     type?: string;
     badge?: string;
   }[] = [
-    { name: "Dashboard", icon: LayoutDashboard, href: "/dashboard" },
-    { name: "Messages", icon: MessageSquare, href: "/dashboard/messages" },
-    { name: "Orders", icon: ShoppingCart, href: "/dashboard/orders" },
-    { name: "Inventory", icon: Box, href: "/dashboard/inventory" },
-    { name: "Products", icon: Layers, href: "/dashboard/products" },
-    { name: "Customers", icon: Users, href: "/dashboard/customers" },
-    { name: "Shipments", icon: Truck, href: "/dashboard/shipments" },
-    { name: "Collections", icon: CreditCard, href: "/dashboard/collections" },
-    { name: "Sales Analytics", icon: BarChart3, href: "/dashboard/sales-analytics" },
-    { name: "Reports", icon: FileText, href: "/dashboard/reports" },
-    { type: "category", name: "Settings" },
-    { name: "Team Settings", icon: Settings, href: "/dashboard/settings/team" },
-    { name: "Integrations", icon: Link2, href: "/dashboard/settings/integrations" },
-    { name: "Integrations V2 (Test)", icon: Link2, href: "/dashboard/settings/integrations-v2" },
-    { name: "Notifications", icon: Bell, href: "/dashboard/settings/notifications" },
-    { name: "Payments", icon: CreditCard, href: "/dashboard/settings/payments" },
-    { name: "Automations", icon: Zap, badge: "Soon" }
-  ];
+      { name: "Dashboard", icon: LayoutDashboard, href: "/dashboard" },
+      { name: "Messages", icon: MessageSquare, href: "/dashboard/messages" },
+      { name: "Orders", icon: ShoppingCart, href: "/dashboard/orders" },
+      { name: "Inventory", icon: Box, href: "/dashboard/inventory" },
+      { name: "Products", icon: Layers, href: "/dashboard/products" },
+      { name: "Customers", icon: Users, href: "/dashboard/customers" },
+      { name: "Shipments", icon: Truck, href: "/dashboard/shipments" },
+      { name: "Collections", icon: CreditCard, href: "/dashboard/collections" },
+      { name: "Sales Analytics", icon: BarChart3, href: "/dashboard/sales-analytics" },
+      { name: "Reports", icon: FileText, href: "/dashboard/reports" },
+      { type: "category", name: "Settings" },
+      { name: "Team Settings", icon: Settings, href: "/dashboard/settings/team" },
+      { name: "Integrations", icon: Link2, href: "/dashboard/settings/integrations" },
+      { name: "Integrations V2 (Test)", icon: Link2, href: "/dashboard/settings/integrations-v2" },
+      { name: "Notifications", icon: Bell, href: "/dashboard/settings/notifications" },
+      { name: "Payments", icon: CreditCard, href: "/dashboard/settings/payments" },
+      { name: "Automations", icon: Zap, badge: "Soon" }
+    ];
 
 
 
   return (
-    <aside className={`${isCollapsed ? 'w-16' : 'w-64'} bg-brand-dark text-white flex flex-col h-screen fixed left-0 top-0 border-r border-brand-darkHover z-20 transition-all duration-300 ease-in-out`}>
+    <>
+      {/* Mobile hamburger trigger — only visible below md, replaces the hidden sidebar */}
+      <button
+        onClick={() => setIsMobileOpen(true)}
+        className="md:hidden fixed top-3 left-3 z-30 w-10 h-10 flex items-center justify-center rounded-lg bg-brand-dark text-white shadow-lg"
+        aria-label="Open navigation menu"
+        aria-expanded={isMobileOpen}
+      >
+        <Menu className="w-5 h-5" />
+      </button>
+
+      {/* Backdrop overlay for mobile drawer */}
+      {isMobileOpen && (
+        <div
+          className="md:hidden fixed inset-0 bg-black/50 z-20"
+          onClick={() => setIsMobileOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      <aside
+        className={`${isCollapsed ? 'md:w-16' : 'md:w-64'} w-64 bg-brand-dark text-white flex flex-col h-screen fixed left-0 top-0 border-r border-brand-darkHover z-30 transition-all duration-300 ease-in-out ${
+          isMobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+        }`}
+      >
       {/* Brand Header */}
-      <div className={`h-16 flex items-center ${isCollapsed ? 'justify-center px-2' : 'px-6'} border-b border-brand-darkHover gap-2 transition-all duration-300`}>
-        <div className="w-8 h-8 rounded bg-brand-blue flex items-center justify-center font-bold text-lg text-white flex-shrink-0">
-          D
+      <div className={`h-16 flex items-center ${isCollapsed ? 'md:justify-center md:px-2' : 'px-6'} justify-between border-b border-brand-darkHover gap-2 transition-all duration-300`}>
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded bg-brand-blue flex items-center justify-center font-bold text-lg text-white flex-shrink-0">
+            D
+          </div>
+          {!effectiveCollapsed && (
+            <span className="font-semibold text-lg tracking-wider transition-opacity duration-200">
+              DistributorOS
+            </span>
+          )}
         </div>
-        {!isCollapsed && (
-          <span className="font-semibold text-lg tracking-wider transition-opacity duration-200">
-            DistributorOS
-          </span>
-        )}
+        {/* Close button — mobile drawer only */}
+        <button
+          onClick={() => setIsMobileOpen(false)}
+          className="md:hidden text-brand-textMuted hover:text-white p-1"
+          aria-label="Close navigation menu"
+        >
+          <X className="w-5 h-5" />
+        </button>
       </div>
 
-      <nav className={`flex-1 ${isCollapsed ? 'px-2' : 'px-4'} py-6 space-y-1.5 overflow-y-auto`}>
+      <nav className={`flex-1 ${isCollapsed ? 'md:px-2' : ''} px-4 py-6 space-y-1.5 overflow-y-auto`}>
         {menuItems.map((item) => {
           if (item.type === "category") {
-            if (isCollapsed) return <div key={item.name} className="h-px bg-brand-darkHover my-4" />;
+            if (effectiveCollapsed) return <div key={item.name} className="h-px bg-brand-darkHover my-4" />;
             return (
               <div key={item.name} className="px-4 pt-4 pb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                 {item.name}
@@ -114,13 +169,13 @@ export default function Sidebar({ activeTab, setActiveTab, tenantName }: Sidebar
             ? (item.href === "/dashboard" ? pathname === "/dashboard" || pathname === "/" : pathname.startsWith(item.href))
             : activeTab === item.name;
 
-          const className = `w-full flex items-center ${isCollapsed ? 'justify-center p-3' : 'gap-3 px-4 py-3'
+          const className = `w-full flex items-center ${effectiveCollapsed ? 'justify-center p-3' : 'gap-3 px-4 py-3'
             } rounded-lg text-sm font-medium transition-all text-left relative group ${isActive
               ? "bg-brand-blue text-white shadow-md shadow-brand-blue/20"
               : "text-brand-textMuted hover:bg-brand-darkHover hover:text-white"
             }`;
 
-          const tooltip = isCollapsed && (
+          const tooltip = effectiveCollapsed && (
             <span className="absolute left-full ml-3 px-2 py-1 bg-slate-950 text-white text-xs rounded-md whitespace-nowrap shadow-xl opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none z-50 invisible group-hover:visible">
               {item.name}
             </span>
@@ -135,7 +190,7 @@ export default function Sidebar({ activeTab, setActiveTab, tenantName }: Sidebar
                 aria-label={item.name}
               >
                 <Icon className="w-5 h-5 flex-shrink-0" />
-                {!isCollapsed && (
+                {!effectiveCollapsed && (
                   <span className="ml-3 transition-opacity duration-200 flex items-center gap-2">
                     {item.name}
                     {item.badge && (
@@ -157,13 +212,24 @@ export default function Sidebar({ activeTab, setActiveTab, tenantName }: Sidebar
               className={className}
             >
               <Icon className="w-5 h-5 flex-shrink-0" />
-              {!isCollapsed && <span className="ml-3 transition-opacity duration-200">{item.name}</span>}
+              {!effectiveCollapsed && <span className="ml-3 transition-opacity duration-200">{item.name}</span>}
               {tooltip}
             </button>
           );
         })}
       </nav>
+
+      {/* Desktop-only collapse toggle — mobile drawer uses the close button instead */}
+      <button
+        onClick={toggleCollapse}
+        className="hidden md:flex items-center justify-center gap-2 h-12 border-t border-brand-darkHover text-brand-textMuted hover:bg-brand-darkHover hover:text-white transition-all"
+        aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+      >
+        {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+        {!isCollapsed && <span className="text-xs font-semibold">Collapse</span>}
+      </button>
     </aside>
+    </>
   );
 }
 

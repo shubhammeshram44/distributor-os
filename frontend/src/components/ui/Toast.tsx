@@ -23,14 +23,14 @@ function ToastItem({ toast, onRemove }: ToastItemProps) {
   }, [toast.id, onRemove]);
 
   const styles = {
-    success: "bg-white border-emerald-400 text-emerald-800",
-    error: "bg-white border-rose-400 text-rose-800",
+    success: "bg-white border-success-500 text-success-700",
+    error: "bg-white border-danger-500 text-danger-700",
     info: "bg-white border-brand-blue text-brand-blue",
   };
 
   const icons = {
-    success: <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" />,
-    error: <AlertCircle className="w-4 h-4 text-rose-500 flex-shrink-0" />,
+    success: <CheckCircle2 className="w-4 h-4 text-success-600 flex-shrink-0" />,
+    error: <AlertCircle className="w-4 h-4 text-danger-600 flex-shrink-0" />,
     info: <Info className="w-4 h-4 text-brand-blue flex-shrink-0" />,
   };
 
