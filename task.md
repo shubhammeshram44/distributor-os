@@ -1,0 +1,21 @@
+- [x] Modify `app/services/notification_service.py` to include payment links and outstanding links in templates and signature
+- [x] Modify `app/services/payment_reminder_service.py` to fetch both payment links and check split preference keys
+- [x] Modify `app/models/tenant.py` to update the default `notification_prefs` JSON value
+- [x] Modify `app/api/v1/payments.py` to add `POST /trigger-reminder-sweep`
+- [x] Modify `frontend/src/app/dashboard/settings/notifications/page.tsx` to split Operational and Financial notifications
+- [x] Run test suite `py -m pytest tests/ -x -q` to verify
+- [x] Modify `app/services/notification_service.py`
+- [x] Create implementation plan & update with feedback
+- [x] Add columns to `DistributorTenant` in `app/models/tenant.py`
+- [x] Create database migration using Alembic
+- [x] Implement encryption utility in `app/utils/encryption.py`
+- [x] Add `cryptography` to `requirements.txt`
+- [x] Implement status, connect, and disconnect endpoints in `app/api/v1/tenant.py`
+- [x] Update `PaymentGateway` to accept keys, remove env fallbacks, and auto-detect mode
+- [x] Move webhook signature verification in `app/api/v1/payments.py` to a standalone hmac-based function
+- [x] Update `payment_session_service.py` to retrieve tenant credentials and decrypt secret
+- [x] Update frontend settings navigation in `frontend/src/components/Sidebar.tsx`
+- [x] Build new Settings → Payments page `frontend/src/app/dashboard/settings/payments/page.tsx`
+- [x] Set up default test env variable `ENCRYPTION_KEY` in `tests/conftest.py`
+- [x] Add unit tests for invalid keys and blocked payment sessions in `tests/test_razorpay_connection.py`
+- [x] Run backend tests and verify success

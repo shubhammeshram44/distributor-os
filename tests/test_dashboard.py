@@ -14,7 +14,7 @@ from app.database import tenant_context
 def fixture_client():
     return TestClient(app)
 
-def test_dashboard_api_endpoints(db_session, client):
+def test_dashboard_api_endpoints(db_session, client, seed_demo_data):
     # The default tenant ID used by the seeder is:
     demo_tenant_id = uuid.UUID("d3b07384-d113-4956-a5d2-64be7357c11d")
 
@@ -71,7 +71,42 @@ def test_dashboard_api_endpoints(db_session, client):
     assert "ORD-2505-1482" in activity[0]["message"]
 
 
-def test_dashboard_metrics_date_filtering(db_session, client):
+def test_customer_whatsapp_thread(db_session, client, seed_demo_data):
+    demo_tenant_id = uuid.UUID("d3b07384-d113-4956-a5d2-64be7357c11d")
+    kaveri_id = "c1010000-0000-0000-0000-000000000001"   # has a WhatsApp order
+    maruthi_id = "c1010000-0000-0000-0000-000000000002"  # only a Portal order
+
+    # Trigger the seeder.
+    client.get(f"/api/v1/dashboard/metrics?tenant_id={demo_tenant_id}")
+
+    # Customer with a WhatsApp-sourced order returns the real order + line items.
+    resp = client.get(
+        f"/api/v1/dashboard/customer-whatsapp-thread/{kaveri_id}?tenant_id={demo_tenant_id}"
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["order"] is not None
+    assert data["order"]["order_id"] == "ORD-2505-1482"
+    assert data["order"]["source"] == "WhatsApp"
+    assert data["order"]["status"] == "Confirmed"
+    assert data["has_unmatched"] is False
+    assert data["total"] == 23650.00
+    assert len(data["items"]) == 1
+    assert data["items"][0]["sku_id"] == "PROD-HUL-SOAP"
+    assert data["items"][0]["total_price"] == 23650.00
+
+    # Customer with no WhatsApp order returns an empty thread (not the Portal order).
+    resp_empty = client.get(
+        f"/api/v1/dashboard/customer-whatsapp-thread/{maruthi_id}?tenant_id={demo_tenant_id}"
+    )
+    assert resp_empty.status_code == 200
+    empty = resp_empty.json()
+    assert empty["order"] is None
+    assert empty["items"] == []
+    assert empty["total"] == 0.0
+
+
+def test_dashboard_metrics_date_filtering(db_session, client, seed_demo_data):
     demo_tenant_id = uuid.UUID("d3b07384-d113-4956-a5d2-64be7357c11d")
     
     # 1. Call metrics with dates that filter orders
@@ -105,5 +140,72 @@ def test_dashboard_tenant_validation_guardrails(client):
     resp = client.get("/api/v1/dashboard/metrics?tenant_id=")
     assert resp.status_code == 401
     assert "Session expired or token missing" in resp.json()["detail"]
+
+
+def test_dashboard_overview_endpoint(db_session, client, seed_demo_data):
+    demo_tenant_id = uuid.UUID("d3b07384-d113-4956-a5d2-64be7357c11d")
+
+    # Call overview endpoint
+    resp = client.get(f"/api/v1/dashboard/overview?tenant_id={demo_tenant_id}")
+    assert resp.status_code == 200
+    data = resp.json()
+
+    assert "metrics" in data
+    assert "recent_orders" in data
+    assert "donut_data" in data
+
+    metrics = data["metrics"]
+    assert metrics["total_sales"] == 252970.0
+    assert metrics["orders_count"] == 5
+    assert metrics["average_order_value"] == 50594.0
+
+    recent_orders = data["recent_orders"]
+    assert len(recent_orders) == 5
+    assert recent_orders[0]["order_id"] == "ORD-2505-1482"
+    assert recent_orders[0]["status"] == "Confirmed"
+
+    donut = data["donut_data"]
+    assert len(donut) == 4
+    assert next(item for item in donut if item["name"] == "0-15 Days")["percentage"] == 39
+
+
+def test_dashboard_credit_risk_alerts(db_session, client, seed_demo_data):
+    demo_tenant_id = uuid.UUID("d3b07384-d113-4956-a5d2-64be7357c11d")
+
+    # Call credit-risk-alerts endpoint
+    resp = client.get(f"/api/v1/dashboard/credit-risk-alerts?tenant_id={demo_tenant_id}")
+    assert resp.status_code == 200
+    data = resp.json()
+
+    assert "alerts" in data
+    assert "total_at_risk_count" in data
+    assert "total_at_risk_amount" in data
+
+
+def test_dashboard_business_health_score(db_session, client, seed_demo_data):
+    demo_tenant_id = uuid.UUID("d3b07384-d113-4956-a5d2-64be7357c11d")
+
+    # Seed extra orders if needed to meet the 5+ confirmed orders in last 30 days check.
+    # Note: seed_demo_data already seeds 5 orders:
+    # ORD-2505-1476, ORD-2505-1477, ORD-2505-1479, ORD-2505-1481, ORD-2505-1482
+    # All are Confirmed or Delivered and created within the timeframe.
+
+    # 1. Fetch business health score
+    resp = client.get(f"/api/v1/dashboard/business-health-score?tenant_id={demo_tenant_id}")
+    assert resp.status_code == 200
+    data = resp.json()
+
+    assert "has_sufficient_data" in data
+    if data["has_sufficient_data"]:
+        assert "score" in data
+        assert "band" in data
+        assert "signals" in data
+        signals = data["signals"]
+        assert "collections" in signals
+        assert "sales" in signals
+        assert "recovery" in signals
+        assert "inventory" in signals
+        assert "fulfillment" in signals
+
 
 

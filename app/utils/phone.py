@@ -8,6 +8,10 @@ def normalize_phone_number(phone_str: str) -> str:
     if not phone_str:
         return ""
     
+    # Handle WhatsApp JID format (e.g. 919199153059@s.whatsapp.net)
+    if "@" in phone_str:
+        phone_str = phone_str.split("@")[0]
+        
     # Strip all non-digit characters
     digits = re.sub(r"\D", "", phone_str)
     

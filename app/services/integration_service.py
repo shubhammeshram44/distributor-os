@@ -149,6 +149,7 @@ class IntegrationService:
             }
         )
         db.add(ledger)
+        order.status = "Dispatched"
         db.commit()
 
         logger.info(f"Shipment booked with {carrier}. Waybill: {tracking_id}")

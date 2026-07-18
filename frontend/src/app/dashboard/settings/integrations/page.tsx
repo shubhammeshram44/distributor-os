@@ -12,13 +12,18 @@ import {
   EyeOff,
   Link2,
   Loader2,
-  Lock
+  Lock,
+  XCircle
 } from "lucide-react";
 
 export default function IntegrationsPage() {
   const [activeTenantId, setActiveTenantId] = useState("");
   const [whatsappPhoneId, setWhatsappPhoneId] = useState("");
   const [whatsappAccessToken, setWhatsappAccessToken] = useState("");
+  const [whatsappOrderPhone, setWhatsappOrderPhone] = useState("");
+  const [ownerJid, setOwnerJid] = useState("");
+  const [showDisconnectModal, setShowDisconnectModal] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
   
   // Masked visibility states
   const [showPhoneId, setShowPhoneId] = useState(false);
@@ -29,18 +34,17 @@ export default function IntegrationsPage() {
 
   // Evolution API provisioning states
   const [instanceName, setInstanceName] = useState("");
-  const [provisioningStatus, setProvisioningStatus] = useState<"idle" | "provisioning" | "connecting" | "connected" | "error">("idle");
+  const [provisioningStatus, setProvisioningStatus] = useState<"idle" | "provisioning" | "connecting" | "connected" | "disconnected" | "error">("idle");
   const [qrCodeBase64, setQrCodeBase64] = useState("");
   const [evolutionError, setEvolutionError] = useState("");
 
-  // Pre-fill instanceName with slugified tenant ID
-  useEffect(() => {
-    if (activeTenantId) {
-      setInstanceName(`inst-${activeTenantId.substring(0, 8)}`);
-    } else {
-      setInstanceName("default-bot");
-    }
-  }, [activeTenantId]);
+  // Business profile (GSTIN) state
+  const [businessGstin, setBusinessGstin] = useState("");
+  const [businessName, setBusinessName] = useState("");
+  const [businessCategory, setBusinessCategory] = useState("");
+  const [savingProfile, setSavingProfile] = useState(false);
+
+
 
   // Connection status polling
   useEffect(() => {
@@ -50,11 +54,14 @@ export default function IntegrationsPage() {
     
     const checkStatus = async () => {
       try {
-        const resp = await fetch(`${apiBase}/api/v1/evolution/status?instance_name=${instanceName}`);
+        const resp = await fetch(`${apiBase}/api/v1/evolution/status?instance_name=${instanceName}&tenant_id=${activeTenantId}`);
         if (resp.ok) {
           const data = await resp.json();
           if (data.status === "open") {
             setProvisioningStatus("connected");
+            if (data.ownerJid) {
+              setOwnerJid(data.ownerJid);
+            }
             showToast("WhatsApp Instance successfully connected!", "success");
           }
         }
@@ -69,10 +76,6 @@ export default function IntegrationsPage() {
 
   const handleProvisionEvolution = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!instanceName.trim()) {
-      showToast("Instance Name is required.", "error");
-      return;
-    }
 
     setProvisioningStatus("provisioning");
     setEvolutionError("");
@@ -80,20 +83,27 @@ export default function IntegrationsPage() {
 
     try {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-      const resp = await fetch(`${apiBase}/api/v1/evolution/provision`, {
+      const resp = await fetch(`${apiBase}/api/v1/evolution/provision?tenant_id=${activeTenantId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ instance_name: instanceName.trim() })
+        body: JSON.stringify({})
       });
 
       const data = await resp.json();
 
       if (resp.ok && data.status === "success") {
-        if (data.connection_status === "open") {
+        if (data.instance_name) {
+          setInstanceName(data.instance_name);
+        }
+
+        // Intercept for active open state or backend "ALREADY_CONNECTED" string
+        if (data.connection_status === "open" || data.qr_code === "ALREADY_CONNECTED") {
           setProvisioningStatus("connected");
+          setQrCodeBase64(""); // Flush out any stale QR text strings
           showToast("WhatsApp Instance is already open and connected!", "success");
         } else if (data.qr_code) {
-          setQrCodeBase64(data.qr_code);
+          // Guard against raw non-base64 strings and structure the base64 URL properly
+          setQrCodeBase64(data.qr_code.startsWith("data:") ? data.qr_code : `data:image/png;base64,${data.qr_code}`);
           setProvisioningStatus("connecting");
           showToast("QR code generated! Scan with your WhatsApp app.", "success");
         } else {
@@ -151,6 +161,36 @@ export default function IntegrationsPage() {
           const data = await resp.json();
           setWhatsappPhoneId(data.whatsapp_phone_id || "");
           setWhatsappAccessToken(data.whatsapp_access_token || "");
+          setWhatsappOrderPhone(data.whatsapp_order_phone || "");
+          if (data.whatsapp_phone_id) {
+            setInstanceName(data.whatsapp_phone_id);
+            // Verify connection status
+            try {
+            const statusResp = await fetch(
+              `${apiBase}/api/v1/evolution/status?instance_name=${data.whatsapp_phone_id}&tenant_id=${activeTenantId}`
+            );
+            if (statusResp.ok) {
+              const statusData = await statusResp.json();
+              if (statusData.connected === true || statusData.status === "open") {
+                setProvisioningStatus("connected");
+                if (statusData.owner_phone) {
+                  setWhatsappOrderPhone(statusData.owner_phone);
+                }
+              } else {
+                // Was previously connected (phone_id exists) but now disconnected
+                setProvisioningStatus("disconnected");
+              }
+            } else {
+              // API call failed — assume disconnected if phone_id existed
+              setProvisioningStatus("disconnected");
+            }
+            } catch (err) {
+              console.error("Error fetching connection status on mount:", err);
+              setProvisioningStatus("idle");
+            }
+          } else {
+            setProvisioningStatus("idle");
+          }
         } else {
           showToast("Failed to fetch WhatsApp integration details.", "error");
         }
@@ -164,6 +204,64 @@ export default function IntegrationsPage() {
 
     fetchSettings();
   }, [activeTenantId]);
+
+  // Fetch tenant business profile (name, category, GSTIN)
+  useEffect(() => {
+    if (!activeTenantId) return;
+
+    const fetchProfile = async () => {
+      try {
+        const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+        const resp = await fetch(`${apiBase}/api/v1/tenant/profile?tenant_id=${activeTenantId}`, {
+          credentials: "include"
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          setBusinessName(data.tenant?.name || "");
+          setBusinessCategory(data.tenant?.category || "");
+          setBusinessGstin(data.tenant?.gstin || "");
+        }
+      } catch (err) {
+        console.error("Failed to load business profile:", err);
+      }
+    };
+
+    fetchProfile();
+  }, [activeTenantId]);
+
+  const handleSaveBusinessProfile = async () => {
+    const trimmedGstin = businessGstin.trim().toUpperCase();
+    if (trimmedGstin && !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(trimmedGstin)) {
+      showToast("That doesn't look like a valid 15-character GSTIN.", "error");
+      return;
+    }
+
+    setSavingProfile(true);
+    try {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const resp = await fetch(`${apiBase}/api/v1/tenant/profile`, {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json", "X-Tenant-ID": activeTenantId },
+        body: JSON.stringify({
+          name: businessName.trim() || "Untitled Business",
+          category: businessCategory.trim() || "FMCG",
+          gstin: trimmedGstin || null,
+        }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        throw new Error(data.detail || "Failed to update business profile.");
+      }
+      setBusinessGstin(data.tenant?.gstin || "");
+      showToast("Business profile updated successfully.", "success");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to update business profile.";
+      showToast(message, "error");
+    } finally {
+      setSavingProfile(false);
+    }
+  };
 
   const handleTenantChange = (id: string) => {
     setActiveTenantId(id);
@@ -220,7 +318,38 @@ export default function IntegrationsPage() {
     }
   };
 
+  const handleDisconnect = async () => {
+    setDisconnecting(true);
+    try {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const resp = await fetch(`${apiBase}/api/v1/evolution/disconnect?instance_name=${instanceName}`, {
+        method: "DELETE",
+        credentials: "include"
+      });
+
+      if (resp.ok) {
+        showToast("WhatsApp disconnected successfully.", "success");
+        setProvisioningStatus("idle");
+        setInstanceName("");
+        setOwnerJid("");
+        setWhatsappOrderPhone("");
+        setWhatsappPhoneId("");
+        setQrCodeBase64("");
+      } else {
+        const data = await resp.json();
+        showToast(data.detail || "Failed to disconnect WhatsApp.", "error");
+      }
+    } catch (err) {
+      console.error("Disconnect failed:", err);
+      showToast("Network error during disconnect request.", "error");
+    } finally {
+      setDisconnecting(false);
+      setShowDisconnectModal(false);
+    }
+  };
+
   const isConnected = whatsappPhoneId && whatsappAccessToken;
+  const displayPhone = ownerJid ? ownerJid.replace("@s.whatsapp.net", "") : whatsappOrderPhone;
 
   return (
     <div className="flex h-screen bg-[#F8FAFC]">
@@ -248,6 +377,57 @@ export default function IntegrationsPage() {
             </div>
           ) : (
             <div className="space-y-6">
+              {/* Business Profile / GSTIN — required for a legally correct Tax Invoice */}
+              <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <div className="p-6 border-b border-slate-100">
+                  <h3 className="font-extrabold text-slate-800 text-base">Business Profile</h3>
+                  <p className="text-xs text-slate-400 font-semibold mt-0.5">
+                    Shown on your customers&apos; Tax Invoices.
+                  </p>
+                </div>
+                <div className="p-6 space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-500 mb-2 uppercase tracking-wider">
+                        Business Name
+                      </label>
+                      <input
+                        type="text"
+                        value={businessName}
+                        onChange={(e) => setBusinessName(e.target.value)}
+                        className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-slate-50/20 text-slate-700"
+                        disabled={savingProfile}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-500 mb-2 uppercase tracking-wider">
+                        GSTIN <span className="normal-case font-medium text-slate-400">(optional)</span>
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. 29AAAAA1111A1Z1"
+                        value={businessGstin}
+                        onChange={(e) => setBusinessGstin(e.target.value.toUpperCase())}
+                        maxLength={15}
+                        className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-slate-50/20 text-slate-700 uppercase"
+                        disabled={savingProfile}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-end pt-2 border-t border-slate-100 mt-2">
+                    <button
+                      type="button"
+                      onClick={handleSaveBusinessProfile}
+                      disabled={savingProfile}
+                      className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer"
+                    >
+                      {savingProfile ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                      <span>Save Business Profile</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
               {/* // LEGACY_META_CODE_START */}
               {/* 
               <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
@@ -398,9 +578,14 @@ export default function IntegrationsPage() {
                         <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
                         <span>Provisioning...</span>
                       </span>
+                    ) : provisioningStatus === "disconnected" ? (
+                      <span className="inline-flex items-center gap-1.5 bg-red-50 text-red-700 border border-red-200 px-3 py-1 rounded-full text-xs font-bold shadow-sm">
+                        <XCircle className="w-4 h-4 text-red-600" />
+                        <span>Disconnected</span>
+                      </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1.5 bg-slate-50 text-slate-500 border border-slate-200 px-3 py-1 rounded-full text-xs font-bold">
-                        <Lock className="w-4 h-4 text-slate-400" />
+                      <span className="inline-flex items-center gap-1.5 bg-rose-50 text-rose-700 border border-rose-200 px-3 py-1 rounded-full text-xs font-bold shadow-sm">
+                        <XCircle className="w-4 h-4 text-rose-600" />
                         <span>Not Connected</span>
                       </span>
                     )}
@@ -408,83 +593,186 @@ export default function IntegrationsPage() {
                 </div>
 
                 <div className="p-6 space-y-6">
-                  <div className="bg-slate-50 border border-slate-200/60 rounded-xl p-4 flex gap-3 text-slate-600 text-xs leading-relaxed font-semibold">
-                    <AlertCircle className="w-5 h-5 text-brand-blue flex-shrink-0 mt-0.5" />
-                    <div>
-                      <span className="text-slate-800 font-bold">Evolution API Provisioning Instructions:</span>
-                      <ul className="list-disc pl-4 mt-1.5 space-y-1 text-slate-500 font-medium">
-                        <li>Enter a unique identifier name for your WhatsApp instance (default is prefilled based on your workspace).</li>
-                        <li>Click "Provision WhatsApp Instance" to initialize the connection.</li>
-                        <li>If required, scan the generated QR code using Link a Device option in your WhatsApp application.</li>
-                        <li>The system will automatically detect the connection and activate the ingestion pipeline.</li>
-                      </ul>
-                    </div>
-                  </div>
-
-                  <form onSubmit={handleProvisionEvolution} className="space-y-5">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">
-                        WhatsApp Instance Name *
-                      </label>
-                      <div className="relative rounded-lg shadow-sm">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                          <Smartphone className="h-4 w-4 text-slate-400" />
+                  {provisioningStatus === "connected" ? (
+                    <div className="space-y-4">
+                      <div className="bg-slate-50 border border-slate-200/60 rounded-xl p-4 flex flex-col gap-2">
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Connected Phone Number</span>
+                          <span className="text-sm font-bold text-slate-800">
+                            +{displayPhone.replace("+", "")}
+                          </span>
                         </div>
-                        <input
-                          type="text"
-                          value={instanceName}
-                          onChange={(e) => setInstanceName(e.target.value)}
-                          required
-                          disabled={provisioningStatus === "provisioning" || provisioningStatus === "connecting"}
-                          placeholder="e.g. inst-workspace"
-                          className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-1 focus:ring-brand-blue bg-white font-semibold"
-                        />
+                        <div className="flex justify-between items-center border-t border-slate-200/60 pt-2 mt-1">
+                          <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Instance ID</span>
+                          <span className="text-xs font-semibold text-slate-500 font-mono">
+                            {instanceName}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex justify-end pt-2 border-t border-slate-100 mt-6">
+                        <button
+                          type="button"
+                          onClick={() => setShowDisconnectModal(true)}
+                          className="px-6 py-2.5 bg-rose-600 text-white rounded-lg text-sm font-bold shadow-md hover:bg-rose-700 cursor-pointer transition-all animate-in fade-in duration-200"
+                        >
+                          Disconnect
+                        </button>
                       </div>
                     </div>
-
-                    {qrCodeBase64 && (provisioningStatus === "connecting" || provisioningStatus === "provisioning") && (
-                      <div className="flex flex-col items-center justify-center p-6 bg-slate-50 border border-dashed border-slate-200 rounded-xl space-y-4">
-                        <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Scan this QR code with WhatsApp</p>
-                        <div className="bg-white p-4 rounded-xl shadow-md border border-slate-100">
-                          <img src={qrCodeBase64} alt="WhatsApp QR Code" className="w-48 h-48" />
+                  ) : provisioningStatus === "disconnected" ? (
+                    <div className="space-y-4">
+                      <div className="bg-red-50 border border-red-200 rounded-xl p-5">
+                        <div className="flex items-start gap-3">
+                          <XCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                          <div>
+                            <p className="text-sm font-bold text-red-700">
+                              WhatsApp Disconnected
+                            </p>
+                            <p className="text-xs text-red-500 mt-1 leading-relaxed">
+                              Your WhatsApp connection was lost. Orders from retailers are 
+                              NOT being received until you reconnect.
+                            </p>
+                            {whatsappOrderPhone && (
+                              <p className="text-xs text-red-400 mt-2">
+                                Last connected: {whatsappOrderPhone}
+                              </p>
+                            )}
+                          </div>
                         </div>
-                        <p className="text-[10px] text-slate-400 font-semibold animate-pulse flex items-center gap-1.5">
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          <span>Waiting for scan authorization...</span>
-                        </p>
                       </div>
-                    )}
 
-                    {evolutionError && (
-                      <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl text-xs font-semibold text-rose-800 flex items-center gap-2">
-                        <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-                        <span>{evolutionError}</span>
+                      <div className="bg-slate-50 border border-slate-200/60 rounded-xl p-4 text-xs text-slate-500 leading-relaxed font-semibold">
+                        <p className="font-semibold text-slate-700 mb-1">To reconnect:</p>
+                        <ol className="list-decimal pl-4 space-y-1 text-slate-500 font-medium">
+                          <li>Click "Reconnect WhatsApp" below</li>
+                          <li>Scan the QR code with your WhatsApp</li>
+                          <li>Orders will resume automatically</li>
+                        </ol>
                       </div>
-                    )}
 
-                    <div className="flex justify-end pt-2 border-t border-slate-100 mt-6">
-                      <button
-                        type="submit"
-                        disabled={provisioningStatus === "provisioning" || provisioningStatus === "connecting"}
-                        className="px-6 py-2.5 bg-emerald-600 text-white rounded-lg text-sm font-bold shadow-md hover:bg-emerald-700 disabled:opacity-55 flex items-center gap-2 cursor-pointer transition-all"
-                      >
-                        {provisioningStatus === "provisioning" ? (
-                          <>
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                            <span>Initializing Instance...</span>
-                          </>
-                        ) : (
-                          <span>Provision WhatsApp Instance</span>
+                      {evolutionError && (
+                        <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl text-xs font-semibold text-rose-800 flex items-center gap-2">
+                          <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                          <span>{evolutionError}</span>
+                        </div>
+                      )}
+
+                      <div className="flex justify-end pt-2 border-t border-slate-100 mt-6">
+                        <button
+                          type="button"
+                          onClick={handleProvisionEvolution}
+                          disabled={false}
+                          className="px-6 py-2.5 bg-red-600 text-white rounded-lg text-sm font-bold shadow-md hover:bg-red-700 disabled:opacity-55 flex items-center gap-2 cursor-pointer transition-all"
+                        >
+                          <span>Reconnect WhatsApp</span>
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="bg-slate-50 border border-slate-200/60 rounded-xl p-4 flex gap-3 text-slate-600 text-xs leading-relaxed font-semibold">
+                        <AlertCircle className="w-5 h-5 text-brand-blue flex-shrink-0 mt-0.5" />
+                        <div>
+                          <span className="text-slate-800 font-bold">Evolution API Connection Instructions:</span>
+                          <ul className="list-disc pl-4 mt-1.5 space-y-1 text-slate-500 font-medium">
+                            <li>Click "Connect WhatsApp" to initialize the connection.</li>
+                            <li>The system will auto-generate a unique instance ID for your workspace.</li>
+                            <li>Scan the generated QR code using the "Link a Device" option in your WhatsApp app.</li>
+                            <li>The system will automatically detect the connection and activate the ingestion pipeline.</li>
+                          </ul>
+                        </div>
+                      </div>
+
+                      <form onSubmit={handleProvisionEvolution} className="space-y-5">
+                        {qrCodeBase64 && (provisioningStatus === "connecting" || provisioningStatus === "provisioning") && (
+                          <div className="flex flex-col items-center justify-center p-6 bg-slate-50 border border-dashed border-slate-200 rounded-xl space-y-4">
+                            <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Scan this QR code with WhatsApp</p>
+                            <div className="bg-white p-4 rounded-xl shadow-md border border-slate-100">
+                              <img src={qrCodeBase64} alt="WhatsApp QR Code" className="w-48 h-48" />
+                            </div>
+                            <p className="text-[10px] text-slate-400 font-semibold animate-pulse flex items-center gap-1.5">
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              <span>Waiting for scan authorization...</span>
+                            </p>
+                          </div>
                         )}
-                      </button>
-                    </div>
-                  </form>
+
+                        {evolutionError && (
+                          <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl text-xs font-semibold text-rose-800 flex items-center gap-2">
+                            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                            <span>{evolutionError}</span>
+                          </div>
+                        )}
+
+                        <div className="flex justify-end pt-2 border-t border-slate-100 mt-6">
+                          <button
+                            type="submit"
+                            disabled={provisioningStatus === "provisioning" || provisioningStatus === "connecting"}
+                            className="px-6 py-2.5 bg-emerald-600 text-white rounded-lg text-sm font-bold shadow-md hover:bg-emerald-700 disabled:opacity-55 flex items-center gap-2 cursor-pointer transition-all"
+                          >
+                            {provisioningStatus === "provisioning" ? (
+                              <>
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                                <span>Connecting...</span>
+                              </>
+                            ) : (
+                              <span>Connect WhatsApp</span>
+                            )}
+                          </button>
+                        </div>
+                      </form>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
           )}
         </main>
       </div>
+
+      {showDisconnectModal && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full border border-slate-100 p-6 space-y-6 animate-in fade-in zoom-in duration-200">
+            <div className="flex items-start gap-4">
+              <div className="p-3 bg-rose-50 rounded-full text-rose-600">
+                <AlertCircle className="w-6 h-6" />
+              </div>
+              <div className="space-y-1.5">
+                <h3 className="text-base font-bold text-slate-950">Disconnect WhatsApp</h3>
+                <p className="text-sm text-slate-500 font-medium leading-relaxed font-semibold">
+                  This will disconnect your WhatsApp. New orders will stop coming in. Are you sure?
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                disabled={disconnecting}
+                onClick={() => setShowDisconnectModal(false)}
+                className="px-4 py-2 text-slate-600 hover:bg-slate-50 rounded-lg text-sm font-bold cursor-pointer transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={disconnecting}
+                onClick={handleDisconnect}
+                className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-sm font-bold shadow-md disabled:opacity-55 flex items-center gap-1.5 cursor-pointer transition-all"
+              >
+                {disconnecting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Disconnecting...</span>
+                  </>
+                ) : (
+                  <span>Yes, Disconnect</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Elegant Toast Notifications */}
       {toast.show && (

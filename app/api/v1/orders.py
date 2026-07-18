@@ -3,10 +3,11 @@ import io
 import logging
 import typing
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Cookie, Header, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
+from sqlalchemy import func, and_, select as sa_select, update as sa_update
+from sqlalchemy.orm import Session, aliased, joinedload
 from app.database import get_db, tenant_context
 from app.models.order import Order, OrderLineItem, OrderStateLedger
 from app.models.product import Product
@@ -15,8 +16,36 @@ from app.models.customer import Customer
 from app.models.ledger import CustomerLedger
 from app.models.invoice import Invoice
 from app.models.inventory import Inventory
+from app.models.demand_gap import DemandGap
+from app.services.tenant_service import resolve_tenant_id
+from app.services.demo_service import ensure_demo_data
+from app.services.payment_service import reconcile_payments_and_invoices
 
 logger = logging.getLogger(__name__)
+
+# Dynamically override Order.total_amount property to support setter operations in API
+original_total_amount_getter = Order.total_amount.fget
+def get_total_amount(self):
+    if hasattr(self, "_total_amount") and self._total_amount is not None:
+        return self._total_amount
+    return original_total_amount_getter(self)
+def set_total_amount(self, value):
+    self._total_amount = value
+Order.total_amount = property(get_total_amount, set_total_amount)
+
+
+
+class OrderLineItemResponse(BaseModel):
+    id: str
+    product_id: str | None = None
+    sku_code: str | None = None
+    product_name: str | None = None
+    quantity: int
+    allocated_quantity: int | None = None
+    unit_price: float
+
+    class Config:
+        from_attributes = True
 
 
 class OrderResponse(BaseModel):
@@ -31,6 +60,9 @@ class OrderResponse(BaseModel):
     payment_status: str
     amount_paid: float
     invoice_type: str
+    raw_source_text: str | None = None
+    line_items: list[OrderLineItemResponse] = []
+    invoice_id: str | None = None
 
 
 class AllocatedPayment(BaseModel):
@@ -49,6 +81,8 @@ class OrderDetailResponse(BaseModel):
     amount_paid: float
     payments_allocated: list[AllocatedPayment]
     invoice_type: str
+    raw_source_text: str | None = None
+    invoice_id: str | None = None
 
 
 from reportlab.lib.pagesizes import letter
@@ -57,58 +91,119 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
-from fastapi import Cookie, Header
 
-@router.get("", status_code=status.HTTP_200_OK, response_model=list[OrderResponse])
+@router.get("", status_code=status.HTTP_200_OK)
 def list_orders(
     tenant_id: uuid.UUID | None = None,
+    skip: int = 0,
+    limit: int = 50,
+    search: str | None = None,
+    sort_by: str = "created_at",
+    sort_order: str = "desc",
+    status_filter: str | None = None,
     access_token: str | None = Cookie(None),
     authorization: str | None = Header(None),
     db: Session = Depends(get_db)
 ):
     """
-    Returns all orders for a tenant.
+    Returns paginated orders for a tenant with optional search and sorting.
     """
-    from app.services.tenant_service import resolve_tenant_id
-    from app.services.demo_service import ensure_demo_data
     resolved_tenant_id = resolve_tenant_id(tenant_id, access_token, authorization)
-    ensure_demo_data(db, resolved_tenant_id)
+    if str(resolved_tenant_id) == "d3b07384-d113-4956-a5d2-64be7357c11d":
+        ensure_demo_data(db, resolved_tenant_id)
     tenant_context.set(resolved_tenant_id)
-    from sqlalchemy.orm import joinedload
-    from sqlalchemy import select
+
+    # Base filter
+    filters = [Order.tenant_id == resolved_tenant_id]
+
+    # Server-side search: filter by customer name or order ID prefix
+    if search:
+        search_term = f"%{search.lower()}%"
+        customer_ids_matching = db.execute(
+            sa_select(Customer.id).where(
+                and_(
+                    Customer.tenant_id == resolved_tenant_id,
+                    func.lower(Customer.retailer_name).like(search_term)
+                )
+            )
+        ).scalars().all()
+        filters.append(
+            (func.lower(Order.internal_order_id).like(search_term)) |
+            (Order.customer_id.in_(customer_ids_matching))
+        )
+
+    # Sorting
+    _sort_col = {
+        "created_at": Order.created_at,
+        "amount": None,  # computed, handled below
+    }.get(sort_by, Order.created_at)
+
+    order_clause = _sort_col.desc() if sort_order == "desc" else _sort_col.asc()
+
+    # Count total before pagination
+    total_count = db.execute(
+        sa_select(func.count(Order.id)).where(and_(*filters))
+    ).scalar() or 0
 
     query = (
-        select(Order, Invoice)
+        sa_select(Order, Invoice)
         .outerjoin(Invoice, Invoice.order_id == Order.id)
         .options(
+            joinedload(Order.customer),
             joinedload(Order.line_items).joinedload(OrderLineItem.product)
         )
-        .filter(Order.tenant_id == resolved_tenant_id)
-        .order_by(Order.created_at.desc())
+        .where(and_(*filters))
+        .order_by(order_clause)
+        .offset(skip)
+        .limit(limit)
     )
     orders_invoices = db.execute(query).unique().all()
+    # Pre-fetch all customers in one query to avoid N+1
+    _cust_ids = list({o.customer_id for o, inv in orders_invoices})
+    _custs_map = (
+        {c.id: c for c in db.query(Customer).filter(Customer.id.in_(_cust_ids)).all()}
+        if _cust_ids else {}
+    )
+
     results = []
-    
+
     for o, inv in orders_invoices:
-        customer = db.get(Customer, o.customer_id)
+        customer = _custs_map.get(o.customer_id)
         cust_name = customer.retailer_name if customer else "Unknown Retailer"
 
         # Calculate total amount
-        amount_sum = sum(float(item.quantity * item.unit_price) for item in o.line_items)
+        amount_sum = sum(
+            float((item.allocated_quantity if item.allocated_quantity is not None else item.quantity) * item.unit_price)
+            for item in o.line_items
+        )
 
         # Status badge conversion: Draft = "Pending", Confirmed = "Confirmed", Needs Review = "Needs Review"
         status_raw = o.current_status
         has_triage_sku = any(
-            item.product is not None and item.product.sku_id == "UNMATCHED_TRIAGE_SKU"
+            item.product_id is None or (item.product is not None and item.product.sku_id in ("UNMATCHED_SKU", "UNMATCHED_TRIAGE_SKU"))
             for item in o.line_items
         )
-        if has_triage_sku:
-            status_raw = "NEEDS_REVIEW"
-        status_resolved = "Pending" if status_raw == "Draft" else ("Needs Review" if status_raw == "NEEDS_REVIEW" else status_raw)
+        if has_triage_sku or status_raw == "pending_review":
+            status_raw = "pending_review"
+        status_resolved = "Pending" if status_raw == "Draft" else ("Needs Review" if status_raw in ["NEEDS_REVIEW", "pending_review"] else status_raw)
 
         # Payment status attributes
-        payment_status = o.payment_status if o.payment_status != "UNPAID" else (inv.payment_status if inv else "UNPAID")
+        payment_status = inv.payment_status if inv else "UNPAID"
         amount_paid = float(inv.amount_paid) if inv else 0.0
+
+        line_items_data = []
+        for item in o.line_items:
+            sku = item.product.sku_id if item.product else "UNMATCHED_SKU"
+            p_name = f"{item.product.brand} {item.product.category}" if item.product else (item.unmatched_raw_text or "Unknown Product")
+            line_items_data.append({
+                "id": str(item.id),
+                "product_id": str(item.product_id) if item.product_id else None,
+                "sku_code": sku,
+                "product_name": p_name,
+                "quantity": item.quantity,
+                "allocated_quantity": item.allocated_quantity,
+                "unit_price": float(item.unit_price)
+            })
 
         results.append({
             "id": str(o.id),
@@ -117,17 +212,213 @@ def list_orders(
             "channel": o.source,
             "amount": amount_sum,
             "status": status_resolved,
-            "created_on": o.created_at.strftime("%d %b, %Y %I:%M %p"),
-            "eta": o.created_at.strftime("%d %b, %Y %I:%M %p"),
+            "created_on": o.created_at.isoformat() + "Z",
+            "eta": o.created_at.isoformat() + "Z",
             "payment_status": payment_status,
             "amount_paid": amount_paid,
-            "invoice_type": o.invoice_type
+            "invoice_type": o.invoice_type,
+            "raw_source_text": o.raw_source_text,
+            "line_items": line_items_data,
+            "invoice_id": str(inv.id) if inv else None
         })
 
-    return results
+    return {"items": results, "total": total_count, "skip": skip, "limit": limit}
+
+
+def process_order_self_learning(db: Session, order_id: uuid.UUID, tenant_id: uuid.UUID):
+    """
+    Isolated database sub-transaction to process self-learning safely, registering
+    unique permanent product aliases, then clearing unmatched_raw_text on line items.
+    """
+    from app.models.order import OrderLineItem
+    from app.models.product import ProductAlias
+    import logging
+    logger = logging.getLogger("uvicorn.error")
+
+    try:
+        with db.begin_nested():
+            items = db.query(OrderLineItem).filter(OrderLineItem.order_id == order_id).all()
+            for item in items:
+                if item.unmatched_raw_text and item.product_id is not None:
+                    clean_alias = item.unmatched_raw_text.lower().strip()
+                    existing = db.query(ProductAlias).filter(
+                        ProductAlias.tenant_id == tenant_id,
+                        ProductAlias.alias_name.ilike(clean_alias)
+                    ).first()
+                    if not existing:
+                        new_alias = ProductAlias(
+                            id=uuid.uuid4(),
+                            tenant_id=tenant_id,
+                            product_id=item.product_id,
+                            alias_name=item.unmatched_raw_text.strip()
+                        )
+                        db.add(new_alias)
+                    item.unmatched_raw_text = None
+            db.flush()
+    except Exception as e:
+        logger.error("Self-learning sub-transaction failed: %s", str(e))
+
 
 class StatusUpdatePayload(BaseModel):
     to_status: str
+
+
+@router.post("/{order_id}/cancel", status_code=status.HTTP_200_OK)
+def cancel_order(
+    order_id: uuid.UUID,
+    db: Session = Depends(get_db)
+):
+    """
+    Cancels a Draft or Confirmed order. Reverses inventory reservation and
+    customer outstanding balance if cancelling from Confirmed.
+    """
+    order = db.get(Order, order_id)
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    tenant_context.set(order.tenant_id)
+    current = order.current_status
+
+    if current not in ("Draft", "Pending", "Confirmed", "Needs Review"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot cancel order with status '{current}'. Only Draft/Confirmed orders can be cancelled."
+        )
+
+    try:
+        items = db.query(OrderLineItem).filter(OrderLineItem.order_id == order_id).all()
+
+        # If Confirmed, reverse inventory and customer balance
+        if current == "Confirmed":
+            customer = db.get(Customer, order.customer_id)
+            order_total = sum(float(i.quantity * i.unit_price) for i in items)
+
+            # Restore inventory
+            for item in items:
+                db.execute(
+                    sa_update(Inventory)
+                    .where(
+                        and_(
+                            Inventory.tenant_id == order.tenant_id,
+                            Inventory.sku_id == item.product_id
+                        )
+                    )
+                    .values(quantity_on_hand=Inventory.quantity_on_hand + item.quantity)
+                )
+
+            # Reverse customer outstanding balance via ledger service.
+            # Use invoice.total_amount (actual billed amount at confirmation),
+            # not order_total which may differ due to partial inventory allocation.
+            invoice = db.query(Invoice).filter(Invoice.order_id == order.id).first()
+            if invoice:
+                invoice.payment_status = "CANCELLED"
+                if float(invoice.total_amount) > 0:
+                    from app.services.ledger_service import record_transaction
+                    record_transaction(
+                        db=db,
+                        tenant_id=order.tenant_id,
+                        customer_id=order.customer_id,
+                        type="CREDIT",
+                        amount=float(invoice.total_amount),
+                        reference_id=f"CANCEL-{order.internal_order_id}",
+                        description=f"Order {order.internal_order_id} cancelled — charge reversed"
+                    )
+
+        db.add(OrderStateLedger(
+            tenant_id=order.tenant_id,
+            order_id=order.id,
+            from_status=current,
+            to_status="Cancelled",
+            updated_by="system_cancel_request"
+        ))
+
+        db.commit()
+        return {"status": "success", "order_id": str(order.id), "new_status": "Cancelled"}
+
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Cancellation failed: {str(e)}")
+
+
+import csv as csv_module
+
+
+@router.get("/export", status_code=status.HTTP_200_OK)
+def export_orders_csv(
+    tenant_id: uuid.UUID | None = None,
+    search: str | None = None,
+    status_filter: str | None = None,
+    access_token: str | None = Cookie(None),
+    authorization: str | None = Header(None),
+    db: Session = Depends(get_db)
+):
+    """
+    Streams all orders as a CSV file for the active tenant.
+    """
+    resolved_tenant_id = resolve_tenant_id(tenant_id, access_token, authorization)
+    tenant_context.set(resolved_tenant_id)
+
+    filters = [Order.tenant_id == resolved_tenant_id]
+    if search:
+        search_term = f"%{search.lower()}%"
+        customer_ids = db.execute(
+            sa_select(Customer.id).where(
+                and_(
+                    Customer.tenant_id == resolved_tenant_id,
+                    func.lower(Customer.retailer_name).like(search_term)
+                )
+            )
+        ).scalars().all()
+        filters.append(
+            (func.lower(Order.internal_order_id).like(search_term)) |
+            (Order.customer_id.in_(customer_ids))
+        )
+
+    orders = (
+        db.execute(
+            sa_select(Order)
+            .options(joinedload(Order.line_items).joinedload(OrderLineItem.product))
+            .where(and_(*filters))
+            .order_by(Order.created_at.desc())
+        )
+        .unique()
+        .scalars()
+        .all()
+    )
+
+    cust_ids = list({o.customer_id for o in orders})
+    custs = {c.id: c for c in db.query(Customer).filter(Customer.id.in_(cust_ids)).all()} if cust_ids else {}
+
+    output = io.StringIO()
+    writer = csv_module.writer(output)
+    writer.writerow([
+        "Order ID", "Customer", "Channel", "Amount (₹)", "Status",
+        "Payment Status", "Amount Paid (₹)", "Invoice Type", "Created At"
+    ])
+    for o in orders:
+        cust = custs.get(o.customer_id)
+        amount = sum(float(i.quantity * i.unit_price) for i in o.line_items)
+        writer.writerow([
+            o.internal_order_id,
+            cust.retailer_name if cust else "Unknown",
+            o.source,
+            f"{amount:.2f}",
+            o.current_status,
+            o.payment_status,
+            "",
+            o.invoice_type,
+            o.created_at.strftime("%Y-%m-%d %H:%M")
+        ])
+
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=orders_export.csv"}
+    )
 
 @router.put("/{order_id}/status", status_code=status.HTTP_200_OK)
 def update_order_status(
@@ -149,121 +440,39 @@ def update_order_status(
     # Set tenant isolation context
     tenant_context.set(order.tenant_id)
 
+    _VALID_TRANSITIONS: dict[str, set[str]] = {
+        "Draft": {"Confirmed"},
+        "NEEDS_REVIEW": set(),  # Must resolve via triage first
+        "Confirmed": {"Dispatched"},
+        "Dispatched": {"Delivered"},
+        "Delivered": set(),
+    }
+    current_from_status = order.current_status
+    allowed = _VALID_TRANSITIONS.get(current_from_status, set())
+    if payload.to_status not in allowed:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid transition '{current_from_status}' → '{payload.to_status}'. Allowed: {sorted(allowed) or 'none (terminal or triage state)'}"
+        )
+
     try:
         # Fetch Child Line Items
         items = db.query(OrderLineItem).filter(OrderLineItem.order_id == order_id).all()
 
         if payload.to_status == "Confirmed":
-            # 1. Fetch Customer
-            customer = db.get(Customer, order.customer_id)
-            if not customer:
-                raise HTTPException(
-                    status_code=404,
-                    detail="Customer not found"
-                )
-
-            # 2. Calculate current order total
-            current_order_total = sum(float(item.quantity * item.unit_price) for item in items)
-
-            # 3. Aggregate Confirmed orders' outstanding balances
-            total_confirmed_outstanding = 0.0
-            confirmed_orders = db.query(Order).filter(Order.customer_id == order.customer_id).all()
-            for co in confirmed_orders:
-                if co.id != order.id and co.current_status == "Confirmed":
-                    order_total = sum(float(line.quantity * line.unit_price) for line in co.line_items)
-                    total_confirmed_outstanding += order_total
-
-            # 4. Check Credit Limit
-            combined_balance = total_confirmed_outstanding + current_order_total
-            if combined_balance > float(customer.credit_limit):
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Credit limit exceeded for customer '{customer.retailer_name}'. Combined balance: ₹{combined_balance:,.2f}, Credit Limit: ₹{customer.credit_limit:,.2f}"
-                )
-
-            # Resolve product variables dynamically
-            for item in items:
-                prod_data = db.query(Product).filter(Product.id == item.product_id).first()
-                if prod_data:
-                    item.sku_code = prod_data.sku_id
-                    item.product_name = prod_data.sku_id
-                else:
-                    item.sku_code = "UNKNOWN_SKU"
-                    item.product_name = "Unknown Product"
-
-            # 5. Inventory Guardrail Validation Loop
-            for item in items:
-                # Find the corresponding inventory row for this tenant and SKU
-                inv_record = db.query(Inventory).filter(
-                    Inventory.tenant_id == order.tenant_id,
-                    Inventory.sku_id == item.product_id  # Matches parent model ID mapping link
-                ).first()
-                
-                if not inv_record:
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"Warehouse stock record not initialized for product code {item.sku_code}"
-                    )
-                    
-                if inv_record.quantity_on_hand < item.quantity:
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"Insufficient physical stock for item. Requested: {item.quantity}, Available: {inv_record.quantity_on_hand}"
-                    )
-
-            # Rewrite Stock Decrement Execution: Perform atomic subtraction on the real stock inventory rows
-            for item in items:
-                inv_record = db.query(Inventory).filter(
-                    Inventory.tenant_id == order.tenant_id,
-                    Inventory.sku_id == item.product_id
-                ).first()
-                if inv_record:
-                    inv_record.quantity_on_hand -= item.quantity
-
-            # Update Customer outstanding balance
-            customer.outstanding_balance = float(customer.outstanding_balance) + current_order_total
-
-            # Record a DEBIT transaction in the customer ledger
-            db.add(CustomerLedger(
-                id=uuid.uuid4(),
-                tenant_id=order.tenant_id,
-                customer_id=order.customer_id,
-                type="DEBIT",
-                amount=current_order_total,
-                reference_id=order.internal_order_id
-            ))
-
-            # Create Invoice directly
-            from datetime import datetime
-            invoice = Invoice(
+            from app.services.order_confirmation_service import confirm_order
+            confirm_order(db, order, updated_by="system_orders_agent")
+        else:
+            # Record state transition to OrderStateLedger
+            current_status = order.current_status
+            db.add(OrderStateLedger(
                 tenant_id=order.tenant_id,
                 order_id=order.id,
-                gstin=customer.gstin if customer.gstin else "29AAAAA1111A1Z1",
-                total_amount=current_order_total,
-                irn_status="Cleared",
-                qr_code_status="Generated",
-                customer_id=order.customer_id,
-                payment_status="UNPAID",
-                amount_paid=0.0,
-                created_at=datetime.utcnow()
-            )
-            db.add(invoice)
-            db.flush()
-
-            # Reconcile customer payments immediately to consume any credits
-            from app.services.payment_service import reconcile_payments_and_invoices
-            reconcile_payments_and_invoices(db, order.tenant_id, order.customer_id)
-
-        # Record state transition to OrderStateLedger
-
-        current_status = order.current_status
-        db.add(OrderStateLedger(
-            tenant_id=order.tenant_id,
-            order_id=order.id,
-            from_status=current_status,
-            to_status=payload.to_status,
-            updated_by="system_orders_agent"
-        ))
+                from_status=current_status,
+                to_status=payload.to_status,
+                updated_by="system_orders_agent"
+            ))
+            order.status = payload.to_status
 
         db.commit()
         return {
@@ -282,10 +491,42 @@ def update_order_status(
             detail=f"Status update transaction crash: {str(e)}"
         )
 
+# ─────────────────────────────────────────────────────────────────
+# FUTURE USE: Call restore_inventory_for_order(db, order) from any
+# cancel or reject endpoint when order.status == "Confirmed".
+# Do not call this function from anywhere until cancel/reject
+# order UI and endpoint is built.
+# ─────────────────────────────────────────────────────────────────
+
+# INVENTORY_DEDUCTION_TRIGGER = "on_confirmation"  # Options: "on_confirmation" | "on_dispatch"
+# Change this flag when business logic changes. Currently: inventory deducted on confirmation.
+
+def restore_inventory_for_order(db: Session, order: Order) -> None:
+    """
+    Restores inventory when a confirmed order is cancelled or rejected.
+    Call this from any cancel/reject endpoint ONLY if order.status == "Confirmed".
+    
+    If INVENTORY_DEDUCTION_TRIGGER changes to "on_dispatch" in future,
+    this function should only be called if order.status == "Dispatched".
+    """
+    for item in order.line_items:
+        inv_record = db.query(Inventory).filter(
+            Inventory.tenant_id == order.tenant_id,
+            Inventory.sku_id == item.product_id
+        ).first()
+        if inv_record:
+            restored_qty = item.allocated_quantity if item.allocated_quantity is not None else item.quantity
+            inv_record.quantity_committed = max(0, (inv_record.quantity_committed or 0) - restored_qty)
+            logger.info(
+                "Inventory restored (committed pool decremented): product=%s qty=%s for order=%s",
+                item.product_id, restored_qty, order.id
+            )
+
 
 class ItemResolvePayload(BaseModel):
     sku_code: str
     quantity: int
+    save_as_permanent_alias: bool | None = False
 
 @router.patch("/items/{item_id}/resolve", status_code=status.HTTP_200_OK)
 def resolve_order_item(
@@ -323,7 +564,7 @@ def resolve_order_item(
             detail=f"Product with SKU '{payload.sku_code}' not found."
         )
 
-    # 3. Overwrite the order item's fields
+    # 3. Overwrite the order item's fields (preserving unmatched_raw_text for global order confirmation)
     item.product_id = product.id
     item.quantity = payload.quantity
     item.unit_price = product.base_price
@@ -336,7 +577,7 @@ def resolve_order_item(
     has_remaining_unmatched = False
     for i in all_items:
         prod = db.get(Product, i.product_id)
-        if prod and prod.sku_id in ("UNMATCHED_SKU", "UNMATCHED_TRIAGE_SKU"):
+        if i.product_id is None or (prod and prod.sku_id in ("UNMATCHED_SKU", "UNMATCHED_TRIAGE_SKU")):
             has_remaining_unmatched = True
             break
 
@@ -353,6 +594,7 @@ def resolve_order_item(
             to_status=new_status,
             updated_by="operator"
         ))
+        order.status = new_status
 
     db.commit()
     
@@ -444,13 +686,16 @@ def generate_invoice_pdf_bytes(order: Order, db: Session) -> bytes:
     )
 
     # Check if this should be formatted as a GST tax invoice
-    is_gst = order.invoice_type != "RETAIL_CASH_INVOICE"
+    is_gst = order.invoice_type != "RETAIL_INVOICE"
 
     # Header section (Tenant & Invoice ID/Date)
     invoice_id = f"INV-{order.internal_order_id}"
     order_date = order.created_at.strftime("%Y-%m-%d")
     
     header_left = f"<b>{tenant_name}</b><br/>B2B Distributor Services<br/>Email: billing@{tenant_name.lower().replace(' ', '').replace('.', '')}.com"
+    seller_gstin = getattr(tenant, "gstin", None) if tenant else None
+    if is_gst:
+        header_left += f"<br/>GSTIN: {seller_gstin}" if seller_gstin else "<br/>Unregistered Dealer (no GSTIN on file)"
     header_title = "TAX INVOICE" if is_gst else "RETAIL INVOICE"
     header_right = f"<b>{header_title}</b><br/>Invoice ID: {invoice_id}<br/>Date: {order_date}<br/>Status: <b>Confirmed</b>"
 
@@ -516,7 +761,7 @@ def generate_invoice_pdf_bytes(order: Order, db: Session) -> bytes:
         product = db.get(Product, item.product_id)
         sku = product.sku_id if product else item.sku_code or "UNKNOWN"
         item_name = f"{product.brand} {product.category} ({product.pack_size})" if product else "Unknown Product"
-        qty = item.quantity
+        qty = item.allocated_quantity if item.allocated_quantity is not None else item.quantity
         price = float(item.unit_price)
         total = qty * price
         subtotal += total
@@ -624,6 +869,62 @@ def get_order_invoice(
         media_type="application/pdf",
         headers={
             "Content-Disposition": f"attachment; filename=invoice_{order_id}.pdf"
+        }
+    )
+
+
+@router.get("/export/tally")
+def export_orders_to_tally(
+    tenant_id: str | None = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    access_token: str | None = Cookie(None),
+    authorization: str | None = Header(None),
+    db: Session = Depends(get_db)
+):
+    """
+    Exports Confirmed/Dispatched/Delivered orders in a date range as a
+    Tally-importable XML (Sales Vouchers). Lets distributors keep using
+    Tally for their CA/GST filing while DistributorOS handles WhatsApp
+    order capture and collections — no manual re-typing required.
+
+    Import in Tally via Gateway of Tally > Import Data > Vouchers, pointing
+    at the downloaded .xml file.
+    """
+    resolved_tenant_id = resolve_tenant_id(tenant_id, access_token, authorization)
+    tenant_context.set(resolved_tenant_id)
+
+    start_dt = None
+    end_dt = None
+    if start_date:
+        try:
+            start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid start_date format: '{start_date}'. Expected YYYY-MM-DD.")
+    if end_date:
+        try:
+            # Include the entire end date (up to 23:59:59.999999)
+            end_dt = datetime.strptime(end_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59, microsecond=999999)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid end_date format: '{end_date}'. Expected YYYY-MM-DD.")
+
+    from app.services.tally_export_service import build_tally_sales_xml
+    xml_bytes, voucher_count = build_tally_sales_xml(db, resolved_tenant_id, start_dt, end_dt)
+
+    if voucher_count == 0:
+        raise HTTPException(
+            status_code=404,
+            detail="No confirmed orders found in the selected date range to export."
+        )
+
+    buffer = io.BytesIO(xml_bytes)
+    filename_suffix = f"{start_date or 'all'}_to_{end_date or 'all'}"
+    return StreamingResponse(
+        buffer,
+        media_type="application/xml",
+        headers={
+            "Content-Disposition": f"attachment; filename=tally_export_{filename_suffix}.xml",
+            "X-Voucher-Count": str(voucher_count)
         }
     )
 
@@ -890,7 +1191,9 @@ def get_order_by_id(
         "payment_status": order.payment_status if order.payment_status != "UNPAID" else (invoice.payment_status if invoice else "UNPAID"),
         "amount_paid": float(invoice.amount_paid) if invoice else 0.0,
         "payments_allocated": payments_allocated,
-        "invoice_type": order.invoice_type
+        "invoice_type": order.invoice_type,
+        "raw_source_text": order.raw_source_text,
+        "invoice_id": str(invoice.id) if invoice else None
     }
 
 
@@ -952,6 +1255,21 @@ def create_order(
             db.add(product)
             db.flush()
 
+            # Without a matching Inventory row, order_confirmation_service
+            # treats this SKU as having 0 stock and zeroes the line item
+            # out entirely. Seed it with the ordered quantity so this
+            # ad-hoc/fallback product is immediately billable.
+            db.add(Inventory(
+                id=uuid.uuid4(),
+                tenant_id=payload.tenant_id,
+                sku_id=product.id,
+                location="Aisle-A1",
+                quantity_on_hand=item.quantity,
+                quantity_committed=0,
+                low_stock_threshold=10
+            ))
+            db.flush()
+
         db.add(OrderLineItem(
             id=uuid.uuid4(),
             tenant_id=payload.tenant_id,
@@ -961,47 +1279,22 @@ def create_order(
             unit_price=item.unit_price
         ))
 
-    # Add ledger transition entry
-    db.add(OrderStateLedger(
-        tenant_id=payload.tenant_id,
-        order_id=new_order.id,
-        from_status=None,
-        to_status=payload.status,
-        updated_by="operator"
-    ))
+    db.flush()
+    db.refresh(new_order)
 
     if payload.status == "Confirmed":
-        customer = db.get(Customer, payload.customer_id)
-        if customer:
-            amount_sum = sum(float(item.quantity * item.unit_price) for item in payload.items)
-            customer.outstanding_balance = float(customer.outstanding_balance) + amount_sum
-            
-            db.add(CustomerLedger(
-                id=uuid.uuid4(),
-                tenant_id=payload.tenant_id,
-                customer_id=payload.customer_id,
-                type="DEBIT",
-                amount=amount_sum,
-                reference_id=generated_order_id
-            ))
-            
-            invoice = Invoice(
-                tenant_id=payload.tenant_id,
-                order_id=new_order.id,
-                gstin=customer.gstin if customer.gstin else "29AAAAA1111A1Z1",
-                total_amount=amount_sum,
-                irn_status="Cleared",
-                qr_code_status="Generated",
-                customer_id=payload.customer_id,
-                payment_status="UNPAID",
-                amount_paid=0.0,
-                created_at=new_order.created_at
-            )
-            db.add(invoice)
-            db.flush()
-            
-            from app.services.payment_service import reconcile_payments_and_invoices
-            reconcile_payments_and_invoices(db, payload.tenant_id, payload.customer_id)
+        from app.services.order_confirmation_service import confirm_order
+        confirm_order(db, new_order, updated_by="operator")
+    else:
+        # Add ledger transition entry
+        db.add(OrderStateLedger(
+            tenant_id=payload.tenant_id,
+            order_id=new_order.id,
+            from_status=None,
+            to_status=payload.status,
+            updated_by="operator"
+        ))
+        new_order.status = payload.status
 
     db.commit()
     return {
@@ -1013,7 +1306,7 @@ def create_order(
 
 
 class OrderPatchPayload(BaseModel):
-    invoice_type: typing.Literal["GST_TAX_INVOICE", "RETAIL_CASH_INVOICE", "UNSPECIFIED"]
+    invoice_type: typing.Literal["GST_TAX_INVOICE", "RETAIL_INVOICE", "UNSPECIFIED"]
 
 
 @router.patch("/{order_id}", status_code=status.HTTP_200_OK)
@@ -1111,7 +1404,7 @@ def create_order_generic(payload: IngestionOrderPayload, db: Session = Depends(g
             customer_id="CUST-101",
             retailer_name="Kaveri Provision Store",
             address_text="Bengaluru",
-            gstin="29AAAAA1111A1Z1",
+            gstin="UNREGISTERED",
             tax_group="GST-18",
             payment_terms="0-15 Days"
         )
@@ -1137,9 +1430,11 @@ def create_order_generic(payload: IngestionOrderPayload, db: Session = Depends(g
         # Check if product exists
         product = db.query(Product).filter_by(sku_id=item.sku_id).first()
         if not product:
-            # We use item.sku_id as the primary key ID directly in SQLite to support tests querying by Inventory.sku_id == "SKU..."
+            # NOTE: id must be a real UUID (Product.id is a UUID column).
+            # Using item.sku_id (a business SKU string) directly here
+            # crashes with a Postgres DataError on any non-UUID SKU.
             product = Product(
-                id=item.sku_id,
+                id=uuid.uuid4(),
                 tenant_id=tenant_id,
                 sku_id=item.sku_id,
                 brand="Generic",
@@ -1148,6 +1443,21 @@ def create_order_generic(payload: IngestionOrderPayload, db: Session = Depends(g
                 base_price=item.price
             )
             db.add(product)
+            db.flush()
+
+            # Without a matching Inventory row, order_confirmation_service
+            # treats this SKU as having 0 stock and zeroes the line item
+            # out entirely. Seed it with the ordered quantity so this
+            # ad-hoc/fallback product is immediately billable.
+            db.add(Inventory(
+                id=uuid.uuid4(),
+                tenant_id=tenant_id,
+                sku_id=product.id,
+                location="Aisle-A1",
+                quantity_on_hand=item.quantity,
+                quantity_committed=0,
+                low_stock_threshold=10
+            ))
             db.flush()
 
         db.add(OrderLineItem(
@@ -1167,6 +1477,7 @@ def create_order_generic(payload: IngestionOrderPayload, db: Session = Depends(g
         to_status="Draft",
         updated_by="API"
     ))
+    new_order.status = "Draft"
     db.commit()
 
     return {"status": "success", "order_id": str(order_id)}
@@ -1179,49 +1490,261 @@ def confirm_order_post(order_id: uuid.UUID, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Order not found")
 
     tenant_context.set(order.tenant_id)
-    
-    current_status = order.current_status
-    db.add(OrderStateLedger(
-        tenant_id=order.tenant_id,
-        order_id=order.id,
-        from_status=current_status,
-        to_status="Confirmed",
-        updated_by="API"
-    ))
-    
-    # Also log DEBIT and generate Invoice as standard confirmation does to support FIFO payment collect
-    customer = db.get(Customer, order.customer_id)
-    if customer:
-        current_order_total = sum(float(item.quantity * item.unit_price) for item in order.line_items)
-        customer.outstanding_balance = float(customer.outstanding_balance) + current_order_total
-        db.add(CustomerLedger(
-            id=uuid.uuid4(),
-            tenant_id=order.tenant_id,
-            customer_id=order.customer_id,
-            type="DEBIT",
-            amount=current_order_total,
-            reference_id=order.internal_order_id
-        ))
-        
-        # Create Invoice
-        from app.models.invoice import Invoice
-        invoice = Invoice(
-            tenant_id=order.tenant_id,
-            order_id=order.id,
-            gstin=customer.gstin if customer.gstin else "29AAAAA1111A1Z1",
-            total_amount=current_order_total,
-            irn_status="Cleared",
-            qr_code_status="Generated",
-            customer_id=order.customer_id,
-            payment_status="UNPAID",
-            amount_paid=0.0,
-            created_at=datetime.utcnow()
-        )
-        db.add(invoice)
-        db.flush()
-        
+
+    from app.services.order_confirmation_service import confirm_order
+    confirm_order(db, order, updated_by="API")
     db.commit()
+
+
+
     return {"status": "success", "order_id": str(order.id), "new_status": "Confirmed"}
+
+
+# ---------------------------------------------------------------------------
+# Batch-Confirm: atomic resolve + self-learning + order confirmation in one shot
+# ---------------------------------------------------------------------------
+
+class BatchLineItemChange(BaseModel):
+    """Represents a single staged line-item resolution from the frontend."""
+    item_id: str
+    product_id: str
+
+
+class BatchConfirmOrderPayload(BaseModel):
+    """
+    Payload for the atomic batch-confirm route.
+    `resolved_items` contains staged resolutions mapped directly by product_id.
+    """
+    invoice_type: str | None = None
+    resolved_items: list[BatchLineItemChange] = []
+
+
+@router.post("/{order_id}/batch-confirm", status_code=200)
+def batch_confirm_order(
+    order_id: uuid.UUID,
+    payload: BatchConfirmOrderPayload,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """
+    Atomic batch-confirm endpoint.
+
+    1. Validates the order exists and is in a confirmable state.
+    2. Applies invoice type update if provided.
+    3. Applies every staged line-item resolution (product_id) in a single savepoint block.
+    4. Runs the self-learning alias engine to register new ProductAliases and
+       clear unmatched_raw_text fields.
+    5. Transitions the order to "Confirmed", debits the customer ledger, and
+       generates the invoice — all within a single atomic session commit.
+    """
+    from app.models.product import ProductAlias
+
+    order = db.get(Order, order_id)
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    tenant_context.set(order.tenant_id)
+
+    current_status = order.current_status
+    if current_status == "Confirmed":
+        raise HTTPException(
+            status_code=409,
+            detail="Order is already confirmed.",
+        )
+
+    try:
+        # Save invoice preference if supplied
+        if payload.invoice_type:
+            order.invoice_type = payload.invoice_type
+
+        # ── PHASE 1: Apply staged line-item resolutions ─────────────────────
+        if payload.resolved_items:
+            with db.begin_nested():
+                for change in payload.resolved_items:
+                    try:
+                        item_uuid = uuid.UUID(change.item_id)
+                    except ValueError:
+                        raise HTTPException(
+                            status_code=422,
+                            detail=f"Invalid item_id format: {change.item_id}",
+                        )
+
+                    item = db.get(OrderLineItem, item_uuid)
+                    if not item or item.order_id != order_id:
+                        raise HTTPException(
+                            status_code=404,
+                            detail=f"Line item {change.item_id} not found on this order.",
+                        )
+
+                    try:
+                        prod_uuid = uuid.UUID(change.product_id)
+                    except ValueError:
+                        raise HTTPException(
+                            status_code=422,
+                            detail=f"Invalid product_id format: {change.product_id}",
+                        )
+
+                    # Resolve product by ID
+                    product = db.get(Product, prod_uuid)
+                    if not product:
+                        raise HTTPException(
+                            status_code=404,
+                            detail=f"Product with ID '{change.product_id}' not found.",
+                        )
+
+                    item.product_id = product.id
+                    item.unit_price = product.base_price
+
+                db.flush()
+
+        # ── PHASE 2: Self-learning alias engine ─────────────────────────────
+        process_order_self_learning(db, order.id, order.tenant_id)
+
+        db.refresh(order)  # ensure line_items reflect Phase 1 changes
+        from app.services.order_confirmation_service import confirm_order
+        confirm_order(db, order, updated_by="API")
+
+        # Create PaymentSession in background — don't block confirmation response
+        from app.models.invoice import Invoice
+        new_invoice = db.query(Invoice).filter(Invoice.order_id == order.id).first()
+        engine_bind = db.get_bind()
+
+        def _create_payment_session_sync(tenant_id: str, customer_id: str, order_id: str, invoice_id: str, engine):
+            """Creates Razorpay payment session after response is sent."""
+            import os
+            from sqlalchemy.orm import sessionmaker
+            from app.models.tenant import DistributorTenant
+            from app.models.customer import Customer
+            from app.models.invoice import Invoice
+            from app.services.payment_session_service import get_or_create_payment_session
+            
+            SessionLocalTask = sessionmaker(bind=engine)
+            db_task = SessionLocalTask()
+            try:
+                tenant = db_task.get(DistributorTenant, tenant_id)
+                customer = db_task.get(Customer, customer_id)
+                invoice = db_task.get(Invoice, invoice_id)
+                if tenant and customer and invoice and float(invoice.total_amount) > 0:
+                    session = get_or_create_payment_session(
+                        db=db_task,
+                        invoice=invoice,
+                        customer=customer,
+                        order_id=uuid.UUID(order_id),
+                        tenant_id=uuid.UUID(tenant_id)
+                    )
+                    db_task.commit()
+                    logger.info("PaymentSession created in background: %s", session.id if session else "skipped")
+            except Exception as e:
+                logger.warning("Background PaymentSession creation failed: %s", str(e))
+            finally:
+                db_task.close()
+
+        if new_invoice:
+            background_tasks.add_task(
+                _create_payment_session_sync,
+                str(order.tenant_id),
+                str(order.customer_id),
+                str(order.id),
+                str(new_invoice.id),
+                engine_bind
+            )
+
+        db.commit()
+
+        # Fire order_confirmed notification (non-blocking in background)
+        def _fire_confirmed_notification_sync(tenant_id: str, customer_id: str, order_id: str, engine):
+            """Sends WhatsApp confirmation after response is sent."""
+            import os
+            from sqlalchemy.orm import sessionmaker
+            from app.models.tenant import DistributorTenant
+            from app.models.customer import Customer
+            from app.models.order import Order
+            
+            SessionLocalTask = sessionmaker(bind=engine)
+            db_task = SessionLocalTask()
+            try:
+                tenant = db_task.get(DistributorTenant, tenant_id)
+                customer = db_task.get(Customer, customer_id)
+                order = db_task.get(Order, order_id)
+                
+                if not (tenant and customer and order):
+                    return
+                
+                prefs = tenant.notification_prefs or {}
+                if not prefs.get("order_confirmed", True):
+                    return
+                if not customer.whatsapp_notifications_enabled:
+                    return
+                if not tenant.whatsapp_phone_id:
+                    return
+
+                import httpx
+                from app.utils.phone import normalize_phone_number
+
+                phone = normalize_phone_number(customer.phone_number or "")
+                if phone.startswith("+"):
+                    phone = phone[1:]
+
+                # Build item summary using allocated quantities
+                items_list = []
+                for item in order.line_items:
+                    qty = item.allocated_quantity if item.allocated_quantity is not None else item.quantity
+                    if item.product:
+                        items_list.append(f"{item.product.brand} x {qty}")
+                item_summary = ", ".join(items_list) if items_list else "items"
+
+                total = float(order.total_amount or 0)
+                message = (
+                    f"Hi {customer.retailer_name},\n\n"
+                    f"Your order {order.internal_order_id} has been confirmed ✓\n"
+                    f"Items: {item_summary}\n"
+                    f"Total: ₹{total:,.0f}\n\n"
+                    f"— {tenant.name}"
+                )
+
+                url = f"{os.getenv('EVOLUTION_API_URL', 'http://34.158.60.42:8080')}/message/sendText/{tenant.whatsapp_phone_id}"
+                headers = {"apikey": os.getenv("EVOLUTION_API_KEY", "distributorbotkey2026")}
+
+                try:
+                    resp = httpx.post(url, json={"number": phone, "text": message}, headers=headers, timeout=10.0)
+                    logger.info("Confirmed notification sent for order %s", order_id)
+                except Exception as ex:
+                    logger.warning("Confirmed notification failed: %s", str(ex))
+            except Exception as e:
+                logger.warning("Background confirmed notification failed: %s", str(e))
+            finally:
+                db_task.close()
+
+        background_tasks.add_task(
+            _fire_confirmed_notification_sync,
+            str(order.tenant_id),
+            str(order.customer_id),
+            str(order.id),
+            engine_bind
+        )
+
+        logger.info(
+            "batch_confirm_order: Order %s confirmed with %d staged change(s).",
+            order_id,
+            len(payload.resolved_items),
+        )
+        return {
+            "status": "success",
+            "order_id": str(order.id),
+            "new_status": "Confirmed",
+            "changes_applied": len(payload.resolved_items),
+        }
+
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as exc:
+        db.rollback()
+        logger.error("batch_confirm_order crash for order %s: %s", order_id, str(exc))
+        raise HTTPException(
+            status_code=500,
+            detail=f"Batch-confirm transaction failed: {str(exc)}",
+        )
 
 
 class DispatchPayload(BaseModel):
@@ -1237,9 +1760,14 @@ def dispatch_order_post(order_id: uuid.UUID, payload: DispatchPayload, db: Sessi
     tenant_context.set(order.tenant_id)
     
     shipment = db.query(Shipment).filter(Shipment.order_id == order_id).first()
+    from app.models.customer import Customer
+    customer = db.query(Customer).filter(
+        Customer.id == order.customer_id,
+        Customer.tenant_id == order.tenant_id
+    ).first()
+    dest = customer.address_text if customer else "Unknown Address"
+
     if not shipment:
-        customer = db.get(Customer, order.customer_id)
-        dest = customer.address_text if customer else "Unknown Address"
         shipment = Shipment(
             id=uuid.uuid4(),
             tenant_id=order.tenant_id,
@@ -1254,8 +1782,355 @@ def dispatch_order_post(order_id: uuid.UUID, payload: DispatchPayload, db: Sessi
         shipment.status = "DISPATCHED"
         shipment.carrier = payload.delivery_partner
         shipment.tracking_id = payload.vehicle_number
+
+    # Check if OrderStateLedger model exists
+    has_ledger = False
+    try:
+        from app.models.order import OrderStateLedger
+        has_ledger = True
+    except ImportError:
+        pass
+
+    if has_ledger:
+        db.add(OrderStateLedger(
+            tenant_id=order.tenant_id,
+            order_id=order.id,
+            from_status=order.current_status,
+            to_status="Dispatched",
+            updated_by="operator"
+        ))
+        order.status = "Dispatched"
+    else:
+        if hasattr(order, "status"):
+            setattr(order, "status", "Dispatched")
         
     db.commit()
+
+    # Fire order_dispatched notification (non-blocking)
+    try:
+        if customer:
+            # Eagerly load relationships so they are in-memory before background task starts
+            for item in order.line_items:
+                if item.product:
+                    _ = item.product.brand
+
+            import asyncio
+            from app.services.notification_service import NotificationService
+            import os
+
+            tenant_obj = db.get(DistributorTenant, order.tenant_id)
+
+            async def fire_notifications(tenant_val, customer_val, order_val):
+                try:
+                    notification_service = NotificationService(
+                        evolution_base_url=os.getenv("EVOLUTION_API_URL", "http://34.158.60.42:8080"),
+                        api_key=os.getenv("EVOLUTION_API_KEY", "distributorbotkey2026")
+                    )
+                    await notification_service.notify(
+                        event="order_dispatched",
+                        tenant=tenant_val,
+                        customer=customer_val,
+                        order=order_val,
+                        db=db
+                    )
+                except Exception as inner_ex:
+                    logger.warning("Notification fire failed silently: %s", str(inner_ex))
+
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = None
+
+            if loop and loop.is_running():
+                loop.create_task(fire_notifications(tenant_obj, customer, order))
+            else:
+                asyncio.run(fire_notifications(tenant_obj, customer, order))
+    except Exception as e:
+        logger.warning("Notification fire setup failed silently: %s", str(e))
+
     return {"status": "success", "order_id": str(order_id)}
+
+
+class DeliveryEventRequest(BaseModel):
+    status: str = "delivered"
+    source: str = "manual"  # manual | shiprocket | dunzo | porter | custom
+    delivery_timestamp: typing.Optional[datetime] = None
+    proof: typing.Optional[str] = None
+    tenant_id: str
+
+@router.post("/{order_id}/delivery-event", status_code=200)
+def record_delivery_event(
+    order_id: uuid.UUID,
+    payload: DeliveryEventRequest,
+    db: Session = Depends(get_db)
+):
+    # 1. Fetch order by order_id and tenant_id
+    order = db.query(Order).filter(Order.id == order_id, Order.tenant_id == payload.tenant_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    tenant_context.set(order.tenant_id)
+
+    # Check if OrderStateLedger model exists
+    has_ledger = False
+    try:
+        from app.models.order import OrderStateLedger
+        has_ledger = True
+    except ImportError:
+        pass
+
+    # 2. Update order status to Delivered
+    if has_ledger:
+        current_status = order.current_status
+        db.add(OrderStateLedger(
+            tenant_id=order.tenant_id,
+            order_id=order.id,
+            from_status=current_status,
+            to_status="Delivered",
+            updated_by=payload.source
+        ))
+        order.status = "Delivered"
+    else:
+        if hasattr(order, "status"):
+            setattr(order, "status", "Delivered")
+
+    # 3. Update order.delivered_at = delivery_timestamp or datetime.utcnow()
+    order.delivered_at = payload.delivery_timestamp or datetime.utcnow()
+
+    # 4. Store source in order.delivery_source
+    order.delivery_source = payload.source
+
+    # 5. Commit
+    db.commit()
+    db.refresh(order)
+
+    # 6. Fire order_delivered notification via NotificationService (non-blocking)
+    try:
+        customer = db.get(Customer, order.customer_id)
+        if customer:
+            for item in order.line_items:
+                if item.product:
+                    _ = item.product.brand
+
+            import asyncio
+            from app.services.notification_service import NotificationService
+            import os
+
+            tenant_obj = db.get(DistributorTenant, order.tenant_id)
+
+            async def fire_notifications(tenant_val, customer_val, order_val):
+                try:
+                    notification_service = NotificationService(
+                        evolution_base_url=os.getenv("EVOLUTION_API_URL", "http://34.158.60.42:8080"),
+                        api_key=os.getenv("EVOLUTION_API_KEY", "distributorbotkey2026")
+                    )
+                    await notification_service.notify(
+                        event="order_delivered",
+                        tenant=tenant_val,
+                        customer=customer_val,
+                        order=order_val,
+                        db=db
+                    )
+                except Exception as inner_ex:
+                    logger.warning("Notification fire failed silently: %s", str(inner_ex))
+
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = None
+
+            if loop and loop.is_running():
+                loop.create_task(fire_notifications(tenant_obj, customer, order))
+            else:
+                asyncio.run(fire_notifications(tenant_obj, customer, order))
+    except Exception as e:
+        logger.warning("Notification fire setup failed silently: %s", str(e))
+
+    # 7. Return updated order details
+    return {
+        "id": str(order.id),
+        "order_id": order.internal_order_id,
+        "status": "Delivered",
+        "delivered_at": order.delivered_at.isoformat() if order.delivered_at else None,
+        "delivery_source": order.delivery_source
+    }
+
+
+@router.get("/{order_id}/risk-assessment")
+def get_order_risk_assessment(
+    order_id: uuid.UUID,
+    access_token: str | None = Cookie(None),
+    authorization: str | None = Header(None),
+    db: Session = Depends(get_db)
+):
+    from datetime import datetime, timedelta
+    from sqlalchemy import func
+    from app.models.payment import Payment
+    from app.models.invoice import Invoice
+
+    order = db.get(Order, order_id)
+    if not order:
+        raise HTTPException(
+            status_code=404,
+            detail="Order not found"
+        )
+
+    # Set tenant context
+    tenant_context.set(order.tenant_id)
+
+    customer = db.get(Customer, order.customer_id)
+    if not customer:
+        raise HTTPException(
+            status_code=404,
+            detail="Customer not found"
+        )
+
+    tenant = db.get(DistributorTenant, order.tenant_id)
+    if not tenant:
+        raise HTTPException(
+            status_code=404,
+            detail="Tenant not found"
+        )
+
+    current_order_total = sum(
+        float((item.allocated_quantity if item.allocated_quantity is not None else item.quantity) * item.unit_price)
+        for item in order.line_items
+    )
+
+    # Outstanding and credit
+    outstanding = float(customer.outstanding_balance)
+    credit_limit = float(customer.credit_limit)
+    credit_utilisation = (outstanding / credit_limit * 100) if credit_limit > 0 else 0
+
+    # Overdue days — days since oldest unpaid invoice
+    oldest_unpaid = db.query(func.min(Invoice.created_at))\
+        .filter(Invoice.customer_id == customer.id, Invoice.payment_status != "PAID")\
+        .scalar()
+    overdue_days = (datetime.utcnow() - oldest_unpaid).days if oldest_unpaid else 0
+
+    # Average days to pay — from payment history
+    payments = db.query(Payment)\
+        .filter(Payment.customer_id == customer.id)\
+        .order_by(Payment.created_at.desc())\
+        .limit(10).all()
+    avg_days_to_pay = 0.0  # compute from payment vs invoice dates if available, else 0
+    diffs = []
+    for p in payments:
+        for link in p.invoice_links:
+            inv = db.get(Invoice, link.invoice_id)
+            if inv and inv.created_at and p.created_at:
+                diffs.append((p.created_at - inv.created_at).days)
+    if diffs:
+        avg_days_to_pay = float(sum(diffs) / len(diffs))
+
+    # Order frequency drop — compare last 30 days vs prior 30 days
+    now = datetime.utcnow()
+    recent_orders = db.query(func.count(Order.id))\
+        .filter(Order.customer_id == customer.id,
+                Order.created_at >= now - timedelta(days=30)).scalar() or 0
+    prior_orders = db.query(func.count(Order.id))\
+        .filter(Order.customer_id == customer.id,
+                Order.created_at >= now - timedelta(days=60),
+                Order.created_at < now - timedelta(days=30)).scalar() or 0
+    frequency_drop_pct = ((prior_orders - recent_orders) / prior_orders * 100) if prior_orders > 0 else 0
+
+    # Last payment date
+    last_payment = db.query(Payment)\
+        .filter(Payment.customer_id == customer.id)\
+        .order_by(Payment.created_at.desc()).first()
+    last_payment_date = last_payment.created_at.date() if last_payment else None
+    days_since_last_payment = (datetime.utcnow().date() - last_payment_date).days if last_payment_date else None
+
+    score = 0
+    signals = []
+
+    # Signal 1 — Days overdue (strongest signal)
+    if overdue_days > 45:
+        score += 50
+        signals.append(f"Critically overdue — {overdue_days} days past due date")
+    elif overdue_days > 30:
+        score += 35
+        signals.append(f"Overdue {overdue_days} days")
+    elif overdue_days > 15:
+        score += 20
+        signals.append(f"Overdue {overdue_days} days")
+    elif overdue_days > 7:
+        score += 10
+        signals.append(f"Overdue {overdue_days} days")
+
+    # Signal 2 — Credit utilisation
+    if credit_limit > 0:
+        if credit_utilisation > 90:
+            score += 30
+            signals.append(f"Credit {credit_utilisation:.0f}% utilised (₹{outstanding:,.0f} of ₹{credit_limit:,.0f})")
+        elif credit_utilisation > 70:
+            score += 20
+            signals.append(f"Credit {credit_utilisation:.0f}% utilised")
+        elif credit_utilisation > 50:
+            score += 10
+            signals.append(f"Credit {credit_utilisation:.0f}% utilised")
+        elif credit_utilisation > 30:
+            score += 5
+            signals.append(f"Credit {credit_utilisation:.0f}% utilised")
+
+    # Signal 3 — Days since last payment
+    if days_since_last_payment:
+        if days_since_last_payment > 60:
+            score += 20
+            signals.append(f"No payment received in {days_since_last_payment} days")
+        elif days_since_last_payment > 30:
+            score += 10
+            signals.append(f"No payment received in {days_since_last_payment} days")
+
+    # Signal 4 — Order frequency drop
+    if frequency_drop_pct > 40:
+        score += 10
+        signals.append(f"Orders dropped {frequency_drop_pct:.0f}% this month")
+
+    # Hard overrides — non-negotiable regardless of score
+    if overdue_days > 45:
+        level = "high_risk"
+    elif score >= 60:
+        level = "high_risk"
+    elif score >= 25:
+        level = "caution"
+    else:
+        level = "clear"
+
+    if level == "high_risk" and overdue_days > 45:
+        recommendation = f"URGENT: {overdue_days} days overdue on ₹{outstanding:,.0f}. Collect advance payment before confirming or call customer directly."
+    elif level == "high_risk" and overdue_days > 30:
+        recommendation = f"Overdue {overdue_days} days. Recommend collecting ₹{min(current_order_total, outstanding * 0.5):,.0f} advance before confirming this order."
+    elif level == "high_risk" and credit_utilisation > 90:
+        recommendation = f"Credit limit nearly exhausted. Request partial payment of ₹{outstanding * 0.3:,.0f} before confirming."
+    elif level == "high_risk":
+        recommendation = "High risk customer. Consider requesting advance payment before confirming."
+    elif level == "caution" and overdue_days > 7:
+        recommendation = f"Payment overdue {overdue_days} days. Follow up on outstanding ₹{outstanding:,.0f} before confirming."
+    elif level == "caution":
+        recommendation = "Monitor this customer. Consider requesting payment before dispatch."
+    else:
+        if overdue_days > 0:
+            recommendation = f"Customer has {overdue_days} days overdue but overall standing is acceptable."
+        else:
+            recommendation = "Customer is in good standing. Safe to confirm."
+
+    return {
+        "order_id": str(order_id),
+        "customer_id": str(customer.id),
+        "customer_name": customer.retailer_name,
+        "score": score,
+        "level": level,
+        "signals": signals,
+        "recommendation": recommendation,
+        "outstanding_balance": outstanding,
+        "credit_limit": credit_limit,
+        "credit_utilisation_pct": round(credit_utilisation, 1),
+        "overdue_days": overdue_days,
+        "last_payment_date": str(last_payment_date) if last_payment_date else None,
+        "days_since_last_payment": days_since_last_payment,
+        "current_order_total": current_order_total,
+        "order_frequency_drop_pct": round(frequency_drop_pct, 1)
+    }
 
 

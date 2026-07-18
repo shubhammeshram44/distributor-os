@@ -56,7 +56,7 @@ def test_bulk_action_success(db_session, client):
         internal_order_id="ORD-B2",
         source="WhatsApp",
         customer_id=cust.id,
-        invoice_type="RETAIL_CASH_INVOICE"
+        invoice_type="RETAIL_INVOICE"
     )
     db_session.add(order2)
     db_session.flush()

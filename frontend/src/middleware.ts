@@ -18,9 +18,9 @@ export function middleware(request: NextRequest) {
 
   // Normalise header processing by catching both 'Authorization' and 'authorization' case-insensitively.
   const authHeader = request.headers.get('Authorization') || request.headers.get('authorization');
-  
+
   let token = null;
-  
+
   // Order priority: Process auth headers first, then check the 'access_token' cookie values.
   if (authHeader && authHeader.toLowerCase().startsWith('bearer ')) {
     token = authHeader.substring(7);
@@ -50,6 +50,13 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*', '/auth', '/auth/onboarding', '/login'],
+  matcher: [
+    '/dashboard',
+    '/dashboard/:path*',
+    '/auth',
+    '/auth/onboarding',
+    '/auth/onboarding/:path*',
+    '/login',
+  ],
 };
 

@@ -72,11 +72,13 @@ def test_confirm_order_success(db_session, client):
     # 6. Verify database state
     db_session.expire_all()
 
-    # Verify stock decrements in Inventory
+    # Verify stock decrements in Inventory (no change to physical stock, committed pool incremented)
     inv1_db = db_session.query(Inventory).filter_by(sku_id=p1.id).one()
     inv2_db = db_session.query(Inventory).filter_by(sku_id=p2.id).one()
-    assert inv1_db.quantity_on_hand == 70  # 100 - 30
-    assert inv2_db.quantity_on_hand == 40  # 50 - 10
+    assert inv1_db.quantity_on_hand == 70
+    assert inv1_db.quantity_committed == 30
+    assert inv2_db.quantity_on_hand == 40
+    assert inv2_db.quantity_committed == 10
 
     # Verify ledger entry
     latest_ledger = db_session.query(OrderStateLedger).filter_by(order_id=order.id).order_by(OrderStateLedger.timestamp.desc()).first()
@@ -85,6 +87,11 @@ def test_confirm_order_success(db_session, client):
 
 
 def test_confirm_order_insufficient_stock(db_session, client):
+    """
+    With partial allocation: requesting more than available stock should now return 200.
+    The order is confirmed with allocated_quantity = available stock,
+    and a STOCK_SHORTAGE DemandGap row is persisted with a non-null revenue_at_risk.
+    """
     # Setup Tenant
     tenant = DistributorTenant(name="Orders Test Tenant 2")
     db_session.add(tenant)
@@ -92,7 +99,7 @@ def test_confirm_order_insufficient_stock(db_session, client):
 
     tenant_context.set(tenant.id)
 
-    # Setup Product with low stock_quantity (20) and Inventory
+    # Product with 20 units in stock; order will request 30
     p = Product(sku_id="PROD-LOW-STOCK", brand="HUL", category="Soap", pack_size="100g", base_price=45.0, stock_quantity=20)
     db_session.add(p)
     db_session.flush()
@@ -117,34 +124,51 @@ def test_confirm_order_insufficient_stock(db_session, client):
     db_session.add(order)
     db_session.flush()
 
-    # Add line with requested qty (30) which exceeds stock (20)
+    # requested qty (30) exceeds stock (20) — should be partially allocated
     db_session.add(OrderLineItem(order_id=order.id, product_id=p.id, quantity=30, unit_price=45.0))
     db_session.commit()
 
-    # Call confirmation endpoint
     response = client.put(
         f"/api/v1/orders/{order.id}/status",
         json={"to_status": "Confirmed"}
     )
 
-    # Assert 400 Bad Request
-    assert response.status_code == 400
-    assert "Insufficient stock" in response.json()["detail"] or "Insufficient physical stock" in response.json()["detail"]
+    # Partial allocation — should succeed (200), NOT reject
+    assert response.status_code == 200
+    assert response.json()["new_status"] == "Confirmed"
 
-    # Verify stock was NOT decremented (transaction rollback integrity)
+    # Inventory physical stock should be unchanged, committed should be fully allocated (20)
     db_session.expire_all()
     inv_db = db_session.query(Inventory).filter_by(sku_id=p.id).one()
-    assert inv_db.quantity_on_hand == 20
+    assert inv_db.quantity_on_hand == 0
+    assert inv_db.quantity_committed == 20
+
+    # Line item should have allocated_quantity = 20 (available), not 30 (requested)
+    item_db = db_session.query(OrderLineItem).filter_by(order_id=order.id).one()
+    assert item_db.allocated_quantity == 20
+
+    # A STOCK_SHORTAGE DemandGap row should have been persisted
+    from app.models.demand_gap import DemandGap
+    gap = db_session.query(DemandGap).filter_by(order_id=order.id).one()
+    assert gap.reason_code == "STOCK_SHORTAGE"
+    assert gap.gap_qty == 10           # 30 requested – 20 allocated
+    assert gap.revenue_at_risk is not None
+    assert float(gap.revenue_at_risk) == 450.0  # 10 units × ₹45
+    assert gap.status == "OPEN"
 
 
 def test_confirm_order_atomic_rollback(db_session, client):
+    """
+    With partial allocation: both items should confirm successfully.
+    p1 (enough stock) is fully allocated; p2 (5 available, 10 requested) is partially
+    allocated to 5. A STOCK_SHORTAGE DemandGap row is created for p2's gap of 5 units.
+    """
     tenant = DistributorTenant(name="Orders Test Tenant 3")
     db_session.add(tenant)
     db_session.commit()
 
     tenant_context.set(tenant.id)
 
-    # Setup 2 products: p1 has enough stock (100), p2 has insufficient stock (5)
     p1 = Product(sku_id="PROD-OK", brand="HUL", category="Soap", pack_size="100g", base_price=45.0, stock_quantity=100)
     p2 = Product(sku_id="PROD-NOT-OK", brand="HUL", category="Soap", pack_size="200g", base_price=80.0, stock_quantity=5)
     db_session.add_all([p1, p2])
@@ -171,26 +195,36 @@ def test_confirm_order_atomic_rollback(db_session, client):
     db_session.add(order)
     db_session.flush()
 
-    # Add line items: p1 requested qty is valid, p2 requested qty exceeds stock
+    # p1: 30 requested, 100 available — fully allocated
+    # p2: 10 requested, 5 available — partially allocated (5 gap)
     db_session.add(OrderLineItem(order_id=order.id, product_id=p1.id, quantity=30, unit_price=45.0))
     db_session.add(OrderLineItem(order_id=order.id, product_id=p2.id, quantity=10, unit_price=80.0))
     db_session.commit()
 
-    # Call confirmation endpoint
     response = client.put(
         f"/api/v1/orders/{order.id}/status",
         json={"to_status": "Confirmed"}
     )
 
-    # Assert 400 Bad Request
-    assert response.status_code == 400
+    # Partial allocation — order succeeds
+    assert response.status_code == 200
 
-    # Verify atomic rollback: p1 stock is NOT decremented (should remain 100)
+    # p1 fully allocated: physical stock 100, committed 30
+    # p2 partially allocated: physical stock 5, committed 5
     db_session.expire_all()
     inv1_db = db_session.query(Inventory).filter_by(sku_id=p1.id).one()
     inv2_db = db_session.query(Inventory).filter_by(sku_id=p2.id).one()
-    assert inv1_db.quantity_on_hand == 100
-    assert inv2_db.quantity_on_hand == 5
+    assert inv1_db.quantity_on_hand == 70
+    assert inv1_db.quantity_committed == 30
+    assert inv2_db.quantity_on_hand == 0
+    assert inv2_db.quantity_committed == 5
+
+    # DemandGap row for p2's shortage
+    from app.models.demand_gap import DemandGap
+    gap = db_session.query(DemandGap).filter_by(order_id=order.id, reason_code="STOCK_SHORTAGE").one()
+    assert gap.product_id == p2.id
+    assert gap.gap_qty == 5
+    assert float(gap.revenue_at_risk) == 400.0  # 5 × ₹80
 
 
 def test_resolve_order_item(db_session, client):
@@ -393,11 +427,12 @@ def test_list_orders(db_session, client):
     response = client.get(f"/api/v1/orders?tenant_id={tenant.id}")
     assert response.status_code == 200
     data = response.json()
-    assert len(data) >= 1
-    assert data[0]["order_id"] == "ORD-LIST-TEST-1"
-    assert data[0]["customer"] == "List Customer"
-    assert data[0]["amount"] == 225.0
-    assert data[0]["status"] == "Pending"  # Draft maps to Pending
+    items = data["items"]
+    assert len(items) >= 1
+    assert items[0]["order_id"] == "ORD-LIST-TEST-1"
+    assert items[0]["customer"] == "List Customer"
+    assert items[0]["amount"] == 225.0
+    assert items[0]["status"] == "Pending"  # Draft maps to Pending
 
 
 def test_credit_limit_guardrail_success_and_failure(db_session, client):
@@ -532,10 +567,11 @@ def test_list_orders_with_invoice_payment_status(db_session, client):
     response = client.get(f"/api/v1/orders?tenant_id={tenant.id}")
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 2
+    items = data["items"]
+    assert len(items) == 2
 
     # Map results by order_id
-    results_map = {item["order_id"]: item for item in data}
+    results_map = {item["order_id"]: item for item in items}
 
     # Verify Order 1 (no invoice, should default to UNPAID and 0.0 amount_paid)
     assert "ORD-PAY-LIST-1" in results_map
@@ -757,3 +793,425 @@ def test_patch_order_invoice_type(db_session, client):
     response_fail = client.patch(f"/api/v1/orders/{order.id}", json={"invoice_type": "INVALID_TYPE"})
     assert response_fail.status_code == 422
 
+
+def test_batch_confirm_order_success(db_session, client):
+    # Setup Tenant
+    tenant = DistributorTenant(name="Batch Confirm Tenant")
+    db_session.add(tenant)
+    db_session.flush()
+    tenant_context.set(tenant.id)
+
+    # Setup Product
+    p = Product(
+        sku_id="PROD-BATCH-1",
+        brand="Brand X",
+        category="Category Y",
+        pack_size="1 Liter",
+        base_price=150.0,
+        stock_quantity=100
+    )
+    db_session.add(p)
+    db_session.flush()
+
+    # Setup Customer
+    cust = Customer(
+        retailer_name="Batch Confirm Retailer",
+        customer_id="C-BATCH-1",
+        address_text="Test Address",
+        gstin="29AAAAA1111A1Z1",
+        tax_group="GST-18",
+        payment_terms="0-15 Days"
+    )
+    db_session.add(cust)
+    db_session.flush()
+
+    # Setup Order
+    order = Order(
+        tenant_id=tenant.id,
+        internal_order_id="ORD-BATCH-CONFIRM-1",
+        source="WhatsApp",
+        customer_id=cust.id,
+        invoice_type="UNSPECIFIED"
+    )
+    db_session.add(order)
+    db_session.flush()
+
+    # Setup Unmatched Line Item
+    item = OrderLineItem(
+        order_id=order.id,
+        product_id=None,
+        quantity=5,
+        unit_price=0.0,
+        unmatched_raw_text="Brand X 1L"
+    )
+    db_session.add(item)
+    db_session.commit()
+
+    # Call atomic batch-confirm
+    response = client.post(
+        f"/api/v1/orders/{order.id}/batch-confirm",
+        json={
+            "invoice_type": "RETAIL_INVOICE",
+            "resolved_items": [
+                {
+                    "item_id": str(item.id),
+                    "product_id": str(p.id)
+                }
+            ]
+        }
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["new_status"] == "Confirmed"
+    assert data["changes_applied"] == 1
+
+    # Verify db updates
+    db_session.refresh(order)
+    db_session.refresh(item)
+    assert order.current_status == "Confirmed"
+    assert order.invoice_type == "RETAIL_INVOICE"
+    assert item.product_id == p.id
+    assert float(item.unit_price) == 150.0
+    assert item.unmatched_raw_text is None  # self-learning cleared it
+
+
+def test_record_delivery_event(db_session, client):
+    # Setup Tenant
+    tenant = DistributorTenant(name="Delivery Test Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+
+    tenant_context.set(tenant.id)
+
+    # Setup Customer
+    cust = Customer(
+        retailer_name="Delivery Retailer", customer_id="C-DEL", address_text="Address",
+        gstin="07AAAAA1111A1Z1", tax_group="GST", payment_terms="COD"
+    )
+    db_session.add(cust)
+    db_session.flush()
+
+    # Setup Order
+    order = Order(
+        tenant_id=tenant.id,
+        internal_order_id="ORD-DELIVERY-TEST-1",
+        source="Portal",
+        customer_id=cust.id
+    )
+    db_session.add(order)
+    db_session.flush()
+
+    db_session.add(OrderStateLedger(order_id=order.id, from_status=None, to_status="Draft", updated_by="admin"))
+    db_session.commit()
+
+    # Call delivery event endpoint
+    response = client.post(
+        f"/api/v1/orders/{order.id}/delivery-event",
+        json={
+            "status": "delivered",
+            "source": "manual",
+            "tenant_id": str(tenant.id)
+        }
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "Delivered"
+    assert data["delivery_source"] == "manual"
+    assert data["delivered_at"] is not None
+
+    db_session.expire_all()
+    db_session.refresh(order)
+    assert order.current_status == "Delivered"
+    assert order.delivery_source == "manual"
+    assert order.delivered_at is not None
+
+
+def test_orders_list_query_count_regression(db_session, client):
+    from sqlalchemy import event
+    
+    # Setup Tenant
+    tenant = DistributorTenant(name="Query Count Test Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+
+    tenant_context.set(tenant.id)
+
+    # Helper to create an order
+    def create_mock_order(idx):
+        cust = Customer(
+            retailer_name=f"Retailer {idx}", customer_id=f"C-Q-{idx}", address_text="Address",
+            gstin="07AAAAA1111A1Z1", tax_group="GST", payment_terms="COD"
+        )
+        db_session.add(cust)
+        db_session.flush()
+
+        order = Order(
+            tenant_id=tenant.id,
+            internal_order_id=f"ORD-QC-{idx}",
+            source="Portal",
+            customer_id=cust.id,
+            status="Draft"
+        )
+        db_session.add(order)
+        db_session.flush()
+        
+        db_session.add(OrderStateLedger(order_id=order.id, from_status=None, to_status="Draft", updated_by="admin"))
+        db_session.commit()
+        return order
+
+    # Create 1 order
+    create_mock_order(1)
+
+    queries_count_1 = 0
+    @event.listens_for(db_session.bind, "after_cursor_execute")
+    def receive_after_cursor_execute(conn, cursor, statement, parameters, context, executemany):
+        nonlocal queries_count_1
+        queries_count_1 += 1
+
+    # Call list endpoint
+    resp = client.get(f"/api/v1/orders?tenant_id={tenant.id}")
+    assert resp.status_code == 200
+    
+    # Remove listener
+    event.remove(db_session.bind, "after_cursor_execute", receive_after_cursor_execute)
+
+    # Create 4 more orders (total 5)
+    for i in range(2, 6):
+        create_mock_order(i)
+
+    queries_count_5 = 0
+    @event.listens_for(db_session.bind, "after_cursor_execute")
+    def receive_after_cursor_execute_5(conn, cursor, statement, parameters, context, executemany):
+        nonlocal queries_count_5
+        queries_count_5 += 1
+
+    # Call list endpoint again
+    resp = client.get(f"/api/v1/orders?tenant_id={tenant.id}")
+    assert resp.status_code == 200
+
+    event.remove(db_session.bind, "after_cursor_execute", receive_after_cursor_execute_5)
+
+    # Assert query count remains bounded (constant query complexity, not O(N))
+    assert queries_count_5 <= queries_count_1 + 1
+
+
+def test_order_risk_assessment(db_session, client):
+    # Setup mock data for tenant, customer, order
+    from app.models.tenant import DistributorTenant
+    from app.models.customer import Customer
+    from app.models.order import Order, OrderLineItem, OrderStateLedger
+    from app.models.product import Product
+    import uuid
+
+    tenant = DistributorTenant(id=uuid.uuid4(), name="Risk Test Tenant")
+    db_session.add(tenant)
+    db_session.flush()
+
+    customer = Customer(
+        id=uuid.uuid4(),
+        tenant_id=tenant.id,
+        retailer_name="Risk Test Retailer",
+        outstanding_balance=8000.0,
+        credit_limit=10000.0,
+        phone_number="+919999999999",
+        whatsapp_notifications_enabled=True
+    )
+    db_session.add(customer)
+    
+    product = Product(
+        id=uuid.uuid4(),
+        tenant_id=tenant.id,
+        sku_id="PROD-RISK-1",
+        brand="Risk Brand",
+        category="Risk Cat",
+        pack_size="Pack of 1",
+        base_price=100.0,
+        stock_quantity=50
+    )
+    db_session.add(product)
+    db_session.flush()
+
+    order = Order(
+        id=uuid.uuid4(),
+        tenant_id=tenant.id,
+        customer_id=customer.id,
+        internal_order_id="ORD-RISK-1",
+        source="Risk Source",
+        status="Draft"
+    )
+    db_session.add(order)
+    db_session.flush()
+
+    line_item = OrderLineItem(
+        id=uuid.uuid4(),
+        tenant_id=tenant.id,
+        order_id=order.id,
+        product_id=product.id,
+        quantity=5,
+        unit_price=100.0
+    )
+    db_session.add(line_item)
+    
+    ledger = OrderStateLedger(
+        id=uuid.uuid4(),
+        tenant_id=tenant.id,
+        order_id=order.id,
+        from_status=None,
+        to_status="Draft",
+        updated_by="test"
+    )
+    db_session.add(ledger)
+    db_session.commit()
+
+    # Call risk assessment endpoint
+    resp = client.get(f"/api/v1/orders/{order.id}/risk-assessment?tenant_id={tenant.id}")
+    assert resp.status_code == 200
+    data = resp.json()
+    
+    assert data["order_id"] == str(order.id)
+    assert data["customer_id"] == str(customer.id)
+    assert data["score"] >= 0
+    assert data["level"] in ("clear", "caution", "high_risk")
+    assert "signals" in data
+    assert "recommendation" in data
+    assert data["outstanding_balance"] == 8000.0
+    assert data["credit_limit"] == 10000.0
+    assert data["credit_utilisation_pct"] == 80.0
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# DemandGap — revenue_at_risk is always non-null (both reason codes)
+# ──────────────────────────────────────────────────────────────────────────────
+
+def test_demand_gap_revenue_at_risk_stock_shortage(db_session, client):
+    """
+    After a partial-allocation confirmation, the STOCK_SHORTAGE DemandGap row must carry
+    a non-null revenue_at_risk equal to gap_qty × unit_price.
+    """
+    from app.models.demand_gap import DemandGap
+
+    tenant = DistributorTenant(name="DG Revenue Test Tenant 1")
+    db_session.add(tenant)
+    db_session.commit()
+    tenant_context.set(tenant.id)
+
+    p = Product(sku_id="PROD-DG-REV-1", brand="HUL", category="Soap", pack_size="200g", base_price=100.0, stock_quantity=10)
+    db_session.add(p)
+    db_session.flush()
+
+    # Only 10 in stock; order will request 25 → gap = 15
+    inv = Inventory(tenant_id=tenant.id, sku_id=p.id, location="WH1", quantity_on_hand=10, low_stock_threshold=5)
+    db_session.add(inv)
+    db_session.flush()
+
+    cust = Customer(
+        retailer_name="Gap Revenue Shop", customer_id="C-DG-REV-1", address_text="Mumbai",
+        gstin="27AAAAA1111A1Z1", tax_group="GST", payment_terms="COD"
+    )
+    db_session.add(cust)
+    db_session.flush()
+
+    order = Order(
+        tenant_id=tenant.id, internal_order_id="ORD-DG-REV-1",
+        source="Portal", customer_id=cust.id
+    )
+    db_session.add(order)
+    db_session.flush()
+
+    db_session.add(OrderLineItem(order_id=order.id, product_id=p.id, quantity=25, unit_price=100.0))
+    db_session.commit()
+
+    resp = client.put(f"/api/v1/orders/{order.id}/status", json={"to_status": "Confirmed"})
+    assert resp.status_code == 200
+
+    db_session.expire_all()
+    gap = db_session.query(DemandGap).filter_by(order_id=order.id).one()
+
+    # revenue_at_risk must be non-null and correctly computed
+    assert gap.revenue_at_risk is not None
+    assert float(gap.revenue_at_risk) == 1500.0  # 15 units × ₹100
+    assert gap.reason_code == "STOCK_SHORTAGE"
+    assert gap.status == "OPEN"
+
+
+def test_demand_gap_credit_limit_persists_after_rejection(db_session, client):
+    """
+    When a credit-limit rejection occurs, a CREDIT_LIMIT DemandGap row must be persisted
+    (via the separate-session commit) even though the main transaction is rolled back.
+    revenue_at_risk must equal the full current_order_total.
+    """
+    from app.models.demand_gap import DemandGap
+
+    tenant = DistributorTenant(name="DG Credit Limit Persist Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+    tenant_context.set(tenant.id)
+
+    p = Product(sku_id="PROD-DG-CL-1", brand="P&G", category="Detergent", pack_size="1kg", base_price=200.0, stock_quantity=100)
+    db_session.add(p)
+    db_session.flush()
+
+    inv = Inventory(tenant_id=tenant.id, sku_id=p.id, location="WH1", quantity_on_hand=100, low_stock_threshold=5)
+    db_session.add(inv)
+    db_session.flush()
+
+    # Customer with a tight credit_limit of 1,000 so a 10-unit ₹200 order (₹2,000) triggers it
+    cust = Customer(
+        retailer_name="Tight Credit Shop", customer_id="C-DG-CL-1", address_text="Pune",
+        gstin="27AAAAA1111A1Z1", tax_group="GST", payment_terms="COD",
+        credit_limit=1000.0, outstanding_balance=0.0
+    )
+    db_session.add(cust)
+    db_session.flush()
+
+    order = Order(
+        tenant_id=tenant.id, internal_order_id="ORD-DG-CL-1",
+        source="Portal", customer_id=cust.id
+    )
+    db_session.add(order)
+    db_session.flush()
+
+    db_session.add(OrderStateLedger(order_id=order.id, from_status=None, to_status="Draft", updated_by="test"))
+    db_session.add(OrderLineItem(order_id=order.id, product_id=p.id, quantity=10, unit_price=200.0))
+    db_session.commit()
+
+    # This should be rejected with 400 (combined = ₹2,000 > ₹1,000 limit)
+    resp = client.put(f"/api/v1/orders/{order.id}/status", json={"to_status": "Confirmed"})
+    assert resp.status_code == 400
+    assert "Credit limit exceeded" in resp.json()["detail"]
+
+    # DemandGap row must still exist despite the rollback
+    db_session.expire_all()
+    gap = db_session.query(DemandGap).filter_by(order_id=order.id, reason_code="CREDIT_LIMIT").first()
+    assert gap is not None, "CREDIT_LIMIT DemandGap row was not persisted after rejection"
+    assert gap.revenue_at_risk is not None
+    assert float(gap.revenue_at_risk) == 2000.0  # full current_order_total
+    assert gap.status == "OPEN"
+    assert gap.product_id is None  # CREDIT_LIMIT rows have no product reference
+
+
+def test_demand_gap_rollup_endpoint_defaults_to_7_days(db_session, client):
+    """
+    Calling /api/v1/dashboard/demand-gap-summary without a days param must use
+    window_days=7 in the response (not 30 or any other default).
+    The endpoint must also return zero values cleanly when there are no gaps.
+    """
+    tenant = DistributorTenant(name="DG Rollup Default Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+    tenant_context.set(tenant.id)
+
+    # Call without days param
+    resp = client.get(f"/api/v1/dashboard/demand-gap-summary?tenant_id={tenant.id}")
+    assert resp.status_code == 200
+    data = resp.json()
+
+    # Default window must be 7 days
+    assert data["window_days"] == 7
+
+    # Zero-gap case must not error — just return clean zeros / empty array
+    assert data["total_revenue_at_risk"] == 0.0
+    assert data["distinct_customers_affected"] == 0
+    assert data["by_reason"] == []

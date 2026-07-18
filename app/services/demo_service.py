@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
 from app.database import tenant_context
 from app.models.tenant import DistributorTenant
@@ -17,14 +18,20 @@ from app.services.tenant_service import DEMO_TENANT_ID
 
 def ensure_demo_data(db: Session, tenant_id: uuid.UUID | None = None):
     """
-    Seeds the database with the exact B2B distributor data matching the Operations Dashboard
-    screenshot if the database is empty.
+    Seeds the database with demo data for the demo tenant if not already seeded.
+    Only runs for the well-known demo tenant ID — all other tenants are ignored.
     """
     # Hard multi-tenant lockout constraint
-    if str(tenant_id) != "d3b07384-d113-4956-a5d2-64be7357c11d":
+    if tenant_id != DEMO_TENANT_ID and str(tenant_id) != str(DEMO_TENANT_ID):
         return  # Abort immediately. NEVER seed default rows into custom distributor profiles.
 
-    # 1. Check if the default tenant exists
+    try:
+        _seed_demo_data(db)
+    except IntegrityError:
+        db.rollback()  # Concurrent request already seeded — safe to ignore
+
+
+def _seed_demo_data(db: Session):
     tenant = db.get(DistributorTenant, DEMO_TENANT_ID)
     if not tenant:
         tenant = DistributorTenant(id=DEMO_TENANT_ID, name="S.V. Distributors")
@@ -137,7 +144,8 @@ def ensure_demo_data(db: Session, tenant_id: uuid.UUID | None = None):
             internal_order_id=o["ord_id"],
             source=o["source"],
             customer_id=uuid.UUID(o["cust_id"]) if isinstance(o["cust_id"], str) else o["cust_id"],
-            created_at=datetime.utcnow() - timedelta(minutes=o["time_offset"])
+            created_at=datetime.utcnow() - timedelta(minutes=o["time_offset"]),
+            status=o["status"]
         )
         db.add(order)
         db.flush()
@@ -182,8 +190,10 @@ def ensure_demo_data(db: Session, tenant_id: uuid.UUID | None = None):
             order_id=order.id,
             gstin="29AAAAA1111A1Z1",
             total_amount=o["amount"],
-            irn_status="Cleared",
-            qr_code_status="Generated",
+            # Demo data — no real IRP integration exists; keep consistent with
+            # production behavior so demo mode doesn't imply a capability we don't have.
+            irn_status="NOT_APPLICABLE",
+            qr_code_status="NOT_APPLICABLE",
             customer_id=order.customer_id,
             payment_status="UNPAID",
             amount_paid=0.0,

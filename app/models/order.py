@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import String, ForeignKey, Integer, Numeric, DateTime, JSON, select, desc
-from sqlalchemy.orm import Mapped, mapped_column, relationship, object_session
+from sqlalchemy import String, ForeignKey, Integer, Numeric, DateTime, JSON, select, desc, Text, event
+from sqlalchemy.orm import Mapped, mapped_column, relationship, object_session, Session
 from sqlalchemy.ext.hybrid import hybrid_property
 from app.database import Base, TenantMixin
 
@@ -15,6 +15,12 @@ class Order(Base, TenantMixin):
     invoice_type: Mapped[str] = mapped_column(String(50), nullable=False, default="UNSPECIFIED")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    raw_source_text: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
+    delivery_source: Mapped[str | None] = mapped_column(String(100), nullable=True, default=None)
+    # ONE-TIME DATA MIGRATION:
+    # UPDATE orders SET status = 'pending_review' WHERE status = 'NEEDS_REVIEW';
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="Draft")
 
     @hybrid_property
     def customer_mobile(self) -> str:
@@ -38,9 +44,17 @@ class Order(Base, TenantMixin):
 
     @property
     def total_amount(self) -> float:
-        return sum(float(item.quantity * item.unit_price) for item in self.line_items)
+        return sum(
+            float(
+                (item.allocated_quantity if item.allocated_quantity is not None else item.quantity)
+                * item.unit_price
+            )
+            for item in self.line_items
+        )
     @property
     def payment_status(self) -> str:
+        if hasattr(self, "_payment_status") and self._payment_status is not None:
+            return self._payment_status
         session = object_session(self)
         if session is not None:
             from app.models.invoice import Invoice
@@ -51,49 +65,38 @@ class Order(Base, TenantMixin):
 
     @payment_status.setter
     def payment_status(self, value: str):
-        pass
+        # Cache an explicit override; the getter reads _payment_status first and
+        # otherwise derives status from the Invoice. Having a setter also avoids
+        # AttributeError on payment_service sync writes.
+        self._payment_status = value
 
     line_items: Mapped[list["OrderLineItem"]] = relationship(back_populates="order", cascade="all, delete-orphan")
     ledger_entries: Mapped[list["OrderStateLedger"]] = relationship(back_populates="order", cascade="all, delete-orphan")
+    customer: Mapped["Customer"] = relationship()
 
     @property
     def current_status(self) -> str:
-        """
-        Dynamically fetches the current order status by checking the latest transition in the OrderStateLedger.
-        Defaults to 'Draft' if no ledger entries exist.
-        """
-        session = object_session(self)
-        if session is not None:
-            # Query the database for the most recent ledger entry
-            stmt = (
-                select(OrderStateLedger.to_status)
-                .where(OrderStateLedger.order_id == self.id)
-                .order_by(desc(OrderStateLedger.timestamp))
-                .limit(1)
-            )
-            res = session.execute(stmt).scalar()
-            if res:
-                if res == "NEEDS_REVIEW":
-                    return "Needs Review"
-                return res
+        val = self.status
+        if val in ("NEEDS_REVIEW", "pending_review"):
+            return "Needs Review"
+        return val or "Draft"
 
-        # Fallback to in-memory collection if session is not available or query returns empty
-        if self.ledger_entries:
-            sorted_entries = sorted(self.ledger_entries, key=lambda e: e.timestamp, reverse=True)
-            val = sorted_entries[0].to_status
-            if val == "NEEDS_REVIEW":
-                return "Needs Review"
-            return val
-        return "Draft"
+    @current_status.setter
+    def current_status(self, value: str):
+        self.status = value
 
 class OrderLineItem(Base, TenantMixin):
     __tablename__ = "order_line_items"
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     order_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orders.id", ondelete="CASCADE"), nullable=False)
-    product_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
+    product_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("products.id", ondelete="CASCADE"), nullable=True, default=None)
     quantity: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Quantity actually fulfilled after partial-allocation logic during Confirmation.
+    # NULL means the row pre-dates demand-gap tracking — treat as fully allocated (= quantity).
+    allocated_quantity: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
     unit_price: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
+    unmatched_raw_text: Mapped[str | None] = mapped_column(String(255), nullable=True, default=None)
 
     order: Mapped[Order] = relationship(back_populates="line_items")
     product: Mapped["Product"] = relationship()
@@ -122,4 +125,13 @@ class BulkJob(Base):
     result_link: Mapped[str | None] = mapped_column(String(255), nullable=True)
     metadata_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+@event.listens_for(Session, "before_flush")
+def before_flush(session, flush_context, instances):
+    for obj in session.new | session.dirty:
+        if isinstance(obj, OrderStateLedger):
+            order = session.get(Order, obj.order_id)
+            if order:
+                order.status = obj.to_status
 

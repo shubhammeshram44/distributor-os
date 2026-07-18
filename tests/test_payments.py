@@ -6,6 +6,8 @@ from app.models.tenant import DistributorTenant
 from app.models.customer import Customer
 from app.models.ledger import CustomerLedger
 from app.models.payment import Payment
+from app.models.order import Order
+from app.models.invoice import Invoice
 from app.database import tenant_context
 
 @pytest.fixture(name="client")
@@ -32,6 +34,44 @@ def test_create_collection_voucher_success(db_session, client):
         outstanding_balance=25000.0
     )
     db_session.add(customer)
+    db_session.flush()
+
+    # 2b. Create an order + invoice to back the 25,000 outstanding balance
+    backing_order = Order(
+        tenant_id=tenant.id,
+        internal_order_id="ORD-VOUCHER-BACKING",
+        source="Portal",
+        customer_id=customer.id,
+    )
+    db_session.add(backing_order)
+    db_session.flush()
+    backing_invoice = Invoice(
+        tenant_id=tenant.id,
+        order_id=backing_order.id,
+        customer_id=customer.id,
+        gstin=customer.gstin,
+        total_amount=25000.0,
+        irn_status="Cleared",
+        qr_code_status="Generated",
+        payment_status="UNPAID",
+        amount_paid=0.0,
+    )
+    db_session.add(backing_invoice)
+
+    # Seed the matching DEBIT ledger entry so the ledger is consistent with
+    # the 25,000 outstanding_balance set on the customer above.
+    # record_transaction() recomputes outstanding_balance from the ledger,
+    # so test data must be truthful: the ₹25,000 balance must exist as a
+    # DEBIT ledger entry, not only as a raw field on the customer row.
+    db_session.add(CustomerLedger(
+        id=uuid.uuid4(),
+        tenant_id=tenant.id,
+        customer_id=customer.id,
+        type="DEBIT",
+        amount=25000.0,
+        reference_id="ORD-VOUCHER-BACKING",
+        description="Backing order confirmed (test seed)"
+    ))
     db_session.commit()
 
     # 3. Call endpoint to create a payment voucher

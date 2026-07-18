@@ -29,6 +29,7 @@ export interface RecentOrder {
   status: string;
   created_on?: string;
   eta: string;
+  line_items?: OrderDetail[];
 }
 
 export interface OrderDetail {
@@ -38,6 +39,7 @@ export interface OrderDetail {
   category: string;
   pack_size: string;
   quantity: number;
+  allocated_quantity?: number | null;
   unit_price: number;
   total_price: number;
 }
@@ -51,6 +53,7 @@ export interface DonutSegment {
 export interface ActivityEvent {
   message: string;
   time: string;
+  timestamp?: string;
   category: string;
 }
 
@@ -83,35 +86,26 @@ export function useDashboardData(
         }
       };
 
-      // Fetch Metrics with optional date filters
-      let metricsUrl = `${BASE_URL}/api/v1/dashboard/metrics?tenant_id=${activeTenantId}`;
+      // Fetch consolidated overview with optional date filters
+      let overviewUrl = `${BASE_URL}/api/v1/dashboard/overview?tenant_id=${activeTenantId}`;
       if (startDate) {
-        metricsUrl += `&start_date=${encodeURIComponent(startDate)}`;
+        overviewUrl += `&start_date=${encodeURIComponent(startDate)}`;
       }
       if (endDate) {
-        metricsUrl += `&end_date=${encodeURIComponent(endDate)}`;
+        overviewUrl += `&end_date=${encodeURIComponent(endDate)}`;
       }
-      const metricsResp = await fetch(metricsUrl, options);
-      if (!metricsResp.ok) throw new Error("Failed to fetch dashboard metrics");
-      const metricsData = await metricsResp.json();
-      setMetrics(metricsData);
+      const overviewResp = await fetch(overviewUrl, options);
+      if (!overviewResp.ok) throw new Error("Failed to fetch dashboard overview");
+      const overviewData = await overviewResp.json();
 
-      // Fetch Recent Orders
-      const ordersResp = await fetch(`${BASE_URL}/api/v1/dashboard/recent-orders?tenant_id=${activeTenantId}`, options);
-      if (!ordersResp.ok) throw new Error("Failed to fetch recent orders");
-      const ordersData = await ordersResp.json();
-      setRecentOrders(ordersData);
+      setMetrics(overviewData.metrics);
+      setRecentOrders(overviewData.recent_orders);
+      setDonutData(overviewData.donut_data);
 
-      // Fetch Donut Data
-      const donutResp = await fetch(`${BASE_URL}/api/v1/dashboard/collections-donut?tenant_id=${activeTenantId}`, options);
-      if (!donutResp.ok) throw new Error("Failed to fetch collections donut");
-      const donutResData = await donutResp.json();
-      setDonutData(donutResData);
-      
       setError(null);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      setError(err.message || "Failed to load dashboard data");
+      setError(err instanceof Error ? err.message : "Failed to load dashboard data");
     } finally {
       setIsLoading(false);
     }
@@ -154,7 +148,7 @@ export function useDashboardData(
       if (!resp.ok) throw new Error("Failed to load order line item details");
       const data = await resp.json();
       setSelectedOrderDetails(data);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
     } finally {
       setLoadingDetails(false);
@@ -182,16 +176,39 @@ export function useDashboardData(
     }
   }, [activeTenantId, startDate, endDate, isAuthenticated, firebaseAuthExpiredFlag, fetchStaticData, fetchPolledData]);
 
-  // Activity feed polling setup (every 5 seconds)
+  // Activity feed polling setup (every 30 seconds) with tab-visibility pause and abort to prevent stale response pile-up
   useEffect(() => {
     if (!activeTenantId || !isAuthenticated || firebaseAuthExpiredFlag) return;
 
-    const interval = setInterval(() => {
-      fetchPolledData();
-    }, 5000);
+    const controller = new AbortController();
 
-    return () => clearInterval(interval);
-  }, [activeTenantId, isAuthenticated, firebaseAuthExpiredFlag, fetchPolledData]);
+    const poll = async () => {
+      if (controller.signal.aborted) return;
+      // Skip poll when tab is hidden to reduce server load
+      if (document.visibilityState === "hidden") return;
+      try {
+        const activityResp = await fetch(
+          `${BASE_URL}/api/v1/dashboard/recent-activity?tenant_id=${activeTenantId}`,
+          { method: "GET", credentials: "include", signal: controller.signal }
+        );
+        if (activityResp.ok) {
+          const activityData = await activityResp.json();
+          setActivities(activityData);
+        }
+      } catch (err: unknown) {
+        if (err instanceof Error && err.name !== "AbortError") {
+          console.error("Activity feed poll failed:", err);
+        }
+      }
+    };
+
+    const interval = setInterval(poll, 30000); // 30 seconds instead of 5
+
+    return () => {
+      clearInterval(interval);
+      controller.abort();
+    };
+  }, [activeTenantId, isAuthenticated, firebaseAuthExpiredFlag]);
 
 
   return {

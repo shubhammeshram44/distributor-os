@@ -86,3 +86,52 @@ def test_csv_ingestion_partial_success(db_session):
     inv_p2 = db_session.query(Inventory).filter_by(sku_id=p2.id).one()
     assert inv_p2.quantity_on_hand == 80
     assert inv_p2.quantity_committed == 10
+
+
+def test_obvious_non_order_pre_filter(db_session):
+    from app.models.customer import Customer
+    # 1. Setup Tenant
+    tenant = DistributorTenant(name="Vikas Sales Corp")
+    db_session.add(tenant)
+    db_session.commit()
+
+    tenant_context.set(tenant.id)
+
+    # 2. Setup Whitelisted Customer
+    customer = Customer(
+        retailer_name="Debtor Shop",
+        customer_id="C-DEBTOR-1",
+        address_text="Mumbai",
+        gstin="27BBBBB2222B2Z2",
+        tax_group="GST",
+        payment_terms="Net 30",
+        credit_limit=100000.0,
+        outstanding_balance=0.0,
+        phone_number="+919876543210"
+    )
+    db_session.add(customer)
+    db_session.commit()
+
+    service = IngestionService()
+    
+    # 3. Call ingest_message with obvious non-order phrases
+    # Short messages (< 5 chars) like "ok" and "👍" are caught by Layer 3 (message_too_short).
+    # Messages >= 5 chars like "thanks", "hello", "baad mein" are caught by our pre-filter (non_order_intent).
+    test_cases = [
+        ("ok", "message_too_short"),
+        ("👍", "message_too_short"),
+        ("thanks", "non_order_intent"),
+        ("hello", "non_order_intent"),
+        ("baad mein", "non_order_intent")
+    ]
+    for msg, expected_reason in test_cases:
+        res = service.ingest_message(
+            db=db_session,
+            tenant_id=tenant.id,
+            sender_phone="+919876543210",
+            message_text=msg
+        )
+        assert res["status"] == "ignored"
+        assert res["reason"] == expected_reason
+
+

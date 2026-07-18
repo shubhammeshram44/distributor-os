@@ -1,10 +1,9 @@
 import uuid
 from sqlalchemy import func
 from sqlalchemy.orm import Session
-from app.database import tenant_context
+from app.database import tenant_context, with_db_retry
 from app.models.payment import Payment, PaymentInvoiceLink
 from app.models.customer import Customer
-from app.models.ledger import CustomerLedger
 from app.models.invoice import Invoice
 
 def allocate_payment_fifo(db: Session, customer_id: uuid.UUID, payment_id: uuid.UUID, total_amount: float, tenant_id: uuid.UUID):
@@ -56,6 +55,7 @@ def allocate_payment_fifo(db: Session, customer_id: uuid.UUID, payment_id: uuid.
         )
         db.add(link)
 
+@with_db_retry
 def reconcile_payments_and_invoices(db: Session, tenant_id: uuid.UUID, customer_id: uuid.UUID | None = None):
     """
     Event-driven centralized payment status reconciler.
@@ -83,10 +83,12 @@ def reconcile_payments_and_invoices(db: Session, tenant_id: uuid.UUID, customer_
                 invoice = Invoice(
                     tenant_id=tenant_id,
                     order_id=order.id,
-                    gstin=customer.gstin if (customer and customer.gstin) else "29AAAAA1111A1Z1",
+                    gstin=customer.gstin if (customer and customer.gstin) else "PENDING",
                     total_amount=amount_sum,
-                    irn_status="Cleared",
-                    qr_code_status="Generated",
+                    # No real IRP integration exists yet — do not claim a
+                    # government e-invoice was actually cleared/generated.
+                    irn_status="NOT_APPLICABLE",
+                    qr_code_status="NOT_APPLICABLE",
                     customer_id=order.customer_id,
                     payment_status="UNPAID",
                     amount_paid=0.0,
@@ -139,13 +141,15 @@ def reconcile_payments_and_invoices(db: Session, tenant_id: uuid.UUID, customer_
 
     db.commit()
 
+@with_db_retry
 def process_payment(
     db: Session,
     tenant_id: uuid.UUID,
     customer_id: uuid.UUID,
     amount: float,
     method: str,
-    reference_number: str | None = None
+    reference_number: str | None = None,
+    preferred_invoice_id: uuid.UUID | None = None  # NEW
 ) -> Payment:
     """
     Core handler to process a customer payment, update their outstanding balance,
@@ -170,26 +174,55 @@ def process_payment(
         db.add(payment)
         db.flush()
 
-        # 2. Log Credit in CustomerLedger
+        # 2. Log CREDIT in CustomerLedger and recompute outstanding_balance atomically.
+        # record_transaction writes the ledger entry then recomputes from full ledger,
+        # preventing balance/ledger sync drift.
+        from app.services.ledger_service import record_transaction
         ledger_ref = reference_number or f"PAY-{str(payment.id)[:8].upper()}"
-        ledger_entry = CustomerLedger(
-            id=uuid.uuid4(),
+        record_transaction(
+            db=db,
             tenant_id=tenant_id,
             customer_id=customer_id,
             type="CREDIT",
             amount=amount,
-            reference_id=ledger_ref
+            reference_id=ledger_ref,
+            description=f"Payment received via {method}"
         )
-        db.add(ledger_entry)
 
-        # 3. Decrement Customer Outstanding Balance
-        customer.outstanding_balance = float(customer.outstanding_balance) - amount
-        
-        db.flush()
+        # ── PREFERRED INVOICE ALLOCATION ──
+        amount_remaining = amount
 
-        # Centralized Reconciler handles FIFO allocation and status updates
-        reconcile_payments_and_invoices(db, tenant_id, customer_id)
+        # If a preferred invoice is specified, pay it first
+        if preferred_invoice_id:
+            preferred_invoice = db.get(Invoice, preferred_invoice_id)
+            if preferred_invoice and preferred_invoice.payment_status not in ("PAID",):
+                invoice_total = float(preferred_invoice.total_amount)
+                invoice_paid = float(preferred_invoice.amount_paid or 0)
+                amount_due = invoice_total - invoice_paid
+                if amount_due > 0:
+                    allocated = min(amount_remaining, amount_due)
+                    preferred_invoice.amount_paid = invoice_paid + allocated
+                    preferred_invoice.payment_status = "PAID" if preferred_invoice.amount_paid >= invoice_total else "PARTIALLY_PAID"
+                    amount_remaining -= allocated
+                    db.add(PaymentInvoiceLink(
+                        id=uuid.uuid4(),
+                        tenant_id=tenant_id,
+                        payment_id=payment.id,
+                        invoice_id=preferred_invoice.id,
+                        amount_allocated=allocated
+                    ))
 
+        # Apply remainder (or full amount if no preferred invoice) via FIFO
+        if amount_remaining > 0:
+            allocate_payment_fifo(
+                db=db,
+                customer_id=customer_id,
+                payment_id=payment.id,
+                total_amount=amount_remaining,
+                tenant_id=tenant_id
+            )
+
+        db.commit()
         db.refresh(payment)
         return payment
     except Exception as e:

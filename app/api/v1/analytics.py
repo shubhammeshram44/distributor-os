@@ -7,7 +7,6 @@ from app.models.order import Order, OrderLineItem, OrderStateLedger
 from app.models.product import Product
 from app.models.customer import Customer
 from app.services.tenant_service import resolve_tenant_id
-from app.services.demo_service import ensure_demo_data
 
 router = APIRouter(prefix="/analytics", tags=["Analytics"])
 
@@ -17,7 +16,6 @@ def get_sales_analytics(
     db: Session = Depends(get_db),
     resolved_tenant_id: uuid.UUID = Depends(resolve_tenant_id)
 ):
-    ensure_demo_data(db, resolved_tenant_id)
     tenant_context.set(resolved_tenant_id)
 
     # 1. Total orders count
@@ -108,7 +106,6 @@ def get_revenue_analytics(
     db: Session = Depends(get_db),
     resolved_tenant_id: uuid.UUID = Depends(resolve_tenant_id)
 ):
-    ensure_demo_data(db, resolved_tenant_id)
     tenant_context.set(resolved_tenant_id)
 
     # 1. Total gross revenue sum

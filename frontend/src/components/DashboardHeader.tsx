@@ -1,8 +1,17 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useRef, useCallback, useEffect } from "react";
 import Link from "next/link";
-import { Search, MessageSquare, ChevronDown, LogOut, HelpCircle, Globe } from "lucide-react";
+import { Search, MessageSquare, ChevronDown, LogOut, HelpCircle, Globe, X } from "lucide-react";
+import { useRouter } from "next/navigation";
+
+interface SearchResult {
+  type: "order" | "customer" | "product";
+  id: string;
+  label: string;
+  sublabel?: string;
+  href: string;
+}
 
 interface DashboardHeaderProps {
   activeTenantId?: string;
@@ -20,47 +29,98 @@ export default function DashboardHeader({
   onTenantChange
 }: DashboardHeaderProps) {
 
+  const router = useRouter();
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+  const tenantId = activeTenantId || (typeof window !== "undefined" ? localStorage.getItem("tenant_id") : "");
+
+  const runSearch = useCallback(async (q: string) => {
+    if (!q.trim() || !tenantId) { setSearchResults([]); return; }
+    setSearchLoading(true);
+    try {
+      const [ordersRes, customersRes, productsRes] = await Promise.allSettled([
+        fetch(`${apiBase}/api/v1/orders?tenant_id=${tenantId}&search=${encodeURIComponent(q)}&limit=4`, { credentials: "include" }),
+        fetch(`${apiBase}/api/v1/customers?tenant_id=${tenantId}&search=${encodeURIComponent(q)}&limit=4`, { credentials: "include" }),
+        fetch(`${apiBase}/api/v1/products?tenant_id=${tenantId}&search=${encodeURIComponent(q)}&limit=4`, { credentials: "include" }),
+      ]);
+
+      const results: SearchResult[] = [];
+
+      if (ordersRes.status === "fulfilled" && ordersRes.value.ok) {
+        const d = await ordersRes.value.json();
+        (d.items || []).forEach((o: any) => results.push({ type: "order", id: o.id, label: o.order_id, sublabel: `${o.customer} · ₹${o.amount?.toFixed(0)}`, href: `/dashboard/orders` }));
+      }
+      if (customersRes.status === "fulfilled" && customersRes.value.ok) {
+        const d = await customersRes.value.json();
+        (d.items || []).forEach((c: any) => results.push({ type: "customer", id: c.id, label: c.retailer_name, sublabel: c.phone, href: `/dashboard/customers` }));
+      }
+      if (productsRes.status === "fulfilled" && productsRes.value.ok) {
+        const d = await productsRes.value.json();
+        (d.items || []).forEach((p: any) => results.push({ type: "product", id: p.id, label: p.sku_id, sublabel: `${p.brand} ${p.category}`, href: `/dashboard/products` }));
+      }
+
+      setSearchResults(results);
+    } catch {
+      setSearchResults([]);
+    } finally {
+      setSearchLoading(false);
+    }
+  }, [tenantId, apiBase]);
+
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setSearchQuery(val);
+    setSearchOpen(true);
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    if (!val.trim()) { setSearchResults([]); return; }
+    searchDebounceRef.current = setTimeout(() => runSearch(val), 400);
+  };
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (!(e.target as Element).closest("[data-search-container]")) {
+        setSearchOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const typeLabel: Record<string, string> = { order: "Order", customer: "Customer", product: "Product" };
+  const typeColor: Record<string, string> = {
+    order: "bg-blue-50 text-blue-700",
+    customer: "bg-emerald-50 text-emerald-700",
+    product: "bg-purple-50 text-purple-700",
+  };
 
   const handleLogout = async () => {
-    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
     const token = localStorage.getItem("accessToken");
-
     try {
-      // Notify backend server to discard cross-site session cookies
       await fetch(`${apiBase}/api/v1/auth/logout`, {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "Accept": "application/json",
-          "Content-Type": "application/json",
-          ...(token ? { "Authorization": `Bearer ${token}` } : {})
-        }
+        method: "POST", credentials: "include",
+        headers: { "Accept": "application/json", "Content-Type": "application/json", ...(token ? { "Authorization": `Bearer ${token}` } : {}) }
       });
-    } catch (err) {
-      console.error("Server-side session teardown log incomplete:", err);
-    }
-
-    // Explicitly purge all local caching keys from client storage
+    } catch (err) { console.error("Logout request failed:", err); }
     localStorage.clear();
-    
-    // Clear cookie fallback via explicit window location assignment
     window.location.href = "/auth";
   };
-  // Use the parent-provided userProfile directly; no redundant /auth/me fetch
-  // The parent dashboard page already handles authentication and 401 redirects
+
   const displayProfile = userProfile || (() => {
-    // Fallback: construct a minimal profile from localStorage for sub-pages
     if (typeof window !== "undefined") {
-      const storedName = localStorage.getItem("tenant_name");
-      const storedFullName = localStorage.getItem("userFullName");
-      const storedRole = localStorage.getItem("userRole");
       const storedTenantId = localStorage.getItem("tenant_id");
       if (storedTenantId) {
         return {
-          full_name: storedFullName || "",
-          role: storedRole || "",
-          tenant: { id: storedTenantId, name: storedName || "My Workspace" }
+          full_name: localStorage.getItem("userFullName") || "",
+          role: localStorage.getItem("userRole") || "",
+          tenant: { id: storedTenantId, name: localStorage.getItem("tenant_name") || "My Workspace" }
         };
       }
     }
@@ -69,118 +129,129 @@ export default function DashboardHeader({
 
   return (
     <header className="h-16 bg-white border-b border-dashboard-border flex items-center justify-between px-8 fixed top-0 right-0 left-64 z-10 shadow-sm">
-      {/* Search Input */}
-      <div className="flex items-center gap-4 flex-1 max-w-lg">
+      {/* Search Input with Dropdown */}
+      <div className="flex items-center gap-4 flex-1 max-w-lg" data-search-container>
         <div className="relative w-full">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input
+            ref={searchInputRef}
             type="text"
             placeholder="Search orders, customers, products..."
-            className="w-full pl-10 pr-4 py-2 border border-dashboard-border rounded-lg text-sm bg-slate-50 focus:outline-none focus:ring-1 focus:ring-brand-blue focus:bg-white transition-all text-slate-700"
+            value={searchQuery}
+            onChange={handleSearchChange}
+            onFocus={() => { if (searchQuery) setSearchOpen(true); }}
+            className="w-full pl-10 pr-8 py-2 border border-dashboard-border rounded-lg text-sm bg-slate-50 focus:outline-none focus:ring-1 focus:ring-brand-blue focus:bg-white transition-all text-slate-700"
+            aria-label="Global search"
+            aria-autocomplete="list"
+            aria-expanded={searchOpen && searchResults.length > 0}
           />
+          {searchQuery && (
+            <button
+              onClick={() => { setSearchQuery(""); setSearchResults([]); setSearchOpen(false); searchInputRef.current?.focus(); }}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+              aria-label="Clear search"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+
+          {/* Search Results Dropdown */}
+          {searchOpen && searchQuery && (
+            <div className="absolute top-full mt-1.5 left-0 right-0 bg-white border border-dashboard-border rounded-xl shadow-xl z-50 overflow-hidden">
+              {searchLoading ? (
+                <div className="px-4 py-3 text-xs text-slate-500 font-medium animate-pulse">Searching...</div>
+              ) : searchResults.length === 0 ? (
+                <div className="px-4 py-3 text-xs text-slate-400 font-medium">No results for &ldquo;{searchQuery}&rdquo;</div>
+              ) : (
+                <ul role="listbox">
+                  {searchResults.map((r) => (
+                    <li key={`${r.type}-${r.id}`} role="option">
+                      <Link
+                        href={r.href}
+                        onClick={() => { setSearchQuery(""); setSearchOpen(false); }}
+                        className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 transition-all"
+                      >
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${typeColor[r.type]}`}>
+                          {typeLabel[r.type]}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold text-slate-800 truncate">{r.label}</p>
+                          {r.sublabel && <p className="text-[10px] text-slate-400 truncate">{r.sublabel}</p>}
+                        </div>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
       {/* Right Actions & User Area */}
       <div className="flex items-center gap-6">
-        {/* Tenant Switcher dropdown */}
+        {/* Tenant Switcher */}
         <div className="flex items-center gap-2 border-r border-dashboard-border pr-6">
-          <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Tenant:</span>
+          <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Workspace:</span>
           <div className="relative">
             <select
               value={activeTenantId}
-              onChange={(e) => {
-                const val = e.target.value;
-                if (onTenantChange) onTenantChange(val);
-                if (setActiveTenantId) setActiveTenantId(val);
-              }}
-
+              onChange={(e) => { if (onTenantChange) onTenantChange(e.target.value); if (setActiveTenantId) setActiveTenantId(e.target.value); }}
               className="pl-3 pr-8 py-1.5 border border-dashboard-border rounded-lg text-xs font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-brand-blue cursor-pointer bg-white appearance-none"
+              aria-label="Switch workspace"
             >
               {displayProfile?.tenant ? (
-                <option value={displayProfile.tenant.id}>
-                  {displayProfile.tenant.name || "My Workspace"}
-                </option>
+                <option value={displayProfile.tenant.id}>{displayProfile.tenant.name || "My Workspace"}</option>
               ) : (
-                <option value="">Loading Workspace Account...</option>
+                <option value="">Loading...</option>
               )}
             </select>
             <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
           </div>
         </div>
 
-        {/* Notifications & Badges */}
+        {/* Notifications */}
         <div className="flex items-center gap-4">
-
-
-          {/* WhatsApp Webhook alert count */}
-          <Link href="/dashboard/messages" className="relative p-2 text-slate-500 hover:bg-slate-50 rounded-full transition-all cursor-pointer">
+          <Link href="/dashboard/messages" className="relative p-2 text-slate-500 hover:bg-slate-50 rounded-full transition-all" aria-label="Messages">
             <MessageSquare className="w-5 h-5 text-emerald-600" />
-            <span className="absolute top-0 right-0 w-4.5 h-4.5 bg-emerald-500 text-[9px] font-bold text-white rounded-full flex items-center justify-center border-2 border-white">
-              8
-            </span>
           </Link>
-
-
         </div>
 
-        {/* User Profile with Dropdown */}
+        {/* User Profile Dropdown */}
         <div className="relative">
-          <button 
+          <button
             onClick={() => setIsProfileOpen(!isProfileOpen)}
-            className="flex items-center gap-3 pl-2 border-l border-dashboard-border hover:opacity-80 transition-all cursor-pointer focus:outline-none bg-transparent border-none"
-            aria-label="User Profile Menu"
+            className="flex items-center gap-3 pl-2 border-l border-dashboard-border hover:opacity-80 transition-all focus:outline-none bg-transparent border-none"
+            aria-label="User profile menu"
+            aria-expanded={isProfileOpen}
+            aria-haspopup="true"
           >
-            <div className="text-right">
-              <h5 className="font-semibold text-sm text-slate-800">
-                {displayProfile?.full_name ? `Hi, ${displayProfile.full_name}` : ""}
-              </h5>
-              <p className="text-[10px] text-slate-400 font-medium">
-                {displayProfile?.role || ""}
-              </p>
+            <div className="text-right hidden sm:block">
+              <h5 className="font-semibold text-sm text-slate-800">{displayProfile?.full_name ? `Hi, ${displayProfile.full_name}` : ""}</h5>
+              <p className="text-[10px] text-slate-400 font-medium">{displayProfile?.role || ""}</p>
             </div>
-            <div className="w-9 h-9 rounded-full bg-slate-200 overflow-hidden border border-slate-300 shadow-sm flex items-center justify-center text-xs font-bold text-slate-700">
-              {displayProfile?.full_name ? displayProfile.full_name.charAt(0).toUpperCase() : ""}
+            <div className="w-9 h-9 rounded-full bg-slate-200 border border-slate-300 shadow-sm flex items-center justify-center text-xs font-bold text-slate-700 flex-shrink-0">
+              {displayProfile?.full_name ? displayProfile.full_name.charAt(0).toUpperCase() : "U"}
             </div>
             <ChevronDown className="w-4 h-4 text-slate-400" />
           </button>
 
           {isProfileOpen && (
-            <div className="absolute right-0 mt-2 w-52 bg-white border border-dashboard-border rounded-xl shadow-xl py-2 z-50 animate-fade-in">
-              <div className="px-4 py-2 border-b border-dashboard-border mb-1 text-left">
+            <div className="absolute right-0 mt-2 w-52 bg-white border border-dashboard-border rounded-xl shadow-xl py-2 z-50">
+              <div className="px-4 py-2 border-b border-dashboard-border mb-1">
                 <p className="text-xs font-bold text-slate-800 truncate">{displayProfile?.full_name}</p>
                 <p className="text-[10px] font-semibold text-slate-400 truncate">{displayProfile?.role}</p>
               </div>
-
-              {/* Need help */}
-              <button 
-                onClick={() => {
-                  alert("Support Contact: support@distributoros.com");
-                  setIsProfileOpen(false);
-                }}
-                className="w-full flex items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-all text-left cursor-pointer border-none bg-transparent"
-              >
+              <Link href="mailto:support@distributoros.com" className="w-full flex items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-all" onClick={() => setIsProfileOpen(false)}>
                 <HelpCircle className="w-4 h-4 text-slate-400" />
                 <span>Need help?</span>
-              </button>
-
-              {/* View marketing site */}
-              <Link 
-                href="/"
-                onClick={() => setIsProfileOpen(false)}
-                className="w-full flex items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-all text-left block"
-              >
+              </Link>
+              <Link href="/" className="w-full flex items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-all block" onClick={() => setIsProfileOpen(false)}>
                 <Globe className="w-4 h-4 text-slate-400" />
                 <span>View marketing site</span>
               </Link>
-
               <hr className="border-dashboard-border my-1" />
-
-              {/* Log out */}
-              <button 
-                onClick={handleLogout}
-                className="w-full flex items-center gap-2.5 px-4 py-2.5 text-xs font-bold text-rose-600 hover:bg-rose-50 hover:text-rose-700 transition-all text-left cursor-pointer border-none bg-transparent"
-              >
+              <button onClick={handleLogout} className="w-full flex items-center gap-2.5 px-4 py-2.5 text-xs font-bold text-rose-600 hover:bg-rose-50 transition-all text-left bg-transparent border-none">
                 <LogOut className="w-4 h-4 text-rose-500" />
                 <span>Log out</span>
               </button>
@@ -191,3 +262,4 @@ export default function DashboardHeader({
     </header>
   );
 }
+

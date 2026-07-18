@@ -1,23 +1,86 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Sidebar from "@/components/Sidebar";
 import DashboardHeader from "@/components/DashboardHeader";
-import MetricCards from "@/components/MetricCards";
+// MetricCards inlined locally to format change percentages to 1 decimal place
 import RecentOrders from "@/components/RecentOrders";
 import CollectionsDonut from "@/components/CollectionsDonut";
-import LiveDeliveries from "@/components/LiveDeliveries";
+// LiveDeliveries import removed 2026-06-28 — replaced by DemandGapCard in the bottom grid.
+// The component file (LiveDeliveries.tsx) is preserved on disk for future use.
 import InventorySummary from "@/components/InventorySummary";
-import ActivityFeed from "@/components/ActivityFeed";
-import { useDashboardData } from "@/hooks/useDashboardData";
-import { ChevronDown, SlidersHorizontal, RefreshCw, CheckCircle2, AlertCircle, X } from "lucide-react";
-import WhatsAppSimulator from "@/components/WhatsAppSimulator";
+import DemandGapCard from "@/components/DemandGapCard";
+// ActivityFeed replaced with simple link (see bottom of dashboard layout)
+import OnboardingChecklist from "@/components/OnboardingChecklist";
+import { useDashboardData, DashboardMetrics } from "@/hooks/useDashboardData";
+import ErrorBanner from "@/components/ui/ErrorBanner";
+import { formatDateTime } from "@/utils/datetime";
+import { ChevronDown, SlidersHorizontal, RefreshCw, CheckCircle2, AlertCircle, X, TrendingUp, TrendingDown, IndianRupee, ShoppingBag, BarChart, CreditCard } from "lucide-react";
+
 
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState("Dashboard");
   const [tenantId, setTenantId] = useState("");
   const [userProfile, setUserProfile] = useState<any>(null);
   const [isHydrating, setIsHydrating] = useState(true);
+  const [waStatus, setWaStatus] = useState<{
+    whatsapp_connected: boolean;
+    has_whatsapp: boolean;
+    disconnected_at: string | null;
+    disconnect_reason: string | null;
+  } | null>(null);
+  const [waBannerDismissed, setWaBannerDismissed] = useState(false);
+  const [creditRisk, setCreditRisk] = useState<{
+    alerts: Array<{
+        customer_id: string;
+        customer_name: string;
+        outstanding: number;
+        credit_utilisation_pct: number;
+        overdue_days: number;
+        risk_level: "high_risk" | "caution";
+    }>;
+    total_at_risk_count: number;
+    total_at_risk_amount: number;
+  } | null>(null);
+
+  const [decisionFocus, setDecisionFocus] = useState<{
+    decisions: Array<{
+      type: string;
+      priority: number;
+      icon: string;
+      headline: string;
+      detail: string;
+      amount_at_stake: number;
+      action_label: string;
+      action_url: string;
+    }>;
+    all_clear: boolean;
+    generated_at: string;
+  } | null>(null);
+  const [decisionLoading, setDecisionLoading] = useState(true);
+
+  const [healthScore, setHealthScore] = useState<{
+    has_sufficient_data: boolean;
+    score: number;
+    band: string;
+    band_label: string;
+    band_color: string;
+    trend: string;
+    trend_points: number;
+    primary_insight: string;
+    signals: {
+      collections: { score: number; max: number; status: string; total_outstanding: number; overdue_30d: number; overdue_ratio_pct: number; };
+      sales: { score: number; max: number; growth_pct: number; status: string; this_week_revenue: number; last_week_revenue: number; };
+      recovery: { score: number; max: number; avg_days_to_pay: number; status: string; };
+      inventory: { score: number; max: number; stockout_count: number; total_products: number; status: string; };
+      fulfillment: { score: number; max: number; fulfillment_rate_pct: number; status: string; };
+    };
+    confirmed_orders?: number;
+    days_of_data?: number;
+  } | null>(null);
+  const [healthLoading, setHealthLoading] = useState(true);
+  const [healthExpanded, setHealthExpanded] = useState(false);
+
 
   // Sync profile and tenant from backend / localStorage
   useEffect(() => {
@@ -54,7 +117,7 @@ export default function DashboardPage() {
           if (profileData.tenant?.name) {
             localStorage.setItem("tenant_name", profileData.tenant.name);
           }
-          
+
           if (!storedTenant && profileData.tenant?.id) {
             setTenantId(profileData.tenant.id);
             localStorage.setItem("tenant_id", profileData.tenant.id);
@@ -140,9 +203,96 @@ export default function DashboardPage() {
     loadingDetails,
     fetchOrderDetails,
     closeDetails,
-    refreshAll,
+    refreshAll: originalRefreshAll,
     error
   } = useDashboardData(isHydrating ? "" : tenantId, startDate, endDate);
+
+  const fetchCreditRisk = useCallback(async () => {
+    if (!tenantId) return;
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+    try {
+      const creditRes = await fetch(
+        `${apiBase}/api/v1/dashboard/credit-risk-alerts?tenant_id=${tenantId}`
+      );
+      const creditData = await creditRes.json();
+      setCreditRisk(creditData);
+    } catch (e) {
+      console.error("Failed to fetch credit risk alerts:", e);
+    }
+  }, [tenantId]);
+
+  useEffect(() => {
+    fetchCreditRisk();
+  }, [fetchCreditRisk]);
+
+  const fetchDecisionFocus = useCallback(async () => {
+    if (!tenantId) return;
+    setDecisionLoading(true);
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+    try {
+      const decisionRes = await fetch(
+        `${apiBase}/api/v1/dashboard/decision-focus?tenant_id=${tenantId}`
+      );
+      const decisionData = await decisionRes.json();
+      setDecisionFocus(decisionData);
+    } catch (e) {
+      console.error("Failed to fetch decision focus:", e);
+    } finally {
+      setDecisionLoading(false);
+    }
+  }, [tenantId]);
+
+  useEffect(() => {
+    fetchDecisionFocus();
+  }, [fetchDecisionFocus]);
+
+  const fetchHealthScore = useCallback(async () => {
+    if (!tenantId) return;
+    setHealthLoading(true);
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+    try {
+      const healthRes = await fetch(
+        `${apiBase}/api/v1/dashboard/business-health-score?tenant_id=${tenantId}`
+      );
+      const healthData = await healthRes.json();
+      setHealthScore(healthData);
+    } catch (e) {
+      console.error("Failed to fetch business health score:", e);
+    } finally {
+      setHealthLoading(false);
+    }
+  }, [tenantId]);
+
+  useEffect(() => {
+    fetchHealthScore();
+  }, [fetchHealthScore]);
+
+  const refreshAll = () => {
+    originalRefreshAll();
+    fetchCreditRisk();
+    fetchDecisionFocus();
+    fetchHealthScore();
+  };
+
+  // Poll connection status every 60 seconds
+  useEffect(() => {
+    if (!tenantId) return;
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+    const check = async () => {
+      try {
+        const res = await fetch(
+          `${apiBase}/api/v1/tenant/connection-status?tenant_id=${tenantId}`
+        );
+        const data = await res.json();
+        setWaStatus(data);
+        // Reset dismissed state if reconnected
+        if (data.whatsapp_connected) setWaBannerDismissed(false);
+      } catch (e) {}
+    };
+    check();
+    const interval = setInterval(check, 60000);
+    return () => clearInterval(interval);
+  }, [tenantId]);
 
   if (!tenantId || tenantId === "") {
     return (
@@ -186,13 +336,13 @@ export default function DashboardPage() {
                   <h1 className="text-xl font-bold text-slate-800 tracking-tight">Dashboard</h1>
                   <p className="text-xs text-slate-400 font-semibold mt-0.5">Real-time operational workflow management</p>
                 </div>
-                
+
                 {/* Date Picker & Action Controls */}
                 <div className="flex items-center gap-3">
                   {/* Unified Timeframe Selector */}
                   <div className="flex items-center gap-2">
                     <label className="text-xs font-semibold text-slate-500">Timeframe:</label>
-                    <select 
+                    <select
                       value={timeframe}
                       onChange={(e) => {
                         setTimeframe(e.target.value);
@@ -250,6 +400,295 @@ export default function DashboardPage() {
                 </div>
               </div>
 
+              {/* API Error Banner */}
+              {error && (
+                <ErrorBanner
+                  message={`Dashboard data could not be loaded: ${error}`}
+                  onRetry={() => refreshAll()}
+                />
+              )}
+
+              {/* WhatsApp Disconnection Banner */}
+              {waStatus && 
+               waStatus.has_whatsapp && 
+               !waStatus.whatsapp_connected && 
+               !waBannerDismissed && (
+                  <div className="mx-6 mt-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                          <span className="text-lg">🔴</span>
+                          <div>
+                              <span className="text-red-700 font-semibold text-sm">
+                                  WhatsApp Disconnected
+                              </span>
+                              <span className="text-red-600 text-xs ml-2">
+                                  Orders are not being received
+                              </span>
+                          </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                          <a
+                              href="/dashboard/settings/integrations"
+                              className="px-3 py-1.5 bg-red-600 text-white text-xs font-semibold rounded-lg hover:bg-red-700"
+                          >
+                              Reconnect Now →
+                          </a>
+                          <button
+                              onClick={() => setWaBannerDismissed(true)}
+                              className="text-red-400 hover:text-red-600 text-lg leading-none"
+                              title="Dismiss"
+                          >
+                              ×
+                          </button>
+                      </div>
+                  </div>
+              )}
+
+              {/* Getting Started checklist — only renders for a brand-new,
+                  unfinished workspace; disappears once dismissed or complete. */}
+              <OnboardingChecklist activeTenantId={tenantId} />
+
+              {/* Business Health Score */}
+              {!healthLoading && healthScore?.has_sufficient_data && (
+                  <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                      <div
+                          className="flex items-center justify-between px-5 py-4 cursor-pointer hover:bg-slate-50"
+                          onClick={() => setHealthExpanded(!healthExpanded)}
+                      >
+                          {/* Score display */}
+                          <div className="flex items-center gap-4">
+                              {/* Circular score */}
+                              <div className={`relative w-14 h-14 flex-shrink-0`}>
+                                  <svg className="w-14 h-14 -rotate-90" viewBox="0 0 56 56">
+                                      <circle cx="28" cy="28" r="24" fill="none" stroke="#e2e8f0" strokeWidth="4"/>
+                                      <circle
+                                          cx="28" cy="28" r="24"
+                                          fill="none"
+                                          stroke={
+                                              healthScore.band === "excellent" ? "#10b981" :
+                                              healthScore.band === "good" ? "#f59e0b" :
+                                              healthScore.band === "attention" ? "#f97316" : "#ef4444"
+                                          }
+                                          strokeWidth="4"
+                                          strokeDasharray={`${(healthScore.score / 100) * 150.8} 150.8`}
+                                          strokeLinecap="round"
+                                      />
+                                  </svg>
+                                  <div className="absolute inset-0 flex items-center justify-center">
+                                      <span className="text-sm font-bold text-slate-800">
+                                          {healthScore.score}
+                                      </span>
+                                  </div>
+                              </div>
+
+                              {/* Score details */}
+                              <div>
+                                  <div className="flex items-center gap-2">
+                                      <span className="text-sm font-bold text-slate-800">
+                                          Business Health
+                                      </span>
+                                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                                          healthScore.band === "excellent" ? "bg-emerald-50 text-emerald-700" :
+                                          healthScore.band === "good" ? "bg-amber-50 text-amber-700" :
+                                          healthScore.band === "attention" ? "bg-orange-50 text-orange-700" :
+                                          "bg-red-50 text-red-700"
+                                      }`}>
+                                          {healthScore.band_label}
+                                      </span>
+                                      {/* Trend */}
+                                      <span className={`text-xs font-medium ${
+                                          healthScore.trend === "up" ? "text-emerald-600" :
+                                          healthScore.trend === "down" ? "text-red-500" :
+                                          "text-slate-400"
+                                      }`}>
+                                          {healthScore.trend === "up" ? "↑" :
+                                           healthScore.trend === "down" ? "↓" : "→"}
+                                      </span>
+                                  </div>
+                                  <p className="text-xs text-slate-500 mt-0.5">
+                                      {healthScore.primary_insight}
+                                  </p>
+                              </div>
+                          </div>
+
+                          {/* Signal dots + expand */}
+                          <div className="flex items-center gap-3">
+                              <div className="flex gap-1">
+                                  {Object.values(healthScore.signals).map((signal, i) => (
+                                      <div
+                                          key={i}
+                                          className={`w-2 h-2 rounded-full ${
+                                              signal.status === "good" ? "bg-emerald-400" :
+                                              signal.status === "attention" ? "bg-amber-400" :
+                                              "bg-red-400"
+                                          }`}
+                                      />
+                                  ))}
+                              </div>
+                              <span className="text-slate-300 text-sm">
+                                  {healthExpanded ? "▲" : "▼"}
+                              </span>
+                          </div>
+                      </div>
+
+                      {/* Expanded signal details */}
+                      {healthExpanded && (
+                          <div className="border-t border-slate-100 px-5 py-4">
+                              <div className="space-y-3">
+                                  {[
+                                      {
+                                          key: "collections",
+                                          label: "Collections",
+                                          detail: `${healthScore.signals.collections.score}/${healthScore.signals.collections.max} pts`
+                                      },
+                                      {
+                                          key: "sales",
+                                          label: "Sales Momentum",
+                                          detail: `${healthScore.signals.sales.growth_pct > 0 ? "+" : ""}${healthScore.signals.sales.growth_pct}% vs last week`
+                                      },
+                                      {
+                                          key: "recovery",
+                                          label: "Payment Recovery",
+                                          detail: `Avg ${healthScore.signals.recovery.avg_days_to_pay} days to collect`
+                                      },
+                                      {
+                                          key: "inventory",
+                                          label: "Inventory",
+                                          detail: `${healthScore.signals.inventory.stockout_count} products out of stock`
+                                      },
+                                      {
+                                          key: "fulfillment",
+                                          label: "Order Fulfillment",
+                                          detail: `${healthScore.signals.fulfillment.fulfillment_rate_pct}% fully fulfilled`
+                                      }
+                                  ].map(({ key, label, detail }) => {
+                                      const signal = healthScore.signals[key as keyof typeof healthScore.signals];
+                                      return (
+                                          <div key={key} className="flex items-center gap-3">
+                                              <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                                                  signal.status === "good" ? "bg-emerald-400" :
+                                                  signal.status === "attention" ? "bg-amber-400" :
+                                                  "bg-red-400"
+                                              }`} />
+                                              <div className="flex-1">
+                                                  <div className="flex items-center justify-between">
+                                                      <span className="text-xs font-medium text-slate-700">{label}</span>
+                                                      <span className="text-xs text-slate-400">{detail}</span>
+                                                  </div>
+                                                  <div className="mt-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                                      <div
+                                                          className={`h-full rounded-full ${
+                                                              signal.status === "good" ? "bg-emerald-400" :
+                                                              signal.status === "attention" ? "bg-amber-400" :
+                                                              "bg-red-400"
+                                                          }`}
+                                                          style={{
+                                                              width: `${(signal.score / signal.max) * 100}%`
+                                                          }}
+                                                      />
+                                                  </div>
+                                              </div>
+                                          </div>
+                                      );
+                                  })}
+                              </div>
+                          </div>
+                      )}
+                  </div>
+              )}
+
+              {/* Not enough data state */}
+              {!healthLoading && healthScore && !healthScore.has_sufficient_data && (
+                  <div className="bg-slate-50 rounded-xl border border-slate-200 px-5 py-4 flex items-center gap-3">
+                      <span className="text-xl">📊</span>
+                      <div>
+                          <p className="text-xs font-semibold text-slate-600">Business Health Score</p>
+                          <p className="text-xs text-slate-400 mt-0.5">
+                              Available after 7 days and 5 confirmed orders.
+                              {healthScore.confirmed_orders !== undefined && healthScore.confirmed_orders > 0 && ` ${healthScore.confirmed_orders}/5 orders so far.`}
+                          </p>
+                      </div>
+                  </div>
+              )}
+
+              {/* ⚡ Decision Focus Card */}
+              <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                {/* Header */}
+                <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+                  <div>
+                    <h2 className="text-sm font-bold text-slate-800">
+                      ⚡ Focus for the Next 15 Minutes
+                    </h2>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Based on your current orders, collections, and inventory
+                    </p>
+                  </div>
+                  {decisionFocus?.generated_at && (
+                    <span className="text-xs text-slate-400">
+                      Updated {formatDateTime(decisionFocus.generated_at, "relative")}
+                    </span>
+                  )}
+                </div>
+
+                {/* Loading skeleton */}
+                {decisionLoading && (
+                  <div className="p-5 space-y-3">
+                    {[1, 2, 3].map(i => (
+                      <div key={i} className="h-16 bg-slate-100 rounded-lg animate-pulse" />
+                    ))}
+                  </div>
+                )}
+
+                {/* All clear state */}
+                {!decisionLoading && decisionFocus?.all_clear && (
+                  <div className="p-8 text-center">
+                    <div className="text-3xl mb-2">✅</div>
+                    <p className="text-sm font-semibold text-slate-700">All caught up!</p>
+                    <p className="text-xs text-slate-400 mt-1">
+                      No pending actions right now. Your business is running smoothly.
+                    </p>
+                  </div>
+                )}
+
+                {/* Decision items */}
+                {!decisionLoading && decisionFocus && !decisionFocus.all_clear && (
+                  <div className="divide-y divide-slate-50">
+                    {decisionFocus.decisions.map((decision, idx) => (
+                      <div
+                        key={decision.type}
+                        className={`flex items-start gap-4 px-5 py-4 hover:bg-slate-50 transition-colors ${
+                          idx === 0 ? "bg-red-50/30" : ""
+                        }`}
+                      >
+                        {/* Icon */}
+                        <span className="text-xl flex-shrink-0 mt-0.5">{decision.icon}</span>
+
+                        {/* Content */}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-slate-800">
+                            {decision.headline}
+                          </p>
+                          <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
+                            {decision.detail}
+                          </p>
+                        </div>
+
+                        {/* Action button */}
+                        <a
+                          href={decision.action_url}
+                          className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                            idx === 0
+                              ? "bg-red-600 text-white hover:bg-red-700"
+                              : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                          }`}
+                        >
+                          {decision.action_label} →
+                        </a>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               {/* A. Core Operational Metrics Row */}
               <MetricCards metrics={metrics} />
 
@@ -277,37 +716,152 @@ export default function DashboardPage() {
                 </div>
 
                 {/* Right Col: Collections Donut Chart (40% width) */}
-                <div className="lg:col-span-2 min-h-[380px]">
+                <div className="lg:col-span-2 flex flex-col gap-4">
                   <CollectionsDonut
                     data={donutData}
                     viewReportHref="/dashboard/collections"
                     overdue60Count={metrics?.overdue_60_count}
                   />
+
+                  {/* Credit Risk Alerts */}
+                  {creditRisk && creditRisk.alerts.length > 0 && (
+                      <div className="bg-white rounded-xl border border-slate-200 p-5">
+                          {/* Header */}
+                          <div className="flex items-center justify-between mb-4">
+                              <div>
+                                  <h3 className="text-sm font-semibold text-slate-800">
+                                      ⚠️ Credit Risk Alerts
+                                  </h3>
+                                  <p className="text-xs text-slate-500 mt-0.5">
+                                      {creditRisk.total_at_risk_count} customers · 
+                                      ₹{creditRisk.total_at_risk_amount.toLocaleString("en-IN")} at risk
+                                  </p>
+                              </div>
+                              <a href="/dashboard/customers" 
+                                 className="text-xs text-emerald-600 font-medium hover:underline">
+                                  View All →
+                              </a>
+                          </div>
+
+                          {/* Risk summary bar */}
+                          <div className="flex gap-3 mb-4 p-3 bg-slate-50 rounded-lg">
+                              <div className="flex-1 text-center">
+                                  <div className="text-lg font-bold text-red-600">
+                                      {creditRisk.alerts.filter(a => a.risk_level === "high_risk").length}
+                                  </div>
+                                  <div className="text-xs text-slate-500">🔴 High Risk</div>
+                              </div>
+                              <div className="w-px bg-slate-200" />
+                              <div className="flex-1 text-center">
+                                  <div className="text-lg font-bold text-amber-500">
+                                      {creditRisk.alerts.filter(a => a.risk_level === "caution").length}
+                                  </div>
+                                  <div className="text-xs text-slate-500">🟡 Caution</div>
+                              </div>
+                              <div className="w-px bg-slate-200" />
+                              <div className="flex-1 text-center">
+                                  <div className="text-lg font-bold text-slate-700">
+                                      ₹{(creditRisk.total_at_risk_amount / 1000).toFixed(1)}K
+                                  </div>
+                                  <div className="text-xs text-slate-500">Total Due</div>
+                              </div>
+                          </div>
+
+                          {/* Customer list */}
+                          <div className="space-y-2">
+                              {creditRisk.alerts.map((alert) => (
+                                  <div 
+                                      key={alert.customer_id}
+                                      className={`flex items-center gap-3 p-3 rounded-lg border-l-4 ${
+                                          alert.risk_level === "high_risk"
+                                              ? "bg-red-50 border-red-400"
+                                              : "bg-amber-50 border-amber-400"
+                                      }`}
+                                  >
+                                      {/* Risk icon */}
+                                      <span className="text-base flex-shrink-0">
+                                          {alert.risk_level === "high_risk" ? "🔴" : "🟡"}
+                                      </span>
+
+                                      {/* Customer info */}
+                                      <div className="flex-1 min-w-0">
+                                          <p className="text-xs font-semibold text-slate-800 truncate">
+                                              {alert.customer_name}
+                                          </p>
+                                          
+                                          {/* Overdue bar */}
+                                          <div className="flex items-center gap-2 mt-1">
+                                              <div className="flex-1 bg-slate-200 rounded-full h-1.5">
+                                                  <div 
+                                                      className={`h-1.5 rounded-full ${
+                                                          alert.risk_level === "high_risk" 
+                                                              ? "bg-red-400" 
+                                                              : "bg-amber-400"
+                                                      }`}
+                                                      style={{ 
+                                                          width: `${Math.min(100, (alert.overdue_days / 90) * 100)}%` 
+                                                      }}
+                                                  />
+                                              </div>
+                                              <span className="text-xs text-slate-500 flex-shrink-0">
+                                                  {alert.overdue_days}d overdue
+                                              </span>
+                                          </div>
+                                      </div>
+
+                                      {/* Amount */}
+                                      <div className="text-right flex-shrink-0">
+                                          <p className={`text-xs font-bold ${
+                                              alert.risk_level === "high_risk" 
+                                                  ? "text-red-600" 
+                                                  : "text-amber-600"
+                                          }`}>
+                                              ₹{alert.outstanding.toLocaleString("en-IN")}
+                                          </p>
+                                          <p className="text-xs text-slate-400">
+                                              {alert.credit_utilisation_pct}% used
+                                          </p>
+                                      </div>
+                                  </div>
+                              ))}
+                          </div>
+
+                          {creditRisk.total_at_risk_count > 5 && (
+                              <p className="text-xs text-slate-400 mt-3 text-center">
+                                  +{creditRisk.total_at_risk_count - 5} more customers need attention
+                              </p>
+                          )}
+                      </div>
+                  )}
                 </div>
               </div>
 
-              {/* C. Bottom Operational Grid (Live Map, Stock Summary, Activity Feed) */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* C. Bottom Operational Grid (Demand Gap + Stock Summary) */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="min-h-[300px]">
-                  <LiveDeliveries viewAllHref="/dashboard/shipments" />
+                  {/* DemandGapCard replaces LiveDeliveries (2026-06-28) */}
+                  <DemandGapCard activeTenantId={tenantId} />
                 </div>
                 <div className="min-h-[300px]">
                   <InventorySummary data={metrics || undefined} />
                 </div>
-                <div className="min-h-[300px]">
-                  <ActivityFeed activities={activities} viewAllHref="/dashboard/reports" />
-                </div>
+              </div>
+
+              {/* View recent activity link */}
+              <div className="flex justify-end pt-1">
+                <a
+                  href="/dashboard/reports"
+                  className="text-xs text-slate-400 hover:text-indigo-600 transition-colors"
+                >
+                  View Recent Activity →
+                </a>
               </div>
             </>
           )}
         </main>
       </div>
 
-      {/* WhatsApp Ingestion Live testing simulator */}
-      <WhatsAppSimulator
-        activeTenantId={tenantId}
-        onSuccess={refreshAll}
-      />
+
 
       {/* Sleek Floating Toast Notification */}
       {toast.show && (
@@ -325,7 +879,7 @@ export default function DashboardPage() {
             <p className="text-xs font-bold text-slate-800">{toast.type === "success" ? "Success" : "Error"}</p>
             <p className="text-[11px] text-slate-500 font-semibold mt-0.5 break-words">{toast.message}</p>
           </div>
-          <button 
+          <button
             onClick={() => setToast(prev => ({ ...prev, show: false }))}
             className="text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-50 transition-all shrink-0"
           >
@@ -333,6 +887,132 @@ export default function DashboardPage() {
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+interface MetricCardsProps {
+  metrics: DashboardMetrics | null;
+}
+
+function MetricCards({ metrics }: MetricCardsProps) {
+  // Format numbers to Indian currency system (e.g. ₹ 28,45,600)
+  const formatCurrency = (val: number) => {
+    return new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency: "INR",
+      maximumFractionDigits: 0
+    }).format(val);
+  };
+
+  const formatNumber = (val: number) => {
+    return new Intl.NumberFormat("en-IN").format(val);
+  };
+
+  if (!metrics) {
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {[1, 2, 3, 4].map((i) => (
+          <div key={i} className="bg-white p-6 rounded-xl border border-dashboard-border shadow-sm animate-pulse h-32" />
+        ))}
+      </div>
+    );
+  }
+
+  const cards = [
+    {
+      title: "Total Sales (This Week)",
+      value: formatCurrency(metrics.total_sales),
+      change: metrics.total_sales_change,
+      isPositive: metrics.total_sales_change >= 0,
+      subtext: "vs 14 May – 20 May, 2025",
+      icon: IndianRupee,
+      iconBg: "bg-emerald-50 text-emerald-600",
+      strokeColor: "#10b981",
+      sparklinePath: "M0,25 Q15,5 30,20 T60,10 T95,15 T130,5 T160,18" // green sparkline
+    },
+    {
+      title: "Orders Count",
+      value: formatNumber(metrics.orders_count),
+      change: metrics.orders_count_change,
+      isPositive: metrics.orders_count_change >= 0,
+      subtext: "vs last week",
+      icon: ShoppingBag,
+      iconBg: "bg-blue-50 text-blue-600",
+      strokeColor: "#3b82f6",
+      sparklinePath: "M0,20 Q15,28 30,10 T60,25 T90,5 T120,15 T160,8" // blue sparkline
+    },
+    {
+      title: "Average Order Value",
+      value: formatCurrency(metrics.average_order_value),
+      change: metrics.average_order_value_change,
+      isPositive: metrics.average_order_value_change >= 0,
+      subtext: "vs last week",
+      icon: BarChart,
+      iconBg: "bg-purple-50 text-purple-600",
+      strokeColor: "#8b5cf6",
+      sparklinePath: "M0,28 Q20,15 40,25 T80,10 T120,20 T160,12" // purple sparkline
+    },
+    {
+      title: "Outstanding Collections",
+      value: formatCurrency(metrics.outstanding_collections),
+      change: Math.abs(metrics.outstanding_collections_change),
+      isPositive: metrics.outstanding_collections_change < 0,
+      subtext: "vs last week",
+      icon: CreditCard,
+      iconBg: "bg-orange-50 text-orange-600",
+      strokeColor: "#f97316",
+      sparklinePath: "M0,15 Q20,30 40,10 T80,25 T120,5 T160,20" // orange sparkline
+    }
+  ];
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      {cards.map((metric, i) => {
+        const Icon = metric.icon;
+        return (
+          <div key={i} className="bg-white p-5 rounded-xl border border-dashboard-border shadow-sm flex flex-col justify-between hover:shadow-md transition-all">
+            {/* Top Row */}
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center">
+                {metric.title}
+              </span>
+              <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${metric.iconBg}`}>
+                <Icon className="w-4.5 h-4.5" />
+              </div>
+            </div>
+
+            {/* Value and Trend Indicator */}
+            <div className="mt-3 flex items-baseline gap-2">
+              <h2 className="text-xl font-bold text-slate-800 tracking-tight">{metric.value}</h2>
+              <div className={`flex items-center gap-0.5 text-xs font-bold ${
+                metric.isPositive ? "text-emerald-600" : "text-rose-600"
+              }`}>
+                {metric.isPositive ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
+                <span>{parseFloat(String(metric.change)).toFixed(1)}%</span>
+              </div>
+            </div>
+
+            {/* Bottom Sparkline and Subtext */}
+            <div className="mt-4 flex items-center justify-between">
+              <span className="text-[10px] text-slate-400 font-medium">{metric.subtext}</span>
+              
+              {/* Micro-sparkline SVG */}
+              <div className="w-24 h-8 overflow-hidden">
+                <svg className="w-full h-full" viewBox="0 0 160 30">
+                  <path
+                    d={metric.sparklinePath}
+                    fill="none"
+                    stroke={metric.strokeColor}
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </div>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

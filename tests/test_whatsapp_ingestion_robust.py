@@ -177,8 +177,8 @@ def test_webhook_nested_simulator_ingestion(db_session, setup_test_catalog):
     orders_resp = client.get(f"/api/v1/orders?tenant_id=d3b07384-d113-4956-a5d2-64be7357c11d")
     assert orders_resp.status_code == 200
     orders_list = orders_resp.json()
-    assert len(orders_list) > 0
-    assert any(o["order_id"] == order.internal_order_id for o in orders_list)
+    assert len(orders_list["items"]) > 0
+    assert any(o["order_id"] == order.internal_order_id for o in orders_list["items"])
 
     # Query Dashboard recent orders API
     dashboard_resp = client.get(f"/api/v1/dashboard/recent-orders?tenant_id=d3b07384-d113-4956-a5d2-64be7357c11d")
@@ -207,7 +207,7 @@ def test_phone_variants_matching(db_session, setup_test_catalog):
 
 
 def test_conversational_invoice_preference_extraction(db_session, setup_test_catalog):
-    # Setup / Webhook call for RETAIL_CASH_INVOICE
+    # Setup / Webhook call for RETAIL_INVOICE
     response = client.post("/api/v1/whatsapp/webhook", json={
         "tenant_id": "d3b07384-d113-4956-a5d2-64be7357c11d",
         "phone_number": "9999888877",
@@ -223,7 +223,7 @@ def test_conversational_invoice_preference_extraction(db_session, setup_test_cat
     
     retail_order = None
     for o in orders:
-        if o.invoice_type == "RETAIL_CASH_INVOICE":
+        if o.invoice_type == "RETAIL_INVOICE":
             retail_order = o
             break
     assert retail_order is not None

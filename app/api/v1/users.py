@@ -6,7 +6,6 @@ from sqlalchemy import and_
 from app.database import get_db, tenant_context
 from app.models.user import User
 from app.models.tenant import DistributorTenant
-from app.api.v1.dashboard import ensure_demo_data
 from app.utils.security import hash_password, verify_jwt
 
 router = APIRouter(prefix="/users", tags=["Users"])
@@ -17,7 +16,6 @@ def get_users(
     tenant_id: uuid.UUID | None = None,
     db: Session = Depends(get_db)
 ):
-    ensure_demo_data(db, tenant_id)
     if tenant_id:
         tenant_context.set(tenant_id)
 

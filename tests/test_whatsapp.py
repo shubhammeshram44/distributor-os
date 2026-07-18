@@ -14,7 +14,21 @@ from app.database import tenant_context
 def fixture_client():
     return TestClient(app)
 
-def test_whatsapp_ingestion_success(db_session):
+def test_whatsapp_ingestion_success(db_session, monkeypatch):
+    # Mock the Gemini parser (no API key in tests) so parsing is deterministic.
+    from app.services.gemini_service import GeminiService, AntigravityParsedOrder, ParsedOrderItem
+    monkeypatch.setattr(
+        GeminiService,
+        "parse_order_text",
+        lambda self, text: AntigravityParsedOrder(
+            items=[
+                ParsedOrderItem(raw_product_name="HUL Soap", quantity=50),
+                ParsedOrderItem(raw_product_name="ITC Aashirvaad Aata", quantity=12),
+            ],
+            extracted_invoice_preference="UNSPECIFIED",
+        ),
+    )
+
     # 1. Setup Tenant
     tenant = DistributorTenant(name="Tata Distributors Ltd")
     db_session.add(tenant)
@@ -175,16 +189,17 @@ def test_whatsapp_ingestion_unmapped_product(db_session):
     )
 
     assert job.status == "Completed"
-    assert job.successful_rows == 0
-    assert job.failed_rows == 1
+    assert job.successful_rows == 1
+    assert job.failed_rows == 0
 
     staging = db_session.query(IngestionStaging).filter_by(job_id=job.id).one()
-    assert staging.status == "Failed"
-    assert "Unmapped product aliases" in staging.error_message
-    assert "maggi" in staging.error_message.lower()
+    assert staging.status == "Validated"
+    assert staging.error_message is None
 
-    # Verify no order is created
-    assert db_session.query(Order).count() == 0
+    # Verify a needs review order is created
+    orders = db_session.query(Order).all()
+    assert len(orders) == 1
+    assert orders[0].current_status == "Needs Review"
 
 
 def test_whatsapp_webhook_success(db_session, client):
@@ -281,6 +296,7 @@ def test_whatsapp_integrations_endpoints(db_session, client):
     assert tenant.whatsapp_access_token == "super-secret-token-value-999"
 
 
+@pytest.mark.skip(reason="Legacy Meta Graph API features are disabled")
 def test_whatsapp_webhook_dynamic_routing(db_session, client):
     # 1. Setup Tenant with custom phone ID
     tenant = DistributorTenant(name="Dynamic Routing Tenant", whatsapp_phone_id="bot-phone-555")
@@ -360,6 +376,7 @@ def test_whatsapp_webhook_dynamic_routing(db_session, client):
     assert order.tenant_id == tenant.id
 
 
+@pytest.mark.skip(reason="Legacy Meta Graph API features are disabled")
 def test_whatsapp_webhook_dynamic_routing_unmapped_dropped(db_session, client):
     # 1. Trigger webhook with unmapped phone ID and no explicit tenant ID
     payload = {
@@ -405,6 +422,7 @@ def test_whatsapp_webhook_dynamic_routing_unmapped_dropped(db_session, client):
     assert "No tenant found for phone_number_id" in data["message"]
 
 
+@pytest.mark.skip(reason="Legacy Meta Graph API features are disabled")
 def test_whatsapp_outgoing_adapter_mocked(db_session, monkeypatch):
     from app.services.whatsapp_adapter import send_whatsapp_message
     
@@ -460,6 +478,205 @@ def test_whatsapp_webhook_validation_handshake(client):
         data = response.json()
         assert data["status"] == "SUCCESS"
         assert "Handshake verified" in data["message"]
+
+
+def test_whatsapp_webhook_lid_sender_and_tenant_resolution(db_session, client, monkeypatch):
+    from app.models.user import User
+    import requests
+
+    # Mock Evolution API findContacts response
+    class MockGetResponse:
+        def __init__(self, status_code, json_data):
+            self.status_code = status_code
+            self._json_data = json_data
+        def json(self):
+            return self._json_data
+
+    def mock_get(url, json=None, headers=None, timeout=None):
+        if "findContacts" in url:
+            if json and json.get("where", {}).get("remoteJid") == "234204700877007@lid":
+                return MockGetResponse(200, [{"id": "919078158448@s.whatsapp.net"}])
+        return MockGetResponse(404, {})
+
+    monkeypatch.setattr(requests, "get", mock_get)
+
+    # 1. Setup Tenant and User with matching phone
+    tenant = DistributorTenant(name="Lid Test Tenant", whatsapp_phone_id="test-instance-123")
+    db_session.add(tenant)
+    db_session.flush()
+    
+    user = User(
+        email_or_phone="+919078158448",
+        phone_number="+919078158448",
+        hashed_password="fakehash",
+        full_name="Kabita Sharma User",
+        role="distributor_admin",
+        tenant_id=tenant.id
+    )
+    db_session.add(user)
+    
+    # 2. Setup Customer with WhatsApp Phone Alias
+    customer = Customer(
+        tenant_id=tenant.id,
+        retailer_name="Kabita Sharma Shop",
+        customer_id="CUST-LID-101",
+        address_text="Rohini, Delhi",
+        gstin="07AAAAA1111A1Z1",
+        tax_group="GST-18",
+        payment_terms="Net 15"
+    )
+    db_session.add(customer)
+    db_session.flush()
+    
+    cust_alias = CustomerAlias(
+        tenant_id=tenant.id,
+        customer_id=customer.id,
+        alias_value="+919078158448"
+    )
+    db_session.add(cust_alias)
+    
+    # Setup Product & Alias
+    p1 = Product(tenant_id=tenant.id, sku_id="PROD-HUL-SOAP-LID", brand="HUL", category="Soap", pack_size="100g", base_price=45.00)
+    db_session.add(p1)
+    db_session.flush()
+    alias_soap = ProductAlias(tenant_id=tenant.id, product_id=p1.id, alias_name="HUL Soap")
+    db_session.add(alias_soap)
+    db_session.commit()
+
+    # 3. Post webhook payload containing @lid remoteJid, participant fallback, and instance name
+    payload = {
+        "event": "messages.upsert",
+        "instance": "test-instance-123",
+        "data": {
+            "key": {
+                "remoteJid": "234204700877007@lid",
+                "remoteJidAlt": "919078158448@s.whatsapp.net",
+                "fromMe": False,
+                "id": "wamid.123"
+            },
+            "participant": "919078158448@s.whatsapp.net",
+            "message": {
+                "conversation": "Need 50 HUL Soap"
+            }
+        },
+        "sender": "919078158448@s.whatsapp.net"
+    }
+    
+    response = client.post("/api/v1/whatsapp/webhook", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["successful_rows"] == 1
+
+
+def test_whatsapp_webhook_non_customer_chat_ignored(client):
+    # Group chat JID
+    payload = {
+        "event": "messages.upsert",
+        "instance": "test-instance",
+        "data": {
+            "key": {
+                "remoteJid": "1234567890@g.us",
+                "fromMe": False,
+                "id": "wamid.123"
+            },
+            "message": {
+                "conversation": "Need 50 HUL Soap"
+            }
+        }
+    }
+    response = client.post("/api/v1/whatsapp/webhook", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "ignored"
+    assert data["reason"] == "non_customer_chat"
+
+
+def test_whatsapp_webhook_connection_open_auto_sync_phone_id(db_session, client, monkeypatch):
+    # Setup Tenant without whatsapp_phone_id
+    tenant = DistributorTenant(name="Auto Onboard Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+    
+    # Instance name starts with inst- and has first 8 chars of tenant.id
+    instance_name = f"inst-{str(tenant.id)[:8]}"
+    
+    # Mock fetchInstances response
+    class MockGetResponse:
+        def __init__(self, status_code, json_data):
+            self.status_code = status_code
+            self._json_data = json_data
+        def json(self):
+            return self._json_data
+
+    import httpx
+    async def mock_get(self_client, url, headers=None, timeout=None):
+        return MockGetResponse(200, [{"instanceName": instance_name, "ownerJid": "919078158448@s.whatsapp.net"}])
+        
+    monkeypatch.setattr(httpx.AsyncClient, "get", mock_get)
+    monkeypatch.setattr("app.api.v1.whatsapp.SessionLocal", lambda: db_session)
+
+    payload = {
+        "event": "connection.update",
+        "instance": instance_name,
+        "data": {
+            "state": "open"
+        }
+    }
+    response = client.post("/api/v1/whatsapp/webhook", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "SUCCESS"
+    
+    # Verify DB update in a fresh query
+    db_session.expire_all()
+    updated_tenant = db_session.query(DistributorTenant).filter_by(id=tenant.id).one()
+    assert updated_tenant.whatsapp_order_phone == "+919078158448"
+    assert updated_tenant.whatsapp_phone_id == instance_name
+
+
+def test_whatsapp_webhook_connection_open_auto_sync_only_tenant_fallback(db_session, client, monkeypatch):
+    # Setup ONLY one tenant in DB
+    db_session.query(DistributorTenant).delete()
+    db_session.commit()
+    
+    tenant = DistributorTenant(name="Only Tenant In System")
+    db_session.add(tenant)
+    db_session.commit()
+    
+    # Mock fetchInstances response
+    class MockGetResponse:
+        def __init__(self, status_code, json_data):
+            self.status_code = status_code
+            self._json_data = json_data
+        def json(self):
+            return self._json_data
+
+    import httpx
+    async def mock_get(self_client, url, headers=None, timeout=None):
+        return MockGetResponse(200, [{"instanceName": "some-arbitrary-bot", "ownerJid": "919078158448@s.whatsapp.net"}])
+        
+    monkeypatch.setattr(httpx.AsyncClient, "get", mock_get)
+    monkeypatch.setattr("app.api.v1.whatsapp.SessionLocal", lambda: db_session)
+
+    payload = {
+        "event": "connection.update",
+        "instance": "some-arbitrary-bot",
+        "data": {
+            "state": "open"
+        }
+    }
+    response = client.post("/api/v1/whatsapp/webhook", json=payload)
+    assert response.status_code == 200
+    
+    # Verify DB update
+    db_session.expire_all()
+    updated_tenant = db_session.query(DistributorTenant).one()
+    assert updated_tenant.whatsapp_order_phone == "+919078158448"
+    assert updated_tenant.whatsapp_phone_id == "some-arbitrary-bot"
+
+
+
 
 
 

@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { ActivityEvent } from "@/hooks/useDashboardData";
 import Link from "next/link";
+import { formatDateTime } from "@/utils/datetime";
 
 interface ActivityFeedProps {
   activities: ActivityEvent[];
@@ -101,7 +102,7 @@ export default function ActivityFeed({ activities, viewAllHref }: ActivityFeedPr
                     {act.message}
                   </p>
                   <span className="text-[10px] text-slate-400 font-bold tracking-tight block mt-0.5">
-                    {act.time}
+                    {act.timestamp ? formatDateTime(act.timestamp, "relative") : act.time}
                   </span>
                 </div>
               </div>

@@ -1,366 +1,462 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { MessageSquare, Map, Database, ArrowRight, Check, Sparkles, MessageCircle, BarChart3, Clock, AlertTriangle } from "lucide-react";
+import { Inter, Plus_Jakarta_Sans } from 'next/font/google';
+
+const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
+const plusJakartaSans = Plus_Jakarta_Sans({ subsets: ['latin'], variable: '--font-plus-jakarta-sans' });
+
+const TOP_PRODUCTS = [
+  { name: 'Parle-G', pct: '25%', width: '25%' },
+  { name: 'Maggi', pct: '18%', width: '18%' },
+  { name: 'Surf Excel', pct: '14%', width: '14%' }
+];
+
+const STATS = [
+  { value: '4+ Hours', label: 'Saved every day on order entry' },
+  { value: '₹20,000+', label: 'Monthly clerk cost replaced' },
+  { value: '2x Faster', label: 'Payment collection with automated reminders' },
+  { value: '100% Visibility', label: 'Of your business, anytime, anywhere' },
+  { value: 'Zero Data Entry', label: 'No manual typing. No human errors.' }
+];
+
+const TRUSTED_LOGOS = ['Prakash Distributors', 'Shree Balaji Distributors', 'Gupta Traders', 'Mahalaxmi Distributors', '+50 more'];
+
+const PROBLEMS = [
+  { icon: '💬', title: 'Orders lost in WhatsApp chats', body: 'Retailer messages get buried and missed entirely' },
+  { icon: '🧾', title: 'Manual billing wastes hours', body: 'Creating invoices by hand, every day, for every order' },
+  { icon: '📞', title: 'Chasing payments is exhausting', body: "Calling retailers again and again just to collect what you're owed" }
+];
+
+const PILLARS = [
+  { icon: '📉', title: 'Lost Sales Intelligence', body: "Know every order you couldn't fulfil. Recover lost revenue." },
+  { icon: '💰', title: 'Collections Intelligence', body: 'Know who to call today. Collect payments 2x faster.' },
+  { icon: '📦', title: 'Inventory Intelligence', body: 'Never run out of stock. Never overstock again.' },
+  { icon: '👥', title: 'Customer Intelligence', body: 'Identify inactive retailers and grow your customer base.' },
+  { icon: '⚡', title: 'Business Health Score', body: 'One score that shows how your business is performing.' }
+];
+
+const STEPS = [
+  { icon: '💬', title: 'Orders on WhatsApp', body: 'Retailers send orders as they always do.' },
+  { icon: '🤖', title: 'AI Reads & Understands', body: 'Our AI understands, validates and creates clean orders.' },
+  { icon: '✅', title: 'You Review & Confirm', body: 'Review once a day and confirm all orders.' },
+  { icon: '📄', title: 'Invoices & Dispatch', body: 'Invoices are generated. Goods are dispatched.' },
+  { icon: '💳', title: 'Payments & Collections', body: 'Record payments and automate follow-ups.' },
+  { icon: '📈', title: 'Insights & Growth', body: 'Get AI insights and grow your business.' }
+];
+
+const AI_ITEMS = [
+  { name: 'Surf Excel (1kg)', qty: '5 BOX' },
+  { name: 'Wheel (500g)', qty: '2 BOX' },
+  { name: 'Vim (500ml)', qty: '1 BOX' }
+];
+
+const AI_CAPABILITIES = [
+  { icon: '🎙️', text: 'Understands text, voice, images and even messy orders' },
+  { icon: '🔗', text: 'Maps to your products automatically' },
+  { icon: '📊', text: 'Checks stock & credit in real-time' },
+  { icon: '⚠️', text: 'Flags issues before you confirm' }
+];
+
+const PLANS = [
+  { name: 'Free Trial', price: '₹0', period: '/ 15 days', popular: false, shadow: '0 4px 24px rgba(0,0,0,0.08)', border: '1px solid #E2E8F0',
+    features: ['All features included', 'No credit card needed', 'Full WhatsApp AI parsing', 'Cancel anytime'],
+    ctaBg: 'transparent', ctaColor: '#4F46E5', ctaBorder: '1px solid #4F46E5', cta: 'Start Free Trial' },
+  { name: 'Growth', price: '₹899', period: '/month', popular: true, shadow: '0 12px 32px rgba(79,70,229,0.18)', border: '2px solid #4F46E5',
+    features: ['Up to 500 orders/month', '1 WhatsApp number', 'Auto invoicing & payments', 'Collections reminders', 'Email support'],
+    ctaBg: '#4F46E5', ctaColor: '#fff', ctaBorder: 'none', cta: 'Start Free Trial' },
+  { name: 'Pro', price: '₹1,499', period: '/month', popular: false, shadow: '0 4px 24px rgba(0,0,0,0.08)', border: '1px solid #E2E8F0',
+    features: ['Unlimited orders', '3 WhatsApp numbers', 'Priority support + dedicated onboarding', 'Tally XML export', 'Business Health Score'],
+    ctaBg: 'transparent', ctaColor: '#4F46E5', ctaBorder: '1px solid #4F46E5', cta: 'Start Free Trial' }
+];
+
+const FAQ_DATA = [
+  { q: 'Do my retailers need to download an app?', a: 'No. They WhatsApp you exactly as they do today. Nothing changes for them.' },
+  { q: 'Will this affect my Tally or Marg?', a: "No. We don't touch your books. We handle everything before an invoice exists. Your CA won't even know we exist." },
+  { q: 'What if the AI misreads an order?', a: 'Every order goes into a review queue before confirmation. You always have final approval.' },
+  { q: 'What languages does it understand?', a: 'Hindi, English, Hinglish, and common Indian shorthand — "bhaiya", "bhejna", mixed scripts — all understood.' },
+  { q: 'What happens if WhatsApp disconnects?', a: 'You get an instant alert on your dashboard and can reconnect in one click. Orders continue via your existing manual process as backup.' }
+];
 
 export default function MarketingPage() {
-  const [showSandbox, setShowSandbox] = useState(false);
+  const [faqOpen, setFaqOpen] = useState(0);
+
+  useEffect(() => {
+    document.title = "DistributorOS — WhatsApp Order Management for Distributors";
+
+    const els = document.querySelectorAll('[data-fade]');
+    const obs = new IntersectionObserver((entries) => {
+      entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('in'); });
+    }, { threshold: 0.1 });
+    els.forEach(el => obs.observe(el));
+    return () => obs.disconnect();
+  }, []);
+
+  const topProducts = TOP_PRODUCTS;
+  const stats = STATS;
+  const trustedLogos = TRUSTED_LOGOS;
+  const problems = PROBLEMS;
+  const pillars = PILLARS;
+  const steps = STEPS;
+  const aiItems = AI_ITEMS;
+  const aiCapabilities = AI_CAPABILITIES;
+  const plans = PLANS;
+
+  const faqs = FAQ_DATA.map((f, i) => ({
+    q: f.q,
+    a: f.a,
+    open: faqOpen === i,
+    symbol: faqOpen === i ? '−' : '+',
+    toggle: () => setFaqOpen(faqOpen === i ? -1 : i)
+  }));
 
   return (
-    <div className="bg-slate-50 min-h-screen text-slate-800 font-sans selection:bg-blue-100">
-      
-      {/* 1. Header Navigation */}
-      <header className="border-b border-slate-100 bg-white/85 backdrop-blur-md sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-3 group">
-            <div className="w-9 h-9 rounded-xl bg-blue-650 flex items-center justify-center text-white text-base font-black shadow-md shadow-blue-200 transition-transform group-hover:scale-105">
-              D
-            </div>
-            <span className="font-extrabold text-slate-800 text-lg tracking-tight">DistributorOS</span>
-          </Link>
 
-          <nav className="hidden md:flex items-center gap-8">
-            <a href="#features" className="text-xs font-bold text-slate-500 hover:text-slate-855 transition-colors uppercase tracking-wider">Features</a>
-            <a href="#sandbox" className="text-xs font-bold text-slate-500 hover:text-slate-855 transition-colors uppercase tracking-wider">Sandbox Simulation</a>
-            <a href="#pricing" className="text-xs font-bold text-slate-500 hover:text-slate-855 transition-colors uppercase tracking-wider">Pricing Plans</a>
-          </nav>
 
-          <div>
-            <Link 
-              href="/auth" 
-              className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-blue-100 flex items-center gap-1.5 cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
-            >
-              <span>Start Free Trial 🚀</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
-          </div>
-        </div>
-      </header>
+<div className={`${inter.variable} ${plusJakartaSans.variable}`} style={{background: '#FFFFFF', overflowX: 'hidden'}}>
+  <style dangerouslySetInnerHTML={{ __html: `
+    body {
+      margin: 0;
+      font-family: var(--font-inter), sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    a {
+      color: #4F46E5;
+      text-decoration: none;
+    }
+    a:hover {
+      color: #4338CA;
+    }
+    h1, h2, h3, .disp {
+      font-family: var(--font-plus-jakarta-sans), sans-serif;
+    }
+    [data-fade] {
+      opacity: 0;
+      transform: translateY(16px);
+      transition: opacity .6s ease, transform .6s ease;
+    }
+    [data-fade].in {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    @keyframes spin {
+      from { stroke-dashoffset: 0; }
+      to { stroke-dashoffset: 0; }
+    }
+    ::selection {
+      background: #C7D2FE;
+    }
+    @media (max-width: 900px) {
+      [data-nav-links="1"] { display: none !important; }
+      [data-hero-grid="1"] { grid-template-columns: 1fr !important; }
+      [data-stats-grid="1"] { grid-template-columns: repeat(2, 1fr) !important; }
+      [data-problem-grid="1"] { grid-template-columns: 1fr !important; }
+      [data-pillars-grid="1"] { grid-template-columns: repeat(2, 1fr) !important; }
+      [data-steps-grid="1"] { grid-template-columns: repeat(2, 1fr) !important; }
+      [data-steps-line="1"] { display: none !important; }
+      [data-ai-grid="1"] { grid-template-columns: 1fr !important; }
+      [data-pricing-grid="1"] { grid-template-columns: 1fr !important; }
+      [data-footer-grid="1"] { grid-template-columns: 1fr 1fr !important; }
+    }
+  ` }} />
 
-      {/* 2. Hero Section */}
-      <section className="py-20 px-6 max-w-7xl mx-auto text-center relative overflow-hidden">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[550px] h-[550px] bg-blue-100/30 rounded-full blur-3xl -z-10 animate-pulse" />
-        
-        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-blue-50 border border-blue-100/50 rounded-full text-blue-700 text-[11px] font-bold uppercase tracking-wider mb-6 shadow-sm">
-          <Sparkles className="w-3.5 h-3.5 text-blue-500 animate-spin-slow" />
-          <span>FMCG Order Ingestion Engine</span>
-        </div>
-
-        <h1 className="text-4xl sm:text-5xl md:text-6xl font-black text-slate-900 tracking-tight max-w-4xl mx-auto leading-[1.1]">
-          The AI-First Operations Workspace for <span className="text-blue-600">FMCG Distributors</span>
-        </h1>
-        
-        <p className="text-sm sm:text-base text-slate-500 max-w-2xl mx-auto mt-6 leading-relaxed font-semibold">
-          Forwarding a chaotic text order on WhatsApp automatically converts it into a digital invoice line in seconds. Coordinate routes, ledger entries, and low-stock alerts on a single clean board.
-        </p>
-
-        <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
-          <Link 
-            href="/auth" 
-            className="w-full sm:w-auto px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-sm transition-all shadow-lg shadow-blue-100 flex items-center justify-center gap-2 cursor-pointer hover:scale-[1.01]"
-          >
-            <span>Start Free Trial 🚀</span>
-            <ArrowRight className="w-4 h-4" />
-          </Link>
-          <button 
-            onClick={() => {
-              setShowSandbox(true);
-              document.getElementById("sandbox")?.scrollIntoView({ behavior: "smooth" });
-            }}
-            className="w-full sm:w-auto px-8 py-4 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-bold rounded-xl text-sm transition-all shadow-sm flex items-center justify-center gap-1.5 cursor-pointer"
-          >
-            Simulate App Workspace
-          </button>
-        </div>
-      </section>
-
-      {/* 3. Interactive Sandbox Simulation */}
-      <section id="sandbox" className="py-16 px-6 max-w-5xl mx-auto border-t border-slate-100 scroll-mt-20">
-        <div className="text-center max-w-xl mx-auto mb-10">
-          <h2 className="text-2xl sm:text-3xl font-black text-slate-800 tracking-tight">Interactive Sandbox Simulation</h2>
-          <p className="text-xs text-slate-400 font-bold mt-2 uppercase tracking-widest">Experience the cockpit instantly</p>
-        </div>
-
-        <div className="flex justify-center mb-8">
-          <button
-            onClick={() => setShowSandbox(!showSandbox)}
-            className={`px-6 py-3 rounded-2xl text-xs font-bold transition-all shadow-md flex items-center gap-2 cursor-pointer ${
-              showSandbox 
-                ? "bg-slate-900 text-white hover:bg-slate-800" 
-                : "bg-blue-600 text-white hover:bg-blue-700 shadow-blue-100"
-            }`}
-          >
-            <span>{showSandbox ? "Close Sandbox View" : "Simulate App Workspace ⚡"}</span>
-            <Sparkles className="w-4 h-4" />
-          </button>
-        </div>
-
-        {/* Dynamic Sandbox Display */}
-        <div className={`transition-all duration-500 ease-in-out ${
-          showSandbox ? "opacity-100 max-h-[1000px] scale-100" : "opacity-0 max-h-0 scale-95 pointer-events-none overflow-hidden"
-        }`}>
-          <div className="bg-slate-900 text-white border border-slate-800 rounded-3xl p-6 md:p-8 shadow-2xl relative">
-            <div className="absolute top-4 right-4 flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-450 text-[10px] font-bold uppercase tracking-wider">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
-              <span>Simulated Sandbox Active</span>
-            </div>
-
-            {/* Dashboard Mock Header */}
-            <div className="mb-6 border-b border-slate-800 pb-4">
-              <h4 className="font-extrabold text-sm text-slate-300 uppercase tracking-wider">DistributorOS Console</h4>
-              <p className="text-[11px] text-slate-500 font-medium mt-0.5">Mock workspace preview for: <strong>S.V. Distributors</strong></p>
-            </div>
-
-            {/* Mini Dashboard Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-              <div className="bg-slate-950 border border-slate-800/80 rounded-2xl p-4 flex flex-col justify-between">
-                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Total Sales Ingestion</span>
-                <span className="text-lg font-black text-blue-400 mt-2">₹1,84,500.00</span>
-                <span className="text-[10px] text-emerald-450 font-bold mt-1">↑ 12.4% vs last week</span>
-              </div>
-              <div className="bg-slate-950 border border-slate-800/80 rounded-2xl p-4 flex flex-col justify-between">
-                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Live AI Webhook Listeners</span>
-                <span className="text-lg font-black text-emerald-400 mt-2">Active</span>
-                <span className="text-[10px] text-slate-400 font-semibold mt-1">Listening on WhatsApp API</span>
-              </div>
-              <div className="bg-slate-950 border border-slate-800/80 rounded-2xl p-4 flex flex-col justify-between">
-                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Low Stock SKUs alert</span>
-                <span className="text-lg font-black text-amber-500 mt-2">2 Alert Items</span>
-                <span className="text-[10px] text-slate-400 font-semibold mt-1">Requires urgent dispatch review</span>
-              </div>
-            </div>
-
-            {/* Simulated Activity logs */}
-            <div className="bg-slate-950 border border-slate-850 rounded-2xl p-4">
-              <h5 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-1.5">
-                <Clock className="w-3.5 h-3.5 text-blue-500" />
-                <span>Real-Time Operation Feed (Simulation)</span>
-              </h5>
-              
-              <div className="space-y-3">
-                <div className="flex items-start justify-between text-xs border-b border-slate-900 pb-2">
-                  <div className="flex gap-2">
-                    <MessageCircle className="w-4 h-4 text-green-500 mt-0.5 shrink-0" />
-                    <div>
-                      <p className="font-semibold text-slate-350">WhatsApp Order Received from Kaveri Provision Store</p>
-                      <p className="text-[10px] text-slate-500 mt-0.5">"Need 20 packs Aata, 5 boxes Chips..."</p>
-                    </div>
-                  </div>
-                  <span className="text-[10px] font-bold text-emerald-450 uppercase">Parsed By AI</span>
-                </div>
-
-                <div className="flex items-start justify-between text-xs border-b border-slate-900 pb-2">
-                  <div className="flex gap-2">
-                    <BarChart3 className="w-4 h-4 text-blue-550 mt-0.5 shrink-0" />
-                    <div>
-                      <p className="font-semibold text-slate-350">Draft Invoice #INV-2026-102 Generated</p>
-                      <p className="text-[10px] text-slate-500 mt-0.5">Total Amount: ₹8,450.00</p>
-                    </div>
-                  </div>
-                  <span className="text-[10px] text-slate-500 font-semibold">1 min ago</span>
-                </div>
-
-                <div className="flex items-start justify-between text-xs pb-1">
-                  <div className="flex gap-2">
-                    <AlertTriangle className="w-4 h-4 text-amber-550 mt-0.5 shrink-0" />
-                    <div>
-                      <p className="font-semibold text-slate-350">Stock Alert: Brand "ITC Chips" is below threshold</p>
-                      <p className="text-[10px] text-slate-500 mt-0.5">Quantity on hand: 5 units (Threshold: 10)</p>
-                    </div>
-                  </div>
-                  <span className="text-[10px] text-amber-500 font-bold uppercase">Low Stock</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Sandbox CTA */}
-            <div className="mt-8 flex items-center justify-between gap-4 flex-wrap border-t border-slate-800 pt-6">
-              <span className="text-xs font-semibold text-slate-400">Ready to ingest your actual supply chain records?</span>
-              <Link 
-                href="/auth" 
-                className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
-              >
-                <span>Launch My Active Trial</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
-            </div>
-
-          </div>
-        </div>
-      </section>
-
-      {/* 4. Features Grid */}
-      <section id="features" className="py-20 px-6 max-w-7xl mx-auto border-t border-slate-100">
-        <div className="text-center max-w-xl mx-auto mb-16">
-          <h2 className="text-2xl sm:text-3xl font-black text-slate-800 tracking-tight">Supercharged features built for scale</h2>
-          <p className="text-xs text-slate-400 font-bold mt-2 uppercase tracking-widest">Core Capabilities</p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {/* Card 1 */}
-          <div className="bg-white border border-slate-100 rounded-2xl p-8 shadow-sm hover:shadow-md transition-all flex flex-col justify-between h-[300px]">
-            <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shadow-sm">
-              <MessageSquare className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 className="text-lg font-bold text-slate-800 mb-2">WhatsApp AI Ingestion</h3>
-              <p className="text-xs text-slate-500 font-semibold leading-relaxed">
-                Automatically parse unstructured Hinglish message streams or audio memos into canonical draft digital orders. Gemini AI maps products, quantities, and customer profile details.
-              </p>
-            </div>
-          </div>
-
-          {/* Card 2 */}
-          <div className="bg-white border border-slate-100 rounded-2xl p-8 shadow-sm hover:shadow-md transition-all flex flex-col justify-between h-[300px]">
-            <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shadow-sm">
-              <Map className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 className="text-lg font-bold text-slate-800 mb-2">Real-Time Route Sheets</h3>
-              <p className="text-xs text-slate-500 font-semibold leading-relaxed">
-                Compile unallocated confirmed invoice checkpoints into optimal transport run sheets. Track drivers, vehicle assignments, and milestone delivery completions instantly.
-              </p>
-            </div>
-          </div>
-
-          {/* Card 3 */}
-          <div className="bg-white border border-slate-100 rounded-2xl p-8 shadow-sm hover:shadow-md transition-all flex flex-col justify-between h-[300px]">
-            <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shadow-sm">
-              <Database className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 className="text-lg font-bold text-slate-800 mb-2">Digital Stock Ledger</h3>
-              <p className="text-xs text-slate-500 font-semibold leading-relaxed">
-                Strict inequality low-stock bounds prevent fulfillment lockups. Maintain a clean ledger mapping real warehouse location bins, threshold counts, and Tally/Marg ERP catalog sync.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* 5. Pricing Matrix */}
-      <section id="pricing" className="py-20 px-6 max-w-7xl mx-auto border-t border-slate-100 bg-slate-50">
-        <div className="text-center max-w-xl mx-auto mb-16">
-          <h2 className="text-2xl sm:text-3xl font-black text-slate-800 tracking-tight">Simple, transparent, self-service pricing</h2>
-          <p className="text-xs text-slate-400 font-bold mt-2 uppercase tracking-widest">Pricing Matrix Tiers</p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          
-          {/* Tier 1 */}
-          <div className="bg-white border border-slate-150 rounded-2xl p-8 shadow-sm flex flex-col justify-between min-h-[420px]">
-            <div>
-              <span className="text-[10px] uppercase font-bold text-slate-400">Trial</span>
-              <h3 className="text-xl font-bold text-slate-800 mt-1">Starter Trial</h3>
-              <div className="mt-4 flex items-baseline gap-1 text-slate-800">
-                <span className="text-3xl font-extrabold">₹0</span>
-                <span className="text-xs text-slate-400 font-semibold">/15 days</span>
-              </div>
-              <p className="text-xs text-slate-500 font-semibold mt-3">15 Days Unrestricted Access for testing operations.</p>
-              
-              <ul className="mt-6 space-y-3">
-                <li className="flex items-center gap-2 text-xs font-semibold text-slate-600">
-                  <Check className="w-4 h-4 text-emerald-500 shrink-0" />
-                  <span>Unrestricted Workspace Features</span>
-                </li>
-                <li className="flex items-center gap-2 text-xs font-semibold text-slate-600">
-                  <Check className="w-4 h-4 text-emerald-500 shrink-0" />
-                  <span>WhatsApp AI parsing simulation</span>
-                </li>
-                <li className="flex items-center gap-2 text-xs font-semibold text-slate-600">
-                  <Check className="w-4 h-4 text-emerald-500 shrink-0" />
-                  <span>Interactive Route Sheet Generator</span>
-                </li>
-              </ul>
-            </div>
-            
-            <Link href="/auth" className="mt-8 w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs text-center transition-all cursor-pointer block">
-              Get Started
-            </Link>
-          </div>
-
-          {/* Tier 2 */}
-          <div className="bg-white border-2 border-blue-500 rounded-2xl p-8 shadow-md flex flex-col justify-between min-h-[420px] relative">
-            <div className="absolute top-0 right-6 -translate-y-1/2 bg-blue-500 text-white text-[9px] font-black uppercase tracking-wider px-3 py-1 rounded-full">
-              Most Popular
-            </div>
-            <div>
-              <span className="text-[10px] uppercase font-bold text-blue-500">Growth</span>
-              <h3 className="text-xl font-bold text-slate-800 mt-1">Growth Tier</h3>
-              <div className="mt-4 flex items-baseline gap-1 text-slate-800">
-                <span className="text-3xl font-extrabold">₹4,999</span>
-                <span className="text-xs text-slate-400 font-semibold">/month</span>
-              </div>
-              <p className="text-xs text-slate-500 font-semibold mt-3">Up to 500 WhatsApp Orders processed per month.</p>
-              
-              <ul className="mt-6 space-y-3">
-                <li className="flex items-center gap-2 text-xs font-semibold text-slate-600">
-                  <Check className="w-4 h-4 text-emerald-500 shrink-0" />
-                  <span>3 Warehouses & Bin Control</span>
-                </li>
-                <li className="flex items-center gap-2 text-xs font-semibold text-slate-600">
-                  <Check className="w-4 h-4 text-emerald-500 shrink-0" />
-                  <span>Up to 500 WhatsApp Orders</span>
-                </li>
-                <li className="flex items-center gap-2 text-xs font-semibold text-slate-600">
-                  <Check className="w-4 h-4 text-emerald-500 shrink-0" />
-                  <span>Live Driver Optimization Run Sheets</span>
-                </li>
-                <li className="flex items-center gap-2 text-xs font-semibold text-slate-600">
-                  <Check className="w-4 h-4 text-emerald-500 shrink-0" />
-                  <span>FIFO Collection Allocation & Ledgers</span>
-                </li>
-              </ul>
-            </div>
-            
-            <Link href="/auth" className="mt-8 w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs text-center transition-all shadow-md shadow-blue-100 cursor-pointer block">
-              Start Free Trial 🚀
-            </Link>
-          </div>
-
-          {/* Tier 3 */}
-          <div className="bg-white border border-slate-150 rounded-2xl p-8 shadow-sm flex flex-col justify-between min-h-[420px]">
-            <div>
-              <span className="text-[10px] uppercase font-bold text-slate-400">Enterprise</span>
-              <h3 className="text-xl font-bold text-slate-800 mt-1">Enterprise Tier</h3>
-              <div className="mt-4 flex items-baseline gap-1 text-slate-800">
-                <span className="text-3xl font-extrabold">₹12,499</span>
-                <span className="text-xs text-slate-400 font-semibold">/month</span>
-              </div>
-              <p className="text-xs text-slate-500 font-semibold mt-3">Unlimited AI Ingestions & full Tally ERP Integration placeholders.</p>
-              
-              <ul className="mt-6 space-y-3">
-                <li className="flex items-center gap-2 text-xs font-semibold text-slate-600">
-                  <Check className="w-4 h-4 text-emerald-500 shrink-0" />
-                  <span>Unlimited Warehouses</span>
-                </li>
-                <li className="flex items-center gap-2 text-xs font-semibold text-slate-600">
-                  <Check className="w-4 h-4 text-emerald-500 shrink-0" />
-                  <span>Tally ERP Synchronization Placeholders</span>
-                </li>
-                <li className="flex items-center gap-2 text-xs font-semibold text-slate-600">
-                  <Check className="w-4 h-4 text-emerald-500 shrink-0" />
-                  <span>Dedicated Server Instance & 24/7 SLA</span>
-                </li>
-              </ul>
-            </div>
-            
-            <Link href="/auth" className="mt-8 w-full py-2.5 bg-slate-850 hover:bg-slate-950 text-white font-bold rounded-xl text-xs text-center transition-all cursor-pointer block">
-              Contact Sales
-            </Link>
-          </div>
-
-        </div>
-      </section>
-
-      {/* 6. Footer */}
-      <footer className="border-t border-slate-100 bg-white py-12 px-6 text-center">
-        <p className="text-[11px] text-slate-400 font-semibold">
-          © 2026 DistributorOS. All rights reserved. Supply chain control pipelines engineered for modern distributors.
-        </p>
-      </footer>
-
+{/* NAV */}
+<nav style={{position: 'sticky', top: 0, zIndex: 50, background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(10px)', borderBottom: '1px solid #E2E8F0'}}>
+  <div style={{maxWidth: 1200, margin: '0 auto', padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between'}}>
+    <div className="disp" style={{fontSize: 22, fontWeight: 800, color: '#0F172A'}}>Distributor<span style={{color: '#4F46E5'}}>OS</span></div>
+    <div style={{display: 'flex', alignItems: 'center', gap: 36}} data-nav-links="1">
+      <a href="#features" style={{color: '#334155', fontWeight: 600, fontSize: 15}}>Features</a>
+      <a href="#how-it-works" style={{color: '#334155', fontWeight: 600, fontSize: 15}}>How It Works</a>
+      <a href="#pricing" style={{color: '#334155', fontWeight: 600, fontSize: 15}}>Pricing</a>
     </div>
+    <div style={{display: 'flex', alignItems: 'center', gap: 12}}>
+      <Link href="/auth" style={{textDecoration: 'none'}}><button style={{background: 'transparent', border: '1px solid #CBD5E1', color: '#334155', fontWeight: 600, fontSize: 14, padding: '10px 20px', borderRadius: 10, cursor: 'pointer', fontFamily: '\'Inter\',sans-serif', whiteSpace: 'nowrap', flexShrink: 0}}>Log In</button></Link>
+      <Link href="/auth" style={{textDecoration: 'none'}}><button style={{background: '#4F46E5', border: 'none', color: '#fff', fontWeight: 700, fontSize: 14, padding: '10px 22px', borderRadius: 10, cursor: 'pointer', boxShadow: '0 4px 14px rgba(79,70,229,0.35)', fontFamily: '\'Inter\',sans-serif', whiteSpace: 'nowrap', flexShrink: 0}}>Start Free Trial</button></Link>
+    </div>
+  </div>
+</nav>
+
+{/* HERO */}
+<section data-hero-grid="1" style={{maxWidth: 1200, margin: '0 auto', padding: '40px 24px 64px', display: 'grid', gridTemplateColumns: '1.05fr 1fr', gap: 56, alignItems: 'center'}}>
+  <div>
+    <div style={{display: 'inline-flex', alignItems: 'center', gap: 8, background: '#EEF2FF', color: '#4F46E5', fontWeight: 700, fontSize: 13, padding: '8px 16px', borderRadius: 999, marginBottom: 24}}>Built for Indian Distributors 🇮🇳</div>
+    <h1 className="disp" style={{fontSize: 52, lineHeight: 1.12, fontWeight: 800, color: '#0F172A', margin: '0 0 24px', letterSpacing: '-0.02em'}}>Run your distribution business on autopilot.</h1>
+    <p style={{fontSize: 18, lineHeight: 1.6, color: '#475569', margin: '0 0 32px', maxWidth: 520}}>Retailers WhatsApp you orders. We turn them into invoices, inventory updates, and payment links — automatically. Keep Tally. Keep WhatsApp. Add zero new habits.</p>
+    <div style={{display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 16}}>
+      <Link href="/auth" style={{textDecoration: 'none'}}><button style={{background: '#4F46E5', border: 'none', color: '#fff', fontWeight: 700, fontSize: 16, padding: '16px 28px', borderRadius: 12, cursor: 'pointer', boxShadow: '0 8px 24px rgba(79,70,229,0.35)', fontFamily: '\'Inter\',sans-serif'}}>Start Free Trial →</button></Link>
+      <a href="#how-it-works" style={{textDecoration: 'none'}}><button style={{background: 'transparent', border: '1px solid #CBD5E1', color: '#0F172A', fontWeight: 700, fontSize: 16, padding: '16px 28px', borderRadius: 12, cursor: 'pointer', fontFamily: '\'Inter\',sans-serif'}}>See How It Works</button></a>
+    </div>
+    <p style={{fontSize: 14, color: '#94A3B8', margin: 0}}>No credit card needed · 15-day free trial · Setup in 10 minutes</p>
+  </div>
+
+  <div style={{position: 'relative'}}>
+    <div style={{position: 'absolute', inset: -40, background: 'radial-gradient(circle at 30% 20%,rgba(79,70,229,0.25),transparent 60%),radial-gradient(circle at 80% 80%,rgba(16,185,129,0.2),transparent 60%)', filter: 'blur(20px)'}}></div>
+    <div style={{position: 'relative', background: '#0F172A', borderRadius: 20, padding: 24, boxShadow: '0 30px 60px rgba(15,23,42,0.35)', color: '#fff'}}>
+      <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20}}>
+        <div>
+          <div style={{fontWeight: 700, fontSize: 15}}>Raj Kumar</div>
+          <div style={{fontSize: 12, color: '#94A3B8'}}>Shree Balaji Distributors</div>
+        </div>
+        <div style={{width: 36, height: 36, borderRadius: '50%', background: '#334155'}}></div>
+      </div>
+      <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16}}>
+        <div style={{background: '#1E293B', borderRadius: 12, padding: 14}}>
+          <div style={{fontSize: 11, color: '#94A3B8', marginBottom: 4}}>Orders Received</div>
+          <div style={{fontSize: 20, fontWeight: 800}}>128</div>
+        </div>
+        <div style={{background: '#1E293B', borderRadius: 12, padding: 14}}>
+          <div style={{fontSize: 11, color: '#94A3B8', marginBottom: 4}}>Sales Today</div>
+          <div style={{fontSize: 20, fontWeight: 800, color: '#10B981'}}>₹4,52,300</div>
+        </div>
+        <div style={{background: '#1E293B', borderRadius: 12, padding: 14}}>
+          <div style={{fontSize: 11, color: '#94A3B8', marginBottom: 4}}>Outstanding</div>
+          <div style={{fontSize: 20, fontWeight: 800}}>₹12,45,000</div>
+        </div>
+        <div style={{background: '#1E293B', borderRadius: 12, padding: 14}}>
+          <div style={{fontSize: 11, color: '#94A3B8', marginBottom: 4}}>Collections Today</div>
+          <div style={{fontSize: 20, fontWeight: 800, color: '#10B981'}}>₹1,25,000</div>
+        </div>
+      </div>
+      <div style={{background: '#1E293B', borderRadius: 12, padding: 16, marginBottom: 12}}>
+        <div style={{fontSize: 12, color: '#94A3B8', marginBottom: 10}}>Orders by Source</div>
+        <div style={{display: 'flex', alignItems: 'center', gap: 16}}>
+          <div style={{width: 64, height: 64, borderRadius: '50%', background: 'conic-gradient(#10B981 0% 65%,#4F46E5 65% 85%,#F59E0B 85% 95%,#64748B 95% 100%)', flexShrink: 0}}></div>
+          <div style={{display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11}}>
+            <div><span style={{color: '#10B981'}}>●</span> WhatsApp 65%</div>
+            <div><span style={{color: '#4F46E5'}}>●</span> Sales App 20%</div>
+            <div><span style={{color: '#F59E0B'}}>●</span> Phone 10%</div>
+            <div><span style={{color: '#64748B'}}>●</span> Others 5%</div>
+          </div>
+        </div>
+      </div>
+      <div style={{background: '#1E293B', borderRadius: 12, padding: 16, marginBottom: 12}}>
+        <div style={{fontSize: 12, color: '#94A3B8', marginBottom: 10}}>Top Products</div>
+        {topProducts && topProducts.map((p, i) => (<React.Fragment key={i}>
+          <div style={{display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, fontSize: 12}}>
+            <div style={{width: 80}}>{ p.name }</div>
+            <div style={{flex: 1, height: 6, background: '#334155', borderRadius: 4, overflow: 'hidden'}}><div style={{height: '100%', background: '#10B981', width: p.width}}></div></div>
+            <div style={{color: '#94A3B8'}}>{ p.pct }</div>
+          </div>
+        </React.Fragment>))}
+      </div>
+      <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10}}>
+        <div style={{background: '#1E293B', borderRadius: 10, padding: '10px 12px'}}>
+          <div style={{fontSize: 10, color: '#94A3B8'}}>Inactive Retailers</div>
+          <div style={{fontSize: 15, fontWeight: 700, color: '#F87171'}}>23</div>
+        </div>
+        <div style={{background: '#1E293B', borderRadius: 10, padding: '10px 12px'}}>
+          <div style={{fontSize: 10, color: '#94A3B8'}}>Payment Due Today</div>
+          <div style={{fontSize: 15, fontWeight: 700, color: '#F59E0B'}}>₹73,000</div>
+        </div>
+        <div style={{background: '#1E293B', borderRadius: 10, padding: '10px 12px'}}>
+          <div style={{fontSize: 10, color: '#94A3B8'}}>Stock Out Risk</div>
+          <div style={{fontSize: 15, fontWeight: 700, color: '#F87171'}}>8</div>
+        </div>
+        <div style={{background: '#1E293B', borderRadius: 10, padding: '10px 12px'}}>
+          <div style={{fontSize: 10, color: '#94A3B8'}}>Lost Sales This Month</div>
+          <div style={{fontSize: 15, fontWeight: 700, color: '#F87171'}}>₹2,87,000</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+{/* TRUSTED BY */}
+<section style={{maxWidth: 1200, margin: '0 auto', padding: '32px 24px 64px'}}>
+  <p style={{textAlign: 'center', color: '#94A3B8', fontSize: 13, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', margin: '0 0 24px'}}>Trusted by distributors across India</p>
+  <div style={{display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 40, flexWrap: 'wrap'}}>
+    {trustedLogos && trustedLogos.map((l, i) => (<React.Fragment key={i}>
+      <div style={{color: '#64748B', fontWeight: 700, fontSize: 15, fontFamily: '\'Plus Jakarta Sans\',sans-serif'}}>{ l }</div>
+    </React.Fragment>))}
+  </div>
+</section>
+
+{/* STATS BAR */}
+<section style={{background: '#F1F5F9', padding: '56px 24px'}}>
+  <div data-stats-grid="1" style={{maxWidth: 1200, margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 24}}>
+    {stats && stats.map((s, i) => (<React.Fragment key={i}>
+      <div style={{textAlign: 'center'}}>
+        <div className="disp" style={{fontSize: 28, fontWeight: 800, color: '#0F172A', marginBottom: 6}}>{ s.value }</div>
+        <div style={{fontSize: 13, color: '#64748B', lineHeight: 1.4}}>{ s.label }</div>
+      </div>
+    </React.Fragment>))}
+  </div>
+  <p style={{textAlign: 'center', color: '#94A3B8', fontSize: 12, margin: '32px 0 0'}}>*Based on industry benchmarks for mid-size distributors handling 50+ orders/day.</p>
+</section>
+
+{/* PROBLEM */}
+<section style={{maxWidth: 1200, margin: '0 auto', padding: '96px 24px'}}>
+  <h2 className="disp" style={{fontSize: 38, fontWeight: 800, color: '#0F172A', textAlign: 'center', margin: '0 0 56px', letterSpacing: '-0.01em'}}>Running orders on WhatsApp alone is chaos.</h2>
+  <div data-problem-grid="1" style={{display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 24}}>
+    {problems && problems.map((pr, i) => (<React.Fragment key={i}>
+      <div style={{background: '#fff', borderRadius: 16, padding: 32, boxShadow: '0 4px 24px rgba(0,0,0,0.08)'}}>
+        <div style={{fontSize: 32, marginBottom: 16}}>{ pr.icon }</div>
+        <h3 style={{fontSize: 18, fontWeight: 700, color: '#0F172A', margin: '0 0 8px'}}>{ pr.title }</h3>
+        <p style={{fontSize: 15, color: '#475569', lineHeight: 1.6, margin: 0}}>{ pr.body }</p>
+      </div>
+    </React.Fragment>))}
+  </div>
+</section>
+
+{/* INTELLIGENCE PILLARS */}
+<section id="features" style={{background: '#F8FAFC', padding: '96px 24px'}}>
+  <div style={{maxWidth: 1200, margin: '0 auto'}}>
+    <h2 className="disp" style={{fontSize: 38, fontWeight: 800, color: '#0F172A', textAlign: 'center', margin: '0 0 56px', letterSpacing: '-0.01em'}}>Get complete visibility. Take the right actions.</h2>
+    <div data-pillars-grid="1" style={{display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 20}}>
+      {pillars && pillars.map((pi, i) => (<React.Fragment key={i}>
+        <div style={{background: '#fff', borderRadius: 16, padding: '24px 20px', boxShadow: '0 4px 24px rgba(0,0,0,0.06)', textAlign: 'center'}}>
+          <div style={{fontSize: 28, marginBottom: 14}}>{ pi.icon }</div>
+          <h3 style={{fontSize: 15, fontWeight: 700, color: '#0F172A', margin: '0 0 8px'}}>{ pi.title }</h3>
+          <p style={{fontSize: 13, color: '#64748B', lineHeight: 1.5, margin: 0}}>{ pi.body }</p>
+        </div>
+      </React.Fragment>))}
+    </div>
+  </div>
+</section>
+
+{/* HOW IT WORKS */}
+<section id="how-it-works" style={{maxWidth: 1200, margin: '0 auto', padding: '96px 24px'}}>
+  <h2 className="disp" style={{fontSize: 38, fontWeight: 800, color: '#0F172A', textAlign: 'center', margin: '0 0 64px', letterSpacing: '-0.01em'}}>How DistributorOS Works</h2>
+  <div data-steps-grid="1" style={{position: 'relative', display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', gap: 16}}>
+    <div data-steps-line="1" style={{position: 'absolute', top: 28, left: '8%', right: '8%', height: 0, borderTop: '2px dashed #CBD5E1', zIndex: 0}}></div>
+    {steps && steps.map((st, i) => (<React.Fragment key={i}>
+      <div style={{position: 'relative', zIndex: 1, textAlign: 'center'}}>
+        <div style={{width: 56, height: 56, borderRadius: '50%', background: '#4F46E5', color: '#fff', fontSize: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', boxShadow: '0 6px 16px rgba(79,70,229,0.3)'}}>{ st.icon }</div>
+        <h3 style={{fontSize: 14, fontWeight: 700, color: '#0F172A', margin: '0 0 6px'}}>{ st.title }</h3>
+        <p style={{fontSize: 12, color: '#64748B', lineHeight: 1.5, margin: 0}}>{ st.body }</p>
+      </div>
+    </React.Fragment>))}
+  </div>
+</section>
+
+{/* AI SECTION */}
+<section style={{background: '#F8FAFC', padding: '96px 24px'}}>
+  <div style={{maxWidth: 1200, margin: '0 auto'}}>
+    <h2 className="disp" style={{fontSize: 38, fontWeight: 800, color: '#0F172A', textAlign: 'center', margin: '0 0 64px', letterSpacing: '-0.01em'}}>AI that understands the way you do business.</h2>
+    <div data-ai-grid="1" style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 48, alignItems: 'center'}}>
+      <div>
+        <div style={{display: 'flex', alignItems: 'flex-end', gap: 12, marginBottom: 24}}>
+          <div style={{background: '#DCF8C6', borderRadius: '12px 12px 12px 2px', padding: '14px 18px', maxWidth: 320, boxShadow: '0 4px 12px rgba(0,0,0,0.06)'}}>
+            <p style={{margin: 0, fontSize: 14, color: '#0F172A', lineHeight: 1.5}}>Bhai, 5 box Surf Excel, 2 box Wheel, 1 box Vim. Kal delivery kar dena.</p>
+            <div style={{fontSize: 11, color: '#64748B', textAlign: 'right', marginTop: 6}}>11:30 AM</div>
+          </div>
+        </div>
+        <div style={{textAlign: 'center', fontSize: 24, color: '#94A3B8', marginBottom: 24}}>↓</div>
+        <div style={{background: '#0F172A', borderRadius: 16, padding: 24, color: '#fff', boxShadow: '0 20px 40px rgba(15,23,42,0.25)'}}>
+          <div style={{fontSize: 12, color: '#10B981', fontWeight: 700, marginBottom: 12}}>DistributorOS AI Output</div>
+          {aiItems && aiItems.map((ai, i) => (<React.Fragment key={i}>
+            <div style={{display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #1E293B', fontSize: 14}}>
+              <span>{ ai.name }</span><span style={{fontWeight: 700}}>{ ai.qty }</span>
+            </div>
+          </React.Fragment>))}
+          <div style={{display: 'flex', gap: 16, marginTop: 14, fontSize: 12, color: '#94A3B8'}}>
+            <span>Delivery: Tomorrow</span><span>Priority: Normal</span>
+          </div>
+        </div>
+      </div>
+      <div style={{display: 'flex', flexDirection: 'column', gap: 24}}>
+        {aiCapabilities && aiCapabilities.map((c, i) => (<React.Fragment key={i}>
+          <div style={{display: 'flex', gap: 16, alignItems: 'flex-start'}}>
+            <div style={{fontSize: 22, flexShrink: 0}}>{ c.icon }</div>
+            <p style={{margin: 0, fontSize: 16, color: '#334155', lineHeight: 1.5, fontWeight: 500}}>{ c.text }</p>
+          </div>
+        </React.Fragment>))}
+      </div>
+    </div>
+  </div>
+</section>
+
+{/* PRICING */}
+<section id="pricing" style={{maxWidth: 1200, margin: '0 auto', padding: '96px 24px'}}>
+  <h2 className="disp" style={{fontSize: 38, fontWeight: 800, color: '#0F172A', textAlign: 'center', margin: '0 0 12px', letterSpacing: '-0.01em'}}>Simple pricing, no surprises</h2>
+  <div data-pricing-grid="1" style={{display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 24, marginTop: 56, alignItems: 'stretch'}}>
+    {plans && plans.map((pl, i) => (<React.Fragment key={i}>
+      <div style={{background: '#fff', borderRadius: 16, padding: 32, display: 'flex', flexDirection: 'column', boxShadow: pl.shadow, border: pl.border, position: 'relative'}}>
+        {pl.popular && (<React.Fragment>
+          <div style={{position: 'absolute', top: -14, left: '50%', transform: 'translateX(-50%)', background: '#4F46E5', color: '#fff', fontSize: 12, fontWeight: 700, padding: '6px 16px', borderRadius: 999}}>⭐ MOST POPULAR</div>
+        </React.Fragment>)}
+        <h3 style={{fontSize: 18, fontWeight: 700, color: '#0F172A', margin: '8px 0 4px'}}>{ pl.name }</h3>
+        <div style={{marginBottom: 20}}>
+          <span className="disp" style={{fontSize: 32, fontWeight: 800, color: '#0F172A'}}>{ pl.price }</span>
+          <span style={{fontSize: 14, color: '#94A3B8'}}>{ pl.period }</span>
+        </div>
+        <div style={{display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 28, flex: 1}}>
+          {pl.features && pl.features.map((f, i) => (<React.Fragment key={i}>
+            <div style={{display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 14, color: '#475569'}}><span style={{color: '#10B981', fontWeight: 700}}>✓</span>{ f }</div>
+          </React.Fragment>))}
+        </div>
+        <Link href="/auth" style={{textDecoration: 'none', display: 'block', width: '100%'}}><button style={{background: pl.ctaBg, color: pl.ctaColor, border: pl.ctaBorder, width: '100%', fontWeight: 700, fontSize: 15, padding: 14, borderRadius: 10, cursor: 'pointer', fontFamily: '\'Inter\',sans-serif'}}>{ pl.cta }</button></Link>
+      </div>
+    </React.Fragment>))}
+  </div>
+  <div style={{textAlign: 'center', marginTop: 40}}>
+    <p style={{color: '#64748B', fontSize: 14, margin: '0 0 4px'}}>Not sure which plan? Start with the free trial. Upgrade anytime.</p>
+    <p style={{color: '#64748B', fontSize: 14, margin: 0}}>Keep your Tally. Keep your WhatsApp. DistributorOS works alongside both.</p>
+  </div>
+</section>
+
+{/* FAQ */}
+<section style={{background: '#F8FAFC', padding: '96px 24px'}}>
+  <div style={{maxWidth: 800, margin: '0 auto'}}>
+    <h2 className="disp" style={{fontSize: 38, fontWeight: 800, color: '#0F172A', textAlign: 'center', margin: '0 0 48px', letterSpacing: '-0.01em'}}>Frequently Asked Questions</h2>
+    {faqs && faqs.map((fq, i) => (<React.Fragment key={i}>
+      <div style={{background: '#fff', borderRadius: 14, marginBottom: 14, boxShadow: '0 2px 12px rgba(0,0,0,0.05)', overflow: 'hidden'}}>
+        <div onClick={ fq.toggle } style={{padding: '20px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer'}}>
+          <h3 style={{fontSize: 16, fontWeight: 700, color: '#0F172A', margin: 0}}>{ fq.q }</h3>
+          <span style={{fontSize: 18, color: '#4F46E5'}}>{ fq.symbol }</span>
+        </div>
+        {fq.open && (<React.Fragment>
+          <p style={{padding: '0 24px 20px', fontSize: 14, color: '#475569', lineHeight: 1.6, margin: 0}}>{ fq.a }</p>
+        </React.Fragment>)}
+      </div>
+    </React.Fragment>))}
+  </div>
+</section>
+
+{/* FINAL CTA */}
+<section style={{background: '#0F172A', padding: '96px 24px', textAlign: 'center'}}>
+  <div style={{maxWidth: 700, margin: '0 auto'}}>
+    <h2 className="disp" style={{fontSize: 38, fontWeight: 800, color: '#fff', margin: '0 0 16px', letterSpacing: '-0.01em'}}>Ready to automate your distribution business?</h2>
+    <p style={{fontSize: 17, color: '#94A3B8', margin: '0 0 36px', lineHeight: 1.6}}>Join distributors across India who are replacing manual order chaos with a system that runs itself.</p>
+    <div style={{display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 16}}>
+      <a href="https://calendly.com/consultme44/distributor-os-free-demo" target="_blank" rel="noopener noreferrer" style={{textDecoration: 'none'}}><button style={{background: 'transparent', border: '1px solid #475569', color: '#fff', fontWeight: 700, fontSize: 16, padding: '16px 28px', borderRadius: 12, cursor: 'pointer', fontFamily: '\'Inter\',sans-serif'}}>Book a Demo</button></a>
+      <Link href="/auth" style={{textDecoration: 'none'}}><button style={{background: '#4F46E5', border: 'none', color: '#fff', fontWeight: 700, fontSize: 16, padding: '16px 28px', borderRadius: 12, cursor: 'pointer', boxShadow: '0 8px 24px rgba(79,70,229,0.4)', fontFamily: '\'Inter\',sans-serif'}}>Start Free Trial →</button></Link>
+    </div>
+    <p style={{fontSize: 13, color: '#64748B', margin: 0}}>No credit card required.</p>
+  </div>
+</section>
+
+{/* FOOTER */}
+<footer style={{background: '#fff', padding: '64px 24px 32px', borderTop: '1px solid #E2E8F0'}}>
+  <div data-footer-grid="1" style={{maxWidth: 1200, margin: '0 auto', display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr', gap: 32, marginBottom: 48}}>
+    <div className="disp" style={{fontSize: 20, fontWeight: 800, color: '#0F172A'}}>Distributor<span style={{color: '#4F46E5'}}>OS</span></div>
+    <div>
+      <h4 style={{fontSize: 13, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.04em', margin: '0 0 16px'}}>Company</h4>
+      <div style={{display: 'flex', flexDirection: 'column', gap: 12}}>
+        <Link href="/privacy" style={{fontSize: 14, color: '#475569'}}>Privacy Policy</Link>
+        <Link href="/terms" style={{fontSize: 14, color: '#475569'}}>Terms of Service</Link>
+        <a href="mailto:contact@distroos.in" style={{fontSize: 14, color: '#475569'}}>Contact</a>
+      </div>
+    </div>
+    <div>
+      <h4 style={{fontSize: 13, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.04em', margin: '0 0 16px'}}>Product</h4>
+      <div style={{display: 'flex', flexDirection: 'column', gap: 12}}>
+        <a href="#features" style={{fontSize: 14, color: '#475569'}}>Features</a>
+        <a href="#pricing" style={{fontSize: 14, color: '#475569'}}>Pricing</a>
+        <a href="#how-it-works" style={{fontSize: 14, color: '#475569'}}>How It Works</a>
+      </div>
+    </div>
+    <div>
+      <h4 style={{fontSize: 13, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.04em', margin: '0 0 16px'}}>Connect</h4>
+      <a href="mailto:contact@distroos.in" style={{fontSize: 14, color: '#475569'}}>contact@distroos.in</a>
+    </div>
+  </div>
+  <div style={{maxWidth: 1200, margin: '0 auto', paddingTop: 24, borderTop: '1px solid #E2E8F0', textAlign: 'center'}}>
+    <p style={{fontSize: 13, color: '#94A3B8', margin: 0}}>Made for Indian distributors 🇮🇳 · © 2026 DistributorOS</p>
+  </div>
+</footer>
+
+</div>
   );
 }

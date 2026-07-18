@@ -5,8 +5,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.router import api_router
 from app.database import engine, Base
 
-# CRITICAL: Force table lifecycle creation on server startup
-Base.metadata.create_all(bind=engine)
+# Create tables on startup unless SKIP_SCHEMA_INIT is set.
+# In production with Alembic, set SKIP_SCHEMA_INIT=1 and run `alembic upgrade head` instead.
+if not os.getenv("SKIP_SCHEMA_INIT"):
+    Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="Distributor OS API",
@@ -42,6 +44,39 @@ from fastapi.staticfiles import StaticFiles
 os.makedirs("static", exist_ok=True)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+
+async def scheduled_reminder_sweep():
+    from app.database import SessionLocal
+    from app.services.payment_reminder_service import run_payment_reminder_sweep
+    db = SessionLocal()
+    try:
+        await run_payment_reminder_sweep(db)
+    finally:
+        db.close()
+
+@app.on_event("startup")
+def startup_event():
+    if os.getenv("SEED_DEMO_DATA", "false").lower() == "true":
+        from app.database import SessionLocal
+        from app.services.demo_service import ensure_demo_data
+        from app.services.tenant_service import DEMO_TENANT_ID
+        db = SessionLocal()
+        try:
+            ensure_demo_data(db, DEMO_TENANT_ID)
+        finally:
+            db.close()
+
+    if os.getenv("ENABLE_PAYMENT_REMINDER_SCHEDULER", "true").lower() == "true":
+        from apscheduler.schedulers.asyncio import AsyncIOScheduler
+        scheduler = AsyncIOScheduler()
+        scheduler.add_job(scheduled_reminder_sweep, "cron", hour=10, minute=0)
+        scheduler.start()
+
+
 @app.get("/")
 def read_root():
     return {"status": "healthy", "service": "Distributor OS Backend Core"}
+
+@app.api_route("/health", methods=["GET", "HEAD"])
+def health_check():
+    return {"status": "ok"}

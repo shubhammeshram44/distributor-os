@@ -13,7 +13,8 @@ body {
 }
 
 body.sidebar-collapsed .pl-64 {
-  padding-left: 4rem !important; /* matches w-16 */
+  padding-left: 4rem !important;
+  /* matches w-16 */
 }
 
 .left-64 {
@@ -21,7 +22,8 @@ body.sidebar-collapsed .pl-64 {
 }
 
 body.sidebar-collapsed .left-64 {
-  left: 4rem !important; /* matches w-16 */
+  left: 4rem !important;
+  /* matches w-16 */
 }
 
 /* Custom scrollbars for high-density tables */
@@ -29,13 +31,65 @@ body.sidebar-collapsed .left-64 {
   width: 6px;
   height: 6px;
 }
+
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
 ::-webkit-scrollbar-thumb {
   background: #cbd5e1;
   border-radius: 4px;
 }
+
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
+}
+
+/* Toast slide-in animation */
+@keyframes slide-in {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-in {
+  animation: slide-in 0.2s ease-out;
+}
+
+/* Modal / ConfirmDialog scale-in animation */
+@keyframes scale-in {
+  from {
+    transform: scale(0.95);
+    opacity: 0;
+  }
+
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.animate-scale-in {
+  animation: scale-in 0.15s ease-out;
+}
+
+/* Generic fade-in (used in search dropdown, tooltips) */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.15s ease-out;
 }

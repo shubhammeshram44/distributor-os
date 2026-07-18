@@ -23,12 +23,12 @@ class ParsedOrderItem(BaseModel):
 
 class AntigravityParsedOrder(BaseModel):
     items: List[ParsedOrderItem]
-    extracted_invoice_preference: typing.Literal["GST_TAX_INVOICE", "RETAIL_CASH_INVOICE", "UNSPECIFIED"] = "UNSPECIFIED"
+    extracted_invoice_preference: typing.Literal["GST_TAX_INVOICE", "RETAIL_INVOICE", "UNSPECIFIED"]
 
 # Preserved for backward compatibility with your other imports
 class ParsedOrder(BaseModel):
     items: List[ParsedOrderItem]
-    extracted_invoice_preference: typing.Literal["GST_TAX_INVOICE", "RETAIL_CASH_INVOICE", "UNSPECIFIED"] = "UNSPECIFIED"
+    extracted_invoice_preference: typing.Literal["GST_TAX_INVOICE", "RETAIL_INVOICE", "UNSPECIFIED"]
 
 # ---------------------------------------------------------------------------
 # Core Service
@@ -66,7 +66,7 @@ class GeminiService:
                 "Extract each product name (including brand if mentioned) and its precise quantity. "
                 "Also, scan colloquial business language phrases to classify the invoice preference:\n"
                 "- If the message contains expressions like 'GST lagana', 'tax invoice', 'GST bill', 'with tax', 'Company ka bill', 'GST number', set extracted_invoice_preference to 'GST_TAX_INVOICE'.\n"
-                "- If the message contains expressions like 'normal bill', 'cash bill', 'bina tax', 'kachha bill', 'bina GST', 'kachha', set extracted_invoice_preference to 'RETAIL_CASH_INVOICE'.\n"
+                "- If the message contains expressions like 'normal bill', 'cash bill', 'bina tax', 'kachha bill', 'bina GST', 'kachha', set extracted_invoice_preference to 'RETAIL_INVOICE'.\n"
                 "- If no specific invoice preference is requested, set extracted_invoice_preference to 'UNSPECIFIED'.\n"
                 "Return the data strictly as JSON matching the schema."
             )
@@ -85,6 +85,8 @@ class GeminiService:
                     )
                     
                     parsed_json = json.loads(response.text)
+                    if "extracted_invoice_preference" not in parsed_json:
+                        parsed_json["extracted_invoice_preference"] = "UNSPECIFIED"
                     return AntigravityParsedOrder(**parsed_json)
 
                 except (google_exceptions.InternalServerError, 
@@ -125,33 +127,9 @@ class GeminiService:
         # Extract invoice preference from colloquial phrases
         extracted_pref = "UNSPECIFIED"
         if any(phrase in normalized for phrase in ["normal bill", "cash bill", "bina tax", "kachha", "bina gst"]):
-            extracted_pref = "RETAIL_CASH_INVOICE"
+            extracted_pref = "RETAIL_INVOICE"
         elif any(phrase in normalized for phrase in ["gst lagana", "tax invoice", "gst bill", "tax bill", "company ka bill", "gst number", "gst invoice"]):
             extracted_pref = "GST_TAX_INVOICE"
-
-        # Check hardcoded test match patterns first for predictable test behavior
-        if "please send 50 hul soap and 12 itc aashirvaad aata" in normalized:
-            return AntigravityParsedOrder(
-                items=[
-                    ParsedOrderItem(raw_product_name="HUL Soap", quantity=50),
-                    ParsedOrderItem(raw_product_name="ITC Aashirvaad Aata", quantity=12)
-                ],
-                extracted_invoice_preference=extracted_pref
-            )
-        elif "need 50 hul soap" in normalized:
-            return AntigravityParsedOrder(
-                items=[
-                    ParsedOrderItem(raw_product_name="HUL Soap", quantity=50)
-                ],
-                extracted_invoice_preference=extracted_pref
-            )
-        elif "nestle maggi" in normalized:
-            return AntigravityParsedOrder(
-                items=[
-                    ParsedOrderItem(raw_product_name="Nestle Maggi", quantity=10)
-                ],
-                extracted_invoice_preference=extracted_pref
-            )
 
         # General regex matching mapping
         matches = re.finditer(r'(\d+)\s*(?:packets?|pkts?|bags?|kg|liters?|pcs?|units?|box)?\s+([A-Za-z0-9\s\u0900-\u097F]{3,20})', text, re.IGNORECASE)
