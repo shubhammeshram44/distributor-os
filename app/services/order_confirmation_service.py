@@ -179,8 +179,7 @@ def confirm_order(db: Session, order: Order, updated_by: str) -> Invoice:
     db.flush()
 
     # ── 9. Reconcile any existing customer credits against new invoice ──────────
-    from app.services.payment_service import reconcile_payments_and_invoices
-    reconcile_payments_and_invoices(db, order.tenant_id, order.customer_id)
+
 
     # ── 10. Self-learning for product alias updates ────────────────────────────
     from app.api.v1.orders import process_order_self_learning
