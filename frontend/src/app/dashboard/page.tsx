@@ -629,6 +629,8 @@ export default function DashboardPage() {
                       </div>
                     ))}
                   </div>
+                )}
+
                            {/* Row 5: Credit Risk Alerts & Outstanding Collections (stacked) | Orders Intelligence */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Left Column: Outstanding Collections and Credit Risk Alerts stacked */}
