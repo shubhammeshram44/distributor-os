@@ -130,11 +130,15 @@ export default function IntegrationsPageV2() {
         if (data.instance_name) {
           setInstanceName(data.instance_name);
         }
-        if (data.connection_status === "open") {
+
+        // Intercept for active open state or backend "ALREADY_CONNECTED" string
+        if (data.connection_status === "open" || data.qr_code === "ALREADY_CONNECTED") {
           setProvisioningStatus("connected");
+          setQrCodeBase64(""); // Flush out any stale QR text strings
           showToast("WhatsApp Instance is already open and connected!", "success");
         } else if (data.qr_code) {
-          setQrCodeBase64(data.qr_code);
+          // Guard against raw non-base64 strings and structure the base64 URL properly
+          setQrCodeBase64(data.qr_code.startsWith("data:") ? data.qr_code : `data:image/png;base64,${data.qr_code}`);
           setProvisioningStatus("connecting");
           showToast("QR code generated! Scan with your WhatsApp app.", "success");
         } else {
