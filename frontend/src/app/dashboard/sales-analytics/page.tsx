@@ -37,6 +37,15 @@ export default function SalesAnalyticsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<AnalyticsData | null>(null);
+  const [timeframe, setTimeframe] = useState("7d");
+  const [perfMetrics, setPerfMetrics] = useState<{
+    total_sales: number;
+    orders_count: number;
+    avg_order_value: number;
+    sales_change_pct: number;
+    orders_change_pct: number;
+    avg_order_change_pct: number;
+  } | null>(null);
 
   // Sync tenant from localStorage on load
   useEffect(() => {
@@ -89,6 +98,33 @@ export default function SalesAnalyticsPage() {
     }
   }, [activeTenantId, fetchSalesAnalytics]);
 
+  const fetchPerfMetrics = useCallback(async () => {
+    if (!activeTenantId) return;
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+    const now = new Date();
+    const days = timeframe === "7d" ? 7 : timeframe === "30d" ? 30 : 90;
+    const startDate = new Date(now.getTime() - days * 24 * 60 * 60 * 1000)
+      .toISOString().split("T")[0];
+    const endDate = now.toISOString().split("T")[0];
+    
+    try {
+      const res = await fetch(
+        `${apiBase}/api/v1/dashboard/metrics?tenant_id=${activeTenantId}&start_date=${startDate}&end_date=${endDate}`,
+        { credentials: "include" }
+      );
+      if (res.ok) {
+        const resData = await res.json();
+        setPerfMetrics(resData);
+      }
+    } catch (err) {
+      console.error("Error fetching performance metrics:", err);
+    }
+  }, [activeTenantId, timeframe]);
+
+  useEffect(() => {
+    fetchPerfMetrics();
+  }, [fetchPerfMetrics]);
+
   // Transform pie data
   const pieData = data
     ? Object.entries(data.status_distribution).map(([name, value]) => ({
@@ -123,15 +159,69 @@ export default function SalesAnalyticsPage() {
         />
 
         <main className="flex-1 mt-16 p-6 overflow-y-auto space-y-6">
-          <div>
-            <h1 className="text-xl font-bold text-slate-800 tracking-tight flex items-center gap-2">
-              <BarChart3 className="w-5 h-5 text-brand-blue" />
-              <span>Sales Analytics Workspace</span>
-            </h1>
-            <p className="text-xs text-slate-400 font-semibold mt-0.5">
-              Analyze product performance rankings, sales velocities, and dynamic pipeline fulfillment statuses
-            </p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-xl font-bold text-slate-800 tracking-tight flex items-center gap-2">
+                <BarChart3 className="w-5 h-5 text-brand-blue" />
+                <span>Sales Analytics Workspace</span>
+              </h1>
+              <p className="text-xs text-slate-400 font-semibold mt-0.5">
+                Analyze product performance rankings, sales velocities, and dynamic pipeline fulfillment statuses
+              </p>
+            </div>
+            
+            {/* Timeframe Selector */}
+            <select
+              value={timeframe}
+              onChange={(e) => setTimeframe(e.target.value)}
+              className="border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 outline-none focus:border-emerald-500 bg-white cursor-pointer shadow-sm"
+            >
+              <option value="7d">Last 7 Days</option>
+              <option value="30d">Last 30 Days</option>
+              <option value="90d">Last 90 Days</option>
+            </select>
           </div>
+
+          {/* Performance Cards */}
+          {perfMetrics && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {[
+                {
+                  label: "Total Sales",
+                  value: `₹${perfMetrics.total_sales.toLocaleString("en-IN")}`,
+                  change: perfMetrics.sales_change_pct,
+                  icon: "₹"
+                },
+                {
+                  label: "Orders Count",
+                  value: perfMetrics.orders_count.toString(),
+                  change: perfMetrics.orders_change_pct,
+                  icon: "🛒"
+                },
+                {
+                  label: "Average Order Value",
+                  value: `₹${perfMetrics.avg_order_value.toLocaleString("en-IN")}`,
+                  change: perfMetrics.avg_order_change_pct,
+                  icon: "📊"
+                }
+              ].map((card) => (
+                <div key={card.label} className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wide">
+                      {card.label}
+                    </span>
+                    <span className="text-lg">{card.icon}</span>
+                  </div>
+                  <div className="text-2xl font-bold text-slate-800">{card.value}</div>
+                  <div className={`text-xs font-semibold mt-1 ${
+                    card.change >= 0 ? "text-emerald-600" : "text-red-500"
+                  }`}>
+                    {card.change >= 0 ? "↑" : "↓"}{Math.abs(card.change).toFixed(1)}% vs previous period
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
 
           {loading ? (
             <div className="flex flex-col items-center justify-center py-32 gap-3">

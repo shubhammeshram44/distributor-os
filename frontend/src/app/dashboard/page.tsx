@@ -4,7 +4,6 @@ import React, { useState, useEffect, useCallback } from "react";
 import Sidebar from "@/components/Sidebar";
 import DashboardHeader from "@/components/DashboardHeader";
 // MetricCards inlined locally to format change percentages to 1 decimal place
-import RecentOrders from "@/components/RecentOrders";
 import CollectionsDonut from "@/components/CollectionsDonut";
 // LiveDeliveries import removed 2026-06-28 — replaced by DemandGapCard in the bottom grid.
 // The component file (LiveDeliveries.tsx) is preserved on disk for future use.
@@ -15,7 +14,7 @@ import OnboardingChecklist from "@/components/OnboardingChecklist";
 import { useDashboardData, DashboardMetrics } from "@/hooks/useDashboardData";
 import ErrorBanner from "@/components/ui/ErrorBanner";
 import { formatDateTime } from "@/utils/datetime";
-import { ChevronDown, SlidersHorizontal, RefreshCw, CheckCircle2, AlertCircle, X, TrendingUp, TrendingDown, IndianRupee, ShoppingBag, BarChart, CreditCard } from "lucide-react";
+import { CheckCircle2, AlertCircle, X } from "lucide-react";
 
 
 export default function DashboardPage() {
@@ -159,40 +158,25 @@ export default function DashboardPage() {
     }
     return "Loading Workspace...";
   };
+  const [orders, setOrders] = useState<any[]>([]);
 
-  const [timeframe, setTimeframe] = useState("7days");
-  const [startDate, setStartDate] = useState(() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 7);
-    return d.toISOString().split("T")[0];
-  });
-  const [endDate, setEndDate] = useState(() => {
-    return new Date().toISOString().split("T")[0];
-  });
-
-  const handleTimeframeChange = (value: string) => {
-    const today = new Date();
-    const formatDate = (date: Date) => date.toISOString().split("T")[0];
-
-    if (value === "7days") {
-      const pastDate = new Date();
-      pastDate.setDate(today.getDate() - 7);
-      setStartDate(formatDate(pastDate));
-      setEndDate(formatDate(today));
-    } else if (value === "30days") {
-      const pastDate = new Date();
-      pastDate.setDate(today.getDate() - 30);
-      setStartDate(formatDate(pastDate));
-      setEndDate(formatDate(today));
-    } else if (value === "thisMonth") {
-      const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-      setStartDate(formatDate(firstDay));
-      setEndDate(formatDate(today));
-    } else if (value === "custom") {
-      setStartDate("");
-      setEndDate("");
+  const fetchOrders = useCallback(async () => {
+    if (!tenantId) return;
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+    try {
+      const res = await fetch(`${apiBase}/api/v1/orders?tenant_id=${tenantId}&limit=100`);
+      if (res.ok) {
+        const data = await res.json();
+        setOrders(data);
+      }
+    } catch (e) {
+      console.error("Failed to fetch orders:", e);
     }
-  };
+  }, [tenantId]);
+
+  useEffect(() => {
+    fetchOrders();
+  }, [fetchOrders]);
 
   const {
     metrics,
@@ -205,7 +189,7 @@ export default function DashboardPage() {
     closeDetails,
     refreshAll: originalRefreshAll,
     error
-  } = useDashboardData(isHydrating ? "" : tenantId, startDate, endDate);
+  } = useDashboardData(isHydrating ? "" : tenantId, undefined, undefined);
 
   const fetchCreditRisk = useCallback(async () => {
     if (!tenantId) return;
@@ -272,6 +256,7 @@ export default function DashboardPage() {
     fetchCreditRisk();
     fetchDecisionFocus();
     fetchHealthScore();
+    fetchOrders();
   };
 
   // Poll connection status every 60 seconds
@@ -355,67 +340,7 @@ export default function DashboardPage() {
                   <p className="text-xs text-slate-400 font-semibold mt-0.5">Real-time operational workflow management</p>
                 </div>
 
-                {/* Date Picker & Action Controls */}
-                <div className="flex items-center gap-3">
-                  {/* Unified Timeframe Selector */}
-                  <div className="flex items-center gap-2">
-                    <label className="text-xs font-semibold text-slate-500">Timeframe:</label>
-                    <select
-                      value={timeframe}
-                      onChange={(e) => {
-                        setTimeframe(e.target.value);
-                        handleTimeframeChange(e.target.value);
-                      }}
-                      className="bg-white border border-slate-200 text-slate-700 text-xs font-bold rounded-xl px-3 py-2 focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all cursor-pointer outline-none"
-                    >
-                      <option value="7days">Last 7 Days</option>
-                      <option value="30days">Last 30 Days</option>
-                      <option value="thisMonth">This Month</option>
-                      <option value="custom">Custom Range</option>
-                    </select>
-                  </div>
 
-                  {timeframe === "custom" && (
-                    <div className="flex items-center gap-2 animate-fade-in">
-                      <div className="flex items-center gap-1.5 bg-white border border-dashboard-border rounded-lg px-2.5 py-1.5 shadow-sm">
-                        <span className="text-[10px] uppercase font-bold text-slate-400">From</span>
-                        <input
-                          type="date"
-                          value={startDate}
-                          onChange={(e) => setStartDate(e.target.value)}
-                          className="text-xs font-semibold text-slate-600 bg-transparent focus:outline-none cursor-pointer"
-                        />
-                      </div>
-                      <div className="flex items-center gap-1.5 bg-white border border-dashboard-border rounded-lg px-2.5 py-1.5 shadow-sm">
-                        <span className="text-[10px] uppercase font-bold text-slate-400">To</span>
-                        <input
-                          type="date"
-                          value={endDate}
-                          onChange={(e) => setEndDate(e.target.value)}
-                          className="text-xs font-semibold text-slate-600 bg-transparent focus:outline-none cursor-pointer"
-                        />
-                      </div>
-                      {(startDate || endDate) && (
-                        <button
-                          onClick={() => {
-                            setStartDate("");
-                            setEndDate("");
-                          }}
-                          className="p-1.5 text-slate-400 hover:text-slate-600 bg-white border border-dashboard-border rounded-lg shadow-sm"
-                          title="Clear date filters"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Customize Layout Button */}
-                  <button className="flex items-center gap-1.5 px-3 py-2 border border-dashboard-border bg-white rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-all shadow-sm">
-                    <SlidersHorizontal className="w-3.5 h-3.5 text-slate-400" />
-                    <span>Customize</span>
-                  </button>
-                </div>
               </div>
 
               {/* API Error Banner */}
@@ -704,164 +629,220 @@ export default function DashboardPage() {
                       </div>
                     ))}
                   </div>
-                )}
-              </div>
+                           {/* Row 5: Credit Risk Alerts & Outstanding Collections (stacked) | Orders Intelligence */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Left Column: Outstanding Collections and Credit Risk Alerts stacked */}
+                <div className="space-y-4 flex flex-col justify-between">
+                  <div className="space-y-4">
+                    {/* Outstanding Collections Summary Card */}
+                    {metrics?.outstanding_collections !== undefined && (
+                      <div className="bg-white rounded-xl border border-slate-200 p-5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                            Outstanding Collections
+                          </span>
+                          <span className="text-lg">💰</span>
+                        </div>
+                        <div className="mt-2 flex items-baseline gap-2">
+                          <h2 className="text-2xl font-bold text-slate-800 tracking-tight">
+                            ₹{metrics.outstanding_collections.toLocaleString("en-IN")}
+                          </h2>
+                        </div>
+                      </div>
+                    )}
 
-              {/* A. Core Operational Metrics Row */}
-              <MetricCards metrics={metrics} />
+                    {/* Credit Risk Alerts List */}
+                    {creditRisk && creditRisk.alerts.length > 0 && (
+                      <div className="bg-white rounded-xl border border-slate-200 p-5">
+                        <div className="flex items-center justify-between mb-4">
+                          <div>
+                            <h3 className="text-sm font-semibold text-slate-800">
+                              ⚠️ Credit Risk Alerts
+                            </h3>
+                            <p className="text-xs text-slate-500 mt-0.5">
+                              {creditRisk.total_at_risk_count} customers · 
+                              ₹{creditRisk.total_at_risk_amount.toLocaleString("en-IN")} at risk
+                            </p>
+                          </div>
+                          <a href="/dashboard/customers" 
+                             className="text-xs text-emerald-600 font-medium hover:underline">
+                            View All →
+                          </a>
+                        </div>
 
-              {/* B. Split Middle Pane (Recent Orders vs Collections Aging Donut) */}
-              <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-                {/* Left Col: Recent Orders Table (60% width) */}
-                <div className="lg:col-span-3 min-h-[380px]">
-                  <RecentOrders
-                    orders={recentOrders}
-                    fetchOrderDetails={fetchOrderDetails}
-                    selectedOrderDetails={selectedOrderDetails}
-                    loadingDetails={loadingDetails}
-                    closeDetails={closeDetails}
-                    onSuccess={(msg) => {
-                      showToast(msg, "success");
-                      refreshAll();
-                    }}
-                    onError={(msg) => {
-                      showToast(msg, "error");
-                      console.error("Inventory/Order Adjustment Exception:", msg);
-                    }}
-                    activeTenantId={tenantId}
-                    viewAllHref="/dashboard/orders"
-                  />
+                        {/* Risk summary bar */}
+                        <div className="flex gap-3 mb-4 p-3 bg-slate-50 rounded-lg">
+                          <div className="flex-1 text-center">
+                            <div className="text-lg font-bold text-red-600">
+                              {creditRisk.alerts.filter(a => a.risk_level === "high_risk").length}
+                            </div>
+                            <div className="text-xs text-slate-500">🔴 High Risk</div>
+                          </div>
+                          <div className="w-px bg-slate-200" />
+                          <div className="flex-1 text-center">
+                            <div className="text-lg font-bold text-amber-500">
+                              {creditRisk.alerts.filter(a => a.risk_level === "caution").length}
+                            </div>
+                            <div className="text-xs text-slate-500">🟡 Caution</div>
+                          </div>
+                          <div className="w-px bg-slate-200" />
+                          <div className="flex-1 text-center">
+                            <div className="text-lg font-bold text-slate-700">
+                              ₹{(creditRisk.total_at_risk_amount / 1000).toFixed(1)}K
+                            </div>
+                            <div className="text-xs text-slate-500">Total Due</div>
+                          </div>
+                        </div>
+
+                        {/* Customer list */}
+                        <div className="space-y-2">
+                          {creditRisk.alerts.map((alert) => (
+                            <div 
+                              key={alert.customer_id}
+                              className={`flex items-center gap-3 p-3 rounded-lg border-l-4 ${
+                                alert.risk_level === "high_risk"
+                                  ? "bg-red-50 border-red-400"
+                                  : "bg-amber-50 border-amber-400"
+                              }`}
+                            >
+                              <span className="text-base flex-shrink-0">
+                                {alert.risk_level === "high_risk" ? "🔴" : "🟡"}
+                              </span>
+
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-semibold text-slate-800 truncate">
+                                  {alert.customer_name}
+                                </p>
+                                
+                                <div className="flex items-center gap-2 mt-1">
+                                  <div className="flex-1 bg-slate-200 rounded-full h-1.5">
+                                    <div 
+                                      className={`h-1.5 rounded-full ${
+                                        alert.risk_level === "high_risk" 
+                                          ? "bg-red-400" 
+                                          : "bg-amber-400"
+                                      }`}
+                                      style={{ 
+                                        width: `${Math.min(100, (alert.overdue_days / 90) * 100)}%` 
+                                      }}
+                                    />
+                                  </div>
+                                  <span className="text-xs text-slate-500 flex-shrink-0">
+                                    {alert.overdue_days}d overdue
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div className="text-right flex-shrink-0">
+                                <p className={`text-xs font-bold ${
+                                  alert.risk_level === "high_risk" 
+                                    ? "text-red-600" 
+                                    : "text-amber-600"
+                                }`}>
+                                  ₹{alert.outstanding.toLocaleString("en-IN")}
+                                </p>
+                                <p className="text-xs text-slate-400">
+                                  {alert.credit_utilisation_pct}% used
+                                </p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        {creditRisk.total_at_risk_count > 5 && (
+                          <p className="text-xs text-slate-400 mt-3 text-center">
+                            +{creditRisk.total_at_risk_count - 5} more customers need attention
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
-                {/* Right Col: Collections Donut Chart (40% width) */}
-                <div className="lg:col-span-2 flex flex-col gap-4">
+                {/* Right Column: Orders Intelligence */}
+                <div className="bg-white rounded-xl border border-slate-200 p-5 flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-sm font-semibold text-slate-800">📦 Orders Status</h3>
+                      <a href="/dashboard/orders" className="text-xs text-emerald-600 font-medium hover:underline">
+                        View all →
+                      </a>
+                    </div>
+                    <div className="space-y-3">
+                      {[
+                        {
+                          label: "Pending confirmation",
+                          count: orders?.filter((o: any) => o.status === "Pending").length || 0,
+                          color: "text-amber-600",
+                          bg: "bg-amber-50",
+                          url: "/dashboard/orders?status=Pending",
+                          suffix: orders?.filter((o: any) => o.status === "Pending").length > 0 ? "→ Confirm now" : "→ All clear"
+                        },
+                        {
+                          label: "Needs review",
+                          count: orders?.filter((o: any) => o.status === "Needs Review").length || 0,
+                          color: "text-red-600",
+                          bg: "bg-red-50",
+                          url: "/dashboard/orders?status=Needs+Review",
+                          suffix: "→ Action needed"
+                        },
+                        {
+                          label: "Awaiting stock",
+                          count: orders?.filter((o: any) => o.status === "Awaiting Stock").length || 0,
+                          color: "text-slate-500",
+                          bg: "bg-slate-50",
+                          url: "/dashboard/orders?status=Awaiting+Stock",
+                          suffix: "→ Restock needed"
+                        },
+                        {
+                          label: "Dispatched today",
+                          count: orders?.filter((o: any) => o.status === "Dispatched").length || 0,
+                          color: "text-blue-600",
+                          bg: "bg-blue-50",
+                          url: "/dashboard/shipments",
+                          suffix: "→ In transit"
+                        }
+                      ].map(item => (
+                        <a 
+                          key={item.label}
+                          href={item.url}
+                          className={`flex items-center justify-between p-3 rounded-lg ${item.bg} hover:opacity-80 transition-opacity`}
+                        >
+                          <span className="text-xs font-semibold text-slate-600">{item.label}</span>
+                          <div className="flex items-center gap-2">
+                            <span className={`text-sm font-bold ${item.color}`}>{item.count}</span>
+                            {item.count > 0 && (
+                              <span className={`text-xs font-bold ${item.color}`}>{item.suffix}</span>
+                            )}
+                          </div>
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Row 6: Collections aging donut | Demand Gap */}
+              <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+                <div className="lg:col-span-2">
                   <CollectionsDonut
                     data={donutData}
                     viewReportHref="/dashboard/collections"
                     overdue60Count={metrics?.overdue_60_count}
                   />
-
-                  {/* Credit Risk Alerts */}
-                  {creditRisk && creditRisk.alerts.length > 0 && (
-                      <div className="bg-white rounded-xl border border-slate-200 p-5">
-                          {/* Header */}
-                          <div className="flex items-center justify-between mb-4">
-                              <div>
-                                  <h3 className="text-sm font-semibold text-slate-800">
-                                      ⚠️ Credit Risk Alerts
-                                  </h3>
-                                  <p className="text-xs text-slate-500 mt-0.5">
-                                      {creditRisk.total_at_risk_count} customers · 
-                                      ₹{creditRisk.total_at_risk_amount.toLocaleString("en-IN")} at risk
-                                  </p>
-                              </div>
-                              <a href="/dashboard/customers" 
-                                 className="text-xs text-emerald-600 font-medium hover:underline">
-                                  View All →
-                              </a>
-                          </div>
-
-                          {/* Risk summary bar */}
-                          <div className="flex gap-3 mb-4 p-3 bg-slate-50 rounded-lg">
-                              <div className="flex-1 text-center">
-                                  <div className="text-lg font-bold text-red-600">
-                                      {creditRisk.alerts.filter(a => a.risk_level === "high_risk").length}
-                                  </div>
-                                  <div className="text-xs text-slate-500">🔴 High Risk</div>
-                              </div>
-                              <div className="w-px bg-slate-200" />
-                              <div className="flex-1 text-center">
-                                  <div className="text-lg font-bold text-amber-500">
-                                      {creditRisk.alerts.filter(a => a.risk_level === "caution").length}
-                                  </div>
-                                  <div className="text-xs text-slate-500">🟡 Caution</div>
-                              </div>
-                              <div className="w-px bg-slate-200" />
-                              <div className="flex-1 text-center">
-                                  <div className="text-lg font-bold text-slate-700">
-                                      ₹{(creditRisk.total_at_risk_amount / 1000).toFixed(1)}K
-                                  </div>
-                                  <div className="text-xs text-slate-500">Total Due</div>
-                              </div>
-                          </div>
-
-                          {/* Customer list */}
-                          <div className="space-y-2">
-                              {creditRisk.alerts.map((alert) => (
-                                  <div 
-                                      key={alert.customer_id}
-                                      className={`flex items-center gap-3 p-3 rounded-lg border-l-4 ${
-                                          alert.risk_level === "high_risk"
-                                              ? "bg-red-50 border-red-400"
-                                              : "bg-amber-50 border-amber-400"
-                                      }`}
-                                  >
-                                      {/* Risk icon */}
-                                      <span className="text-base flex-shrink-0">
-                                          {alert.risk_level === "high_risk" ? "🔴" : "🟡"}
-                                      </span>
-
-                                      {/* Customer info */}
-                                      <div className="flex-1 min-w-0">
-                                          <p className="text-xs font-semibold text-slate-800 truncate">
-                                              {alert.customer_name}
-                                          </p>
-                                          
-                                          {/* Overdue bar */}
-                                          <div className="flex items-center gap-2 mt-1">
-                                              <div className="flex-1 bg-slate-200 rounded-full h-1.5">
-                                                  <div 
-                                                      className={`h-1.5 rounded-full ${
-                                                          alert.risk_level === "high_risk" 
-                                                              ? "bg-red-400" 
-                                                              : "bg-amber-400"
-                                                      }`}
-                                                      style={{ 
-                                                          width: `${Math.min(100, (alert.overdue_days / 90) * 100)}%` 
-                                                      }}
-                                                  />
-                                              </div>
-                                              <span className="text-xs text-slate-500 flex-shrink-0">
-                                                  {alert.overdue_days}d overdue
-                                              </span>
-                                          </div>
-                                      </div>
-
-                                      {/* Amount */}
-                                      <div className="text-right flex-shrink-0">
-                                          <p className={`text-xs font-bold ${
-                                              alert.risk_level === "high_risk" 
-                                                  ? "text-red-600" 
-                                                  : "text-amber-600"
-                                          }`}>
-                                              ₹{alert.outstanding.toLocaleString("en-IN")}
-                                          </p>
-                                          <p className="text-xs text-slate-400">
-                                              {alert.credit_utilisation_pct}% used
-                                          </p>
-                                      </div>
-                                  </div>
-                              ))}
-                          </div>
-
-                          {creditRisk.total_at_risk_count > 5 && (
-                              <p className="text-xs text-slate-400 mt-3 text-center">
-                                  +{creditRisk.total_at_risk_count - 5} more customers need attention
-                              </p>
-                          )}
-                      </div>
-                  )}
+                </div>
+                <div className="lg:col-span-3 min-h-[300px]">
+                  <DemandGapCard activeTenantId={tenantId} />
                 </div>
               </div>
 
-              {/* C. Bottom Operational Grid (Demand Gap + Stock Summary) */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="min-h-[300px]">
-                  {/* DemandGapCard replaces LiveDeliveries (2026-06-28) */}
-                  <DemandGapCard activeTenantId={tenantId} />
-                </div>
+              {/* Row 7: Inventory Summary | empty placeholder */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="min-h-[300px]">
                   <InventorySummary data={metrics || undefined} />
+                </div>
+                <div className="bg-white/40 border border-dashed border-slate-200 rounded-xl p-5 min-h-[300px] flex items-center justify-center text-xs text-slate-400 font-semibold">
+                  Future Widget Placeholder
                 </div>
               </div>
 
@@ -909,128 +890,4 @@ export default function DashboardPage() {
   );
 }
 
-interface MetricCardsProps {
-  metrics: DashboardMetrics | null;
-}
 
-function MetricCards({ metrics }: MetricCardsProps) {
-  // Format numbers to Indian currency system (e.g. ₹ 28,45,600)
-  const formatCurrency = (val: number) => {
-    return new Intl.NumberFormat("en-IN", {
-      style: "currency",
-      currency: "INR",
-      maximumFractionDigits: 0
-    }).format(val);
-  };
-
-  const formatNumber = (val: number) => {
-    return new Intl.NumberFormat("en-IN").format(val);
-  };
-
-  if (!metrics) {
-    return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="bg-white p-6 rounded-xl border border-dashboard-border shadow-sm animate-pulse h-32" />
-        ))}
-      </div>
-    );
-  }
-
-  const cards = [
-    {
-      title: "Total Sales (This Week)",
-      value: formatCurrency(metrics.total_sales),
-      change: metrics.total_sales_change,
-      isPositive: metrics.total_sales_change >= 0,
-      subtext: "vs 14 May – 20 May, 2025",
-      icon: IndianRupee,
-      iconBg: "bg-emerald-50 text-emerald-600",
-      strokeColor: "#10b981",
-      sparklinePath: "M0,25 Q15,5 30,20 T60,10 T95,15 T130,5 T160,18" // green sparkline
-    },
-    {
-      title: "Orders Count",
-      value: formatNumber(metrics.orders_count),
-      change: metrics.orders_count_change,
-      isPositive: metrics.orders_count_change >= 0,
-      subtext: "vs last week",
-      icon: ShoppingBag,
-      iconBg: "bg-blue-50 text-blue-600",
-      strokeColor: "#3b82f6",
-      sparklinePath: "M0,20 Q15,28 30,10 T60,25 T90,5 T120,15 T160,8" // blue sparkline
-    },
-    {
-      title: "Average Order Value",
-      value: formatCurrency(metrics.average_order_value),
-      change: metrics.average_order_value_change,
-      isPositive: metrics.average_order_value_change >= 0,
-      subtext: "vs last week",
-      icon: BarChart,
-      iconBg: "bg-purple-50 text-purple-600",
-      strokeColor: "#8b5cf6",
-      sparklinePath: "M0,28 Q20,15 40,25 T80,10 T120,20 T160,12" // purple sparkline
-    },
-    {
-      title: "Outstanding Collections",
-      value: formatCurrency(metrics.outstanding_collections),
-      change: Math.abs(metrics.outstanding_collections_change),
-      isPositive: metrics.outstanding_collections_change < 0,
-      subtext: "vs last week",
-      icon: CreditCard,
-      iconBg: "bg-orange-50 text-orange-600",
-      strokeColor: "#f97316",
-      sparklinePath: "M0,15 Q20,30 40,10 T80,25 T120,5 T160,20" // orange sparkline
-    }
-  ];
-
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-      {cards.map((metric, i) => {
-        const Icon = metric.icon;
-        return (
-          <div key={i} className="bg-white p-5 rounded-xl border border-dashboard-border shadow-sm flex flex-col justify-between hover:shadow-md transition-all">
-            {/* Top Row */}
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center">
-                {metric.title}
-              </span>
-              <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${metric.iconBg}`}>
-                <Icon className="w-4.5 h-4.5" />
-              </div>
-            </div>
-
-            {/* Value and Trend Indicator */}
-            <div className="mt-3 flex items-baseline gap-2">
-              <h2 className="text-xl font-bold text-slate-800 tracking-tight">{metric.value}</h2>
-              <div className={`flex items-center gap-0.5 text-xs font-bold ${
-                metric.isPositive ? "text-emerald-600" : "text-rose-600"
-              }`}>
-                {metric.isPositive ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
-                <span>{parseFloat(String(metric.change)).toFixed(1)}%</span>
-              </div>
-            </div>
-
-            {/* Bottom Sparkline and Subtext */}
-            <div className="mt-4 flex items-center justify-between">
-              <span className="text-[10px] text-slate-400 font-medium">{metric.subtext}</span>
-              
-              {/* Micro-sparkline SVG */}
-              <div className="w-24 h-8 overflow-hidden">
-                <svg className="w-full h-full" viewBox="0 0 160 30">
-                  <path
-                    d={metric.sparklinePath}
-                    fill="none"
-                    stroke={metric.strokeColor}
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                  />
-                </svg>
-              </div>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
