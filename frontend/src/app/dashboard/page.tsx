@@ -280,10 +280,28 @@ export default function DashboardPage() {
     const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
     const check = async () => {
       try {
+        // First get tenant connection info
         const res = await fetch(
           `${apiBase}/api/v1/tenant/connection-status?tenant_id=${tenantId}`
         );
         const data = await res.json();
+        
+        // If tenant has WhatsApp configured, verify real-time status
+        if (data.has_whatsapp && data.connection_status !== "unknown") {
+          try {
+            const statusRes = await fetch(
+              `${apiBase}/api/v1/evolution/status?instance_name=dist-${tenantId.substring(0, 8)}&tenant_id=${tenantId}`
+            );
+            if (statusRes.ok) {
+              const statusData = await statusRes.json();
+              // Override DB status with real-time status
+              data.whatsapp_connected = statusData.connected === true;
+            }
+          } catch (e) {
+            // If evolution API unreachable, trust DB status
+          }
+        }
+        
         setWaStatus(data);
         // Reset dismissed state if reconnected
         if (data.whatsapp_connected) setWaBannerDismissed(false);
