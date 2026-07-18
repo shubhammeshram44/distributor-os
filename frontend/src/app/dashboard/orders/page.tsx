@@ -7,13 +7,15 @@ import { InvoiceTypes, InvoiceType } from "@/types/order";
 import Pagination from "@/components/ui/Pagination";
 import { formatDateTime } from "@/utils/datetime";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import { ToastContainer, useToast } from "@/components/ui/Toast";
+import { SkeletonTable } from "@/components/ui/Skeleton";
 import PlaceOrderModal from "@/components/PlaceOrderModal";
+import { useDebounce, fetchWithTimeout } from "@/lib/debounce";
 import {
   Search,
   Loader2,
   RefreshCw,
   AlertCircle,
-  CheckCircle2,
   X,
   MessageSquare,
   Globe,
@@ -61,6 +63,7 @@ export default function OrdersPage() {
   const [activeTenantId, setActiveTenantId] = useState("");
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery] = useDebounce(searchQuery, 300);
   const [selectedStatus, setSelectedStatus] = useState<"All" | "Pending" | "Confirmed" | "Needs Review">("All");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -106,38 +109,31 @@ export default function OrdersPage() {
   const [isCancelling, setIsCancelling] = useState(false);
   const [isPlaceOrderOpen, setIsPlaceOrderOpen] = useState(false);
 
-  const [toast, setToast] = useState<{ show: boolean; message: string; type: "success" | "error" }>({
-    show: false,
-    message: "",
-    type: "success"
-  });
+  const { toasts, toast: toastQueue, removeToast } = useToast();
 
   const foundOrder = orders.find(o => o.id === selectedOrderId);
   const selectedOrder = foundOrder
     ? {
-        ...foundOrder,
-        line_items: selectedOrderDetails || undefined
-      }
+      ...foundOrder,
+      line_items: selectedOrderDetails || undefined
+    }
     : null;
 
- useEffect(() => {
-  if (selectedOrder && selectedOrder.line_items && selectedOrder.line_items.length > 0) {
-    setEditedLineItems(prev => {
-      const firstPrevId = prev[0]?.id;
-      const firstNewId = selectedOrder.line_items![0]?.id;
-      if (firstPrevId !== firstNewId) {
-        return selectedOrder.line_items!;
-      }
-      return prev;
-    });
-  }
-}, [selectedOrder]);
+  useEffect(() => {
+    if (selectedOrder && selectedOrder.line_items && selectedOrder.line_items.length > 0) {
+      setEditedLineItems(prev => {
+        const firstPrevId = prev[0]?.id;
+        const firstNewId = selectedOrder.line_items![0]?.id;
+        if (firstPrevId !== firstNewId) {
+          return selectedOrder.line_items!;
+        }
+        return prev;
+      });
+    }
+  }, [selectedOrder]);
 
   const showToast = (message: string, type: "success" | "error") => {
-    setToast({ show: true, message, type });
-    setTimeout(() => {
-      setToast(prev => ({ ...prev, show: false }));
-    }, 4000);
+    toastQueue[type](message);
   };
 
   // Sync tenant from localStorage on load
@@ -169,9 +165,9 @@ export default function OrdersPage() {
     try {
       const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-      const resp = await fetch(
+      const resp = await fetchWithTimeout(
         `${apiBase}/api/v1/orders?tenant_id=${targetTenant}&skip=${currentSkip}&limit=${limit}`,
-        { credentials: "include", headers: token ? { Authorization: `Bearer ${token}` } : {} }
+        { credentials: "include", headers: token ? { Authorization: `Bearer ${token}` } : {}, timeout: 12000 }
       );
       if (!resp.ok) throw new Error("Failed to fetch orders");
       const data = await resp.json();
@@ -304,10 +300,10 @@ export default function OrdersPage() {
     }
     const orderToAssess = orders.find(o => o.id === selectedOrderId);
     if (!orderToAssess) return;
-    
+
     const status = orderToAssess.status;
     const isPendingOrDraft = status === "Pending" || status === "Draft" || status === "Needs Review";
-    
+
     if (isPendingOrDraft) {
       const fetchRiskAssessment = async () => {
         setRiskLoading(true);
@@ -455,18 +451,18 @@ export default function OrdersPage() {
       prevItems.map((item) =>
         item.id === itemId
           ? {
-              ...item,
-              product_id: selectedProductId,
-              unmatched_raw_text: null,
-              sku_id: targetProduct ? targetProduct.sku_id : item.sku_id,
-              brand: targetProduct ? targetProduct.brand : item.brand,
-              category: targetProduct ? targetProduct.category : item.category,
-              pack_size: targetProduct ? targetProduct.pack_size : item.pack_size,
-              unit_price: targetProduct ? targetProduct.base_price : item.unit_price,
-              total_price: targetProduct ? item.quantity * targetProduct.base_price : item.total_price,
-              isResolvedLocally: true,
-              resolvedSkuCode: targetProduct ? targetProduct.sku_id : undefined,
-            }
+            ...item,
+            product_id: selectedProductId,
+            unmatched_raw_text: null,
+            sku_id: targetProduct ? targetProduct.sku_id : item.sku_id,
+            brand: targetProduct ? targetProduct.brand : item.brand,
+            category: targetProduct ? targetProduct.category : item.category,
+            pack_size: targetProduct ? targetProduct.pack_size : item.pack_size,
+            unit_price: targetProduct ? targetProduct.base_price : item.unit_price,
+            total_price: targetProduct ? item.quantity * targetProduct.base_price : item.total_price,
+            isResolvedLocally: true,
+            resolvedSkuCode: targetProduct ? targetProduct.sku_id : undefined,
+          }
           : item
       )
     );
@@ -610,8 +606,8 @@ export default function OrdersPage() {
   const filteredOrders = orders.filter(o => {
     const matchesStatus = selectedStatus === "All" || o.status === selectedStatus;
     const matchesSearch =
-      o.order_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      o.customer.toLowerCase().includes(searchQuery.toLowerCase());
+      o.order_id.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+      o.customer.toLowerCase().includes(debouncedSearchQuery.toLowerCase());
     return matchesStatus && matchesSearch;
   });
 
@@ -718,8 +714,8 @@ export default function OrdersPage() {
               <button
                 onClick={() => setSelectedStatus("All")}
                 className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${selectedStatus === "All"
-                    ? "bg-white text-brand-blue shadow-sm"
-                    : "text-slate-500 hover:text-slate-800"
+                  ? "bg-white text-brand-blue shadow-sm"
+                  : "text-slate-500 hover:text-slate-800"
                   }`}
               >
                 <span>All</span>
@@ -731,8 +727,8 @@ export default function OrdersPage() {
               <button
                 onClick={() => setSelectedStatus("Pending")}
                 className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${selectedStatus === "Pending"
-                    ? "bg-white text-brand-blue shadow-sm"
-                    : "text-slate-500 hover:text-slate-800"
+                  ? "bg-white text-brand-blue shadow-sm"
+                  : "text-slate-500 hover:text-slate-800"
                   }`}
               >
                 <span>Pending</span>
@@ -744,8 +740,8 @@ export default function OrdersPage() {
               <button
                 onClick={() => setSelectedStatus("Confirmed")}
                 className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${selectedStatus === "Confirmed"
-                    ? "bg-white text-brand-blue shadow-sm"
-                    : "text-slate-500 hover:text-slate-800"
+                  ? "bg-white text-brand-blue shadow-sm"
+                  : "text-slate-500 hover:text-slate-800"
                   }`}
               >
                 <span>Confirmed</span>
@@ -757,8 +753,8 @@ export default function OrdersPage() {
               <button
                 onClick={() => setSelectedStatus("Needs Review")}
                 className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${selectedStatus === "Needs Review"
-                    ? "bg-white text-brand-blue shadow-sm"
-                    : "text-slate-500 hover:text-slate-800"
+                  ? "bg-white text-brand-blue shadow-sm"
+                  : "text-slate-500 hover:text-slate-800"
                   }`}
               >
                 <span>Needs Review</span>
@@ -785,10 +781,22 @@ export default function OrdersPage() {
           <div className="bg-white rounded-xl border border-dashboard-border shadow-sm overflow-hidden flex flex-col min-h-[400px]">
             <div className="flex-1 overflow-x-auto">
               {loading ? (
-                <div className="flex flex-col items-center justify-center py-24 gap-3">
-                  <Loader2 className="w-8 h-8 text-brand-blue animate-spin" />
-                  <span className="text-sm font-semibold text-slate-500">Loading orders catalog...</span>
-                </div>
+                <table className="w-full text-left text-sm border-collapse">
+                  <thead>
+                    <tr className="text-slate-400 font-semibold text-xs border-b border-dashboard-border bg-slate-50/50">
+                      <th className="py-3 px-6">Order ID</th>
+                      <th className="py-3 px-6">Customer</th>
+                      <th className="py-3 px-6 text-center">Channel</th>
+                      <th className="py-3 px-6 text-right">Amount</th>
+                      <th className="py-3 px-6 text-center">Status</th>
+                      <th className="py-3 px-6 text-center">PAYMENT</th>
+                      <th className="py-3 px-6 text-center">Invoice Type</th>
+                      <th className="py-3 px-6">Created On</th>
+                      <th className="py-3 px-6 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <SkeletonTable rows={8} cols={9} />
+                </table>
               ) : error ? (
                 <div className="flex flex-col items-center justify-center py-24 gap-3 text-rose-600">
                   <AlertCircle className="w-8 h-8" />
@@ -806,15 +814,42 @@ export default function OrdersPage() {
 
                 </div>
               ) : filteredOrders.length === 0 ? (
-                <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/40 text-center my-4">
-                  <div className="p-3 bg-slate-100 text-slate-400 rounded-full mb-3">
-                    <Search className="w-6 h-6" />
+                orders.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/40 text-center my-4">
+                    <div className="p-3 bg-slate-100 text-slate-400 rounded-full mb-3">
+                      <MessageSquare className="w-6 h-6" />
+                    </div>
+                    <h3 className="text-sm font-semibold text-slate-800">No orders yet</h3>
+                    <p className="text-xs text-slate-500 max-w-xs mt-1">
+                      Orders placed via WhatsApp or the portal will show up here in real time.
+                    </p>
+                    <button
+                      onClick={() => setIsPlaceOrderOpen(true)}
+                      className="mt-4 px-4 py-2 bg-brand-blue hover:bg-brand-blueHover text-white rounded-lg text-xs font-bold transition-all cursor-pointer"
+                    >
+                      Place your first order
+                    </button>
                   </div>
-                  <h3 className="text-sm font-semibold text-slate-800">Your workspace is clean</h3>
-                  <p className="text-xs text-slate-500 max-w-xs mt-1">
-                    Connect your warehouse stock or send your first WhatsApp text order to see live tracking metrics update instantly.
-                  </p>
-                </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/40 text-center my-4">
+                    <div className="p-3 bg-slate-100 text-slate-400 rounded-full mb-3">
+                      <Search className="w-6 h-6" />
+                    </div>
+                    <h3 className="text-sm font-semibold text-slate-800">No orders match your filters</h3>
+                    <p className="text-xs text-slate-500 max-w-xs mt-1">
+                      Try a different search term or reset the status filter to see everything.
+                    </p>
+                    <button
+                      onClick={() => {
+                        setSearchQuery("");
+                        setSelectedStatus("All");
+                      }}
+                      className="mt-4 px-4 py-2 border border-dashboard-border text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-50 transition-all cursor-pointer"
+                    >
+                      Clear filters
+                    </button>
+                  </div>
+                )
               ) : (
                 <table className="w-full text-left text-sm border-collapse">
                   <thead>
@@ -873,13 +908,12 @@ export default function OrdersPage() {
                               );
                             }
                             return (
-                              <span className={`inline-flex items-center justify-center px-2.5 py-1 rounded-full text-xs font-bold leading-none ${
-                                order.status === "Confirmed"
+                              <span className={`inline-flex items-center justify-center px-2.5 py-1 rounded-full text-xs font-bold leading-none ${order.status === "Confirmed"
                                   ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
                                   : order.status === "Needs Review"
-                                  ? "bg-rose-50 text-rose-700 border border-rose-200"
-                                  : "bg-amber-50 text-amber-700 border border-amber-200"
-                              }`}>
+                                    ? "bg-rose-50 text-rose-700 border border-rose-200"
+                                    : "bg-amber-50 text-amber-700 border border-amber-200"
+                                }`}>
                                 {order.status}
                               </span>
                             );
@@ -887,10 +921,10 @@ export default function OrdersPage() {
                         </td>
                         <td className="py-4 px-6 text-center">
                           <span className={`inline-flex items-center justify-center w-24 px-2.5 py-1 rounded-full text-xs font-bold leading-none ${order.payment_status === "PAID"
-                              ? "bg-emerald-50 text-emerald-700 border border-emerald-200/60"
-                              : order.payment_status === "PARTIALLY_PAID"
-                                ? "bg-amber-50 text-amber-700 border border-amber-200/60"
-                                : "bg-rose-50 text-rose-700 border border-rose-200/60"
+                            ? "bg-emerald-50 text-emerald-700 border border-emerald-200/60"
+                            : order.payment_status === "PARTIALLY_PAID"
+                              ? "bg-amber-50 text-amber-700 border border-amber-200/60"
+                              : "bg-rose-50 text-rose-700 border border-rose-200/60"
                             }`}>
                             {order.payment_status === "PAID"
                               ? "🟢 Paid"
@@ -931,19 +965,20 @@ export default function OrdersPage() {
 
       {/* Details Side Panel Drawer */}
       {selectedOrderId && (
-        <div className="fixed inset-y-0 right-0 z-50 flex justify-end pointer-events-none">
+        <div className="fixed inset-y-0 right-0 z-50 flex justify-end pointer-events-none" role="dialog" aria-modal="true" aria-labelledby="order-details-title">
           <div className="flex-1 pointer-events-none"></div>
 
           <div className="w-[500px] bg-white h-screen shadow-2xl flex flex-col animate-slide-in relative border-l border-slate-200 pointer-events-auto">
             {/* Drawer Header */}
             <div className="p-6 border-b border-dashboard-border flex items-center justify-between bg-brand-dark text-white">
               <div>
-                <h3 className="font-bold text-lg">Order Details</h3>
+                <h3 id="order-details-title" className="font-bold text-lg">Order Details</h3>
                 <p className="text-xs text-brand-textMuted mt-0.5">ID: {selectedOrderNo}</p>
               </div>
               <button
                 onClick={handleCloseDetails}
                 className="p-1.5 rounded-full hover:bg-brand-darkHover text-brand-textMuted hover:text-white transition-all cursor-pointer"
+                aria-label="Close order details"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1139,13 +1174,12 @@ export default function OrdersPage() {
             {/* Footer Buttons */}
             <div className="p-6 border-t border-dashboard-border bg-slate-50 flex flex-col gap-3">
               {riskAssessment && selectedOrder?.status !== "Confirmed" && (
-                <div className={`rounded-lg p-4 mb-4 border ${
-                  riskAssessment.level === "high_risk" 
-                    ? "bg-red-50 border-red-200" 
+                <div className={`rounded-lg p-4 mb-4 border ${riskAssessment.level === "high_risk"
+                    ? "bg-red-50 border-red-200"
                     : riskAssessment.level === "caution"
-                    ? "bg-yellow-50 border-yellow-200"
-                    : "bg-green-50 border-green-200"
-                }`}>
+                      ? "bg-yellow-50 border-yellow-200"
+                      : "bg-green-50 border-green-200"
+                  }`}>
                   <div className="flex items-center gap-2 mb-2">
                     <span className="text-lg">
                       {riskAssessment.level === "high_risk" ? "🔴" : riskAssessment.level === "caution" ? "🟡" : "🟢"}
@@ -1254,45 +1288,45 @@ export default function OrdersPage() {
 
                   {/* Copy Payment Link — for any unpaid post-confirmation order */}
                   {selectedOrder &&
-                   ["Confirmed", "Dispatched", "Delivered"].includes(selectedOrder.status) &&
-                   selectedOrder.payment_status !== "PAID" && (
-                    <button
-                      onClick={async () => {
-                        try {
-                          const invoiceId = selectedOrderPayments?.invoice_id;
-                          if (!invoiceId) {
-                            showToast("No invoice found for this order.", "error");
-                            return;
-                          }
+                    ["Confirmed", "Dispatched", "Delivered"].includes(selectedOrder.status) &&
+                    selectedOrder.payment_status !== "PAID" && (
+                      <button
+                        onClick={async () => {
+                          try {
+                            const invoiceId = selectedOrderPayments?.invoice_id;
+                            if (!invoiceId) {
+                              showToast("No invoice found for this order.", "error");
+                              return;
+                            }
 
-                          const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-                          const res = await fetch(
-                            `${apiBase}/api/v1/payments/payment-options?invoice_id=${invoiceId}&tenant_id=${activeTenantId}`
-                          );
-                          if (!res.ok) {
-                            showToast("Failed to fetch payment options.", "error");
-                            return;
-                          }
-                          const data = await res.json();
-                          const link = data?.payment_links?.pay_invoice;
+                            const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+                            const res = await fetch(
+                              `${apiBase}/api/v1/payments/payment-options?invoice_id=${invoiceId}&tenant_id=${activeTenantId}`
+                            );
+                            if (!res.ok) {
+                              showToast("Failed to fetch payment options.", "error");
+                              return;
+                            }
+                            const data = await res.json();
+                            const link = data?.payment_links?.pay_invoice;
 
-                          if (link) {
-                            await navigator.clipboard.writeText(link);
-                            showToast("Payment link copied to clipboard!", "success");
-                          } else {
-                            showToast("Payment link not available yet.", "error");
+                            if (link) {
+                              await navigator.clipboard.writeText(link);
+                              showToast("Payment link copied to clipboard!", "success");
+                            } else {
+                              showToast("Payment link not available yet.", "error");
+                            }
+                          } catch (err) {
+                            console.error("Failed to copy link:", err);
+                            showToast("Failed to fetch payment link.", "error");
                           }
-                        } catch (err) {
-                          console.error("Failed to copy link:", err);
-                          showToast("Failed to fetch payment link.", "error");
-                        }
-                      }}
-                      className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-lg transition-all flex items-center gap-2 cursor-pointer"
-                    >
-                      <span>🔗</span>
-                      <span>Copy Payment Link</span>
-                    </button>
-                  )}
+                        }}
+                        className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-lg transition-all flex items-center gap-2 cursor-pointer"
+                      >
+                        <span>🔗</span>
+                        <span>Copy Payment Link</span>
+                      </button>
+                    )}
                 </div>
                 <button
                   onClick={handleCloseDetails}
@@ -1321,13 +1355,14 @@ export default function OrdersPage() {
 
       {/* Tally Export Date Range Modal */}
       {showTallyExportModal && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="tally-export-title">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 animate-fade-in">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-bold text-slate-800">Export to Tally</h3>
+              <h3 id="tally-export-title" className="text-sm font-bold text-slate-800">Export to Tally</h3>
               <button
                 onClick={() => setShowTallyExportModal(false)}
                 className="text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-50 transition-all"
+                aria-label="Close export modal"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -1386,12 +1421,12 @@ export default function OrdersPage() {
           <div className="flex items-center justify-between">
             <h4 className="font-bold text-slate-800 text-sm">Bulk Invoice Download</h4>
             <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${bulkStatus === "COMPLETED"
-                ? "bg-emerald-50 text-emerald-700 border border-emerald-100"
-                : bulkStatus === "PARTIALLY_COMPLETED"
-                  ? "bg-amber-50 text-amber-700 border border-amber-100"
-                  : bulkStatus === "FAILED"
-                    ? "bg-rose-50 text-rose-700 border border-rose-100"
-                    : "bg-blue-50 text-brand-blue border border-blue-100 animate-pulse"
+              ? "bg-emerald-50 text-emerald-700 border border-emerald-100"
+              : bulkStatus === "PARTIALLY_COMPLETED"
+                ? "bg-amber-50 text-amber-700 border border-amber-100"
+                : bulkStatus === "FAILED"
+                  ? "bg-rose-50 text-rose-700 border border-rose-100"
+                  : "bg-blue-50 text-brand-blue border border-blue-100 animate-pulse"
               }`}>
               {bulkStatus}
             </span>
@@ -1454,30 +1489,8 @@ export default function OrdersPage() {
         </div>
       )}
 
-      {/* Sleek Floating Toast Notification */}
-      {toast.show && (
-        <div className="fixed top-5 right-5 z-50 flex items-center gap-3 bg-white/95 backdrop-blur-md border border-slate-100 shadow-2xl px-4 py-3.5 rounded-xl animate-slide-in pointer-events-auto max-w-sm">
-          {toast.type === "success" ? (
-            <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0 shadow-sm">
-              <CheckCircle2 className="w-4.5 h-4.5" />
-            </div>
-          ) : (
-            <div className="w-8 h-8 rounded-full bg-rose-50 flex items-center justify-center text-rose-600 shrink-0 shadow-sm">
-              <AlertCircle className="w-4.5 h-4.5" />
-            </div>
-          )}
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-bold text-slate-800">{toast.type === "success" ? "Success" : "Error"}</p>
-            <p className="text-[11px] text-slate-500 font-semibold mt-0.5 break-words">{toast.message}</p>
-          </div>
-          <button
-            onClick={() => setToast(prev => ({ ...prev, show: false }))}
-            className="text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-50 transition-all shrink-0 cursor-pointer"
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      )}
+      {/* Toast Notification Queue — supports multiple concurrent messages */}
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
 
       <PlaceOrderModal
         activeTenantId={activeTenantId}

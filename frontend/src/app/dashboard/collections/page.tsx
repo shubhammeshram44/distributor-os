@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import Sidebar from "@/components/Sidebar";
 import DashboardHeader from "@/components/DashboardHeader";
 import Pagination from "@/components/ui/Pagination";
+import { useDebounce } from "@/lib/debounce";
 import {
   Search,
   Loader2,
@@ -32,6 +33,7 @@ export default function CollectionsPage() {
   const [activeTenantId, setActiveTenantId] = useState("");
   const [customers, setCustomers] = useState<CustomerRow[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery] = useDebounce(searchQuery, 300);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -169,10 +171,14 @@ export default function CollectionsPage() {
     setSubmitting(true);
     try {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
       const resp = await fetch(`${apiBase}/api/v1/payments/collection-voucher?tenant_id=${activeTenantId}`, {
         method: "POST",
         credentials: "include",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({
           customer_id: selectedCustomerId,
           amount: amtVal,
@@ -191,8 +197,7 @@ export default function CollectionsPage() {
         setReferenceNumber("");
         setPaymentMethod("CASH");
         
-        // Refresh customer list
-        fetchCustomers(activeTenantId);
+        setTimeout(() => fetchCustomers(activeTenantId, skip), 50);
       } else {
         const detail = data.detail || "Failed to record collection voucher.";
         showToast(detail, "error");
@@ -207,7 +212,7 @@ export default function CollectionsPage() {
 
   // Filter Logic
   const filteredCustomers = customers.filter(c => {
-    const query = searchQuery.toLowerCase();
+    const query = debouncedSearchQuery.toLowerCase();
     return (
       c.customer_id.toLowerCase().includes(query) ||
       c.retailer_name.toLowerCase().includes(query)

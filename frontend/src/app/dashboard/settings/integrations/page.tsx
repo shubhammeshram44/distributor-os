@@ -285,10 +285,14 @@ export default function IntegrationsPage() {
     setSaving(true);
     try {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
       const resp = await fetch(`${apiBase}/api/v1/tenant/integrations/whatsapp?tenant_id=${activeTenantId}`, {
         method: "PATCH",
         credentials: "include",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({
           whatsapp_phone_id: whatsappPhoneId.trim(),
           whatsapp_access_token: whatsappAccessToken.trim()
@@ -299,7 +303,8 @@ export default function IntegrationsPage() {
         showToast("WhatsApp configuration saved successfully!", "success");
         // Reload details to get masked version of token if updated
         const getResp = await fetch(`${apiBase}/api/v1/tenant/integrations/whatsapp?tenant_id=${activeTenantId}`, {
-          credentials: "include"
+          credentials: "include",
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
         });
         if (getResp.ok) {
           const getData = await getResp.json();

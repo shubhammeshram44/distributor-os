@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import Sidebar from "@/components/Sidebar";
 import DashboardHeader from "@/components/DashboardHeader";
+import { useDebounce } from "@/lib/debounce";
 import {
   Search,
   Loader2,
@@ -94,6 +95,7 @@ export default function TeamSettingsPage() {
   const [activeTab, setActiveTab] = useState<"directory" | "roles">("directory");
   const [users, setUsers] = useState<UserRow[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery] = useDebounce(searchQuery, 300);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -188,10 +190,14 @@ export default function TeamSettingsPage() {
     setSubmitting(true);
     try {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
       const resp = await fetch(`${apiBase}/api/v1/users/invite?tenant_id=${activeTenantId}`, {
         method: "POST",
         credentials: "include",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({
           full_name: fullName.trim(),
           email_or_phone: emailOrPhone.trim(),
@@ -208,8 +214,8 @@ export default function TeamSettingsPage() {
         setEmailOrPhone("");
         setPassword("");
         setRole("OPERATOR");
-        
-        fetchUsers(activeTenantId);
+
+        setTimeout(() => fetchUsers(activeTenantId), 50);
       } else {
         const detail = data.detail || "Failed to invite new staff member.";
         showToast(detail, "error");
@@ -225,10 +231,14 @@ export default function TeamSettingsPage() {
   const handleToggleStatus = async (user: UserRow) => {
     try {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
       const resp = await fetch(`${apiBase}/api/v1/users/${user.id}?tenant_id=${activeTenantId}`, {
         method: "PATCH",
         credentials: "include",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({
           is_active: !user.is_active
         })
@@ -237,7 +247,7 @@ export default function TeamSettingsPage() {
       const data = await resp.json();
       if (resp.ok) {
         showToast(`User ${!user.is_active ? "activated" : "deactivated"} successfully!`, "success");
-        fetchUsers(activeTenantId);
+        setTimeout(() => fetchUsers(activeTenantId), 50);
       } else {
         const detail = data.detail || "Failed to update user status.";
         showToast(detail, "error");
@@ -255,10 +265,14 @@ export default function TeamSettingsPage() {
     setSubmitting(true);
     try {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
       const resp = await fetch(`${apiBase}/api/v1/users/${selectedUserForEdit.id}?tenant_id=${activeTenantId}`, {
         method: "PATCH",
         credentials: "include",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({
           role: editRole
         })
@@ -268,7 +282,7 @@ export default function TeamSettingsPage() {
       if (resp.ok) {
         showToast("User role modified successfully!", "success");
         setSelectedUserForEdit(null);
-        fetchUsers(activeTenantId);
+        setTimeout(() => fetchUsers(activeTenantId), 50);
       } else {
         const detail = data.detail || "Failed to modify user role.";
         showToast(detail, "error");
@@ -297,7 +311,7 @@ export default function TeamSettingsPage() {
   };
 
   const filteredUsers = users.filter(u => {
-    const q = searchQuery.toLowerCase();
+    const q = debouncedSearchQuery.toLowerCase();
     return (
       u.full_name.toLowerCase().includes(q) ||
       u.role.toLowerCase().includes(q) ||
@@ -319,7 +333,7 @@ export default function TeamSettingsPage() {
     <div className="flex bg-dashboard-bg min-h-screen text-slate-800">
       <Sidebar
         activeTab="Team Settings"
-        setActiveTab={() => {}}
+        setActiveTab={() => { }}
         tenantName={getTenantName()}
       />
 
@@ -461,11 +475,10 @@ export default function TeamSettingsPage() {
                               </button>
                               <button
                                 onClick={() => handleToggleStatus(u)}
-                                className={`w-24 text-center block px-2.5 py-1 text-xs rounded-md border font-bold transition-all cursor-pointer ${
-                                  u.is_active
+                                className={`w-24 text-center block px-2.5 py-1 text-xs rounded-md border font-bold transition-all cursor-pointer ${u.is_active
                                     ? "bg-rose-50 border-rose-200 text-rose-500 hover:bg-rose-100 hover:text-rose-600"
                                     : "bg-emerald-50 border-emerald-200 text-emerald-500 hover:bg-emerald-100 hover:text-emerald-600"
-                                }`}
+                                  }`}
                               >
                                 {u.is_active ? "Deactivate" : "Activate"}
                               </button>
@@ -489,9 +502,8 @@ export default function TeamSettingsPage() {
                     <button
                       key={r.role}
                       onClick={() => setSelectedRoleCode(r.role)}
-                      className={`w-full p-4 text-left border rounded-xl shadow-sm transition-all flex flex-col gap-1 cursor-pointer bg-white ${
-                        isSelected ? "border-brand-blue ring-1 ring-brand-blue" : "border-dashboard-border hover:bg-slate-50/50"
-                      }`}
+                      className={`w-full p-4 text-left border rounded-xl shadow-sm transition-all flex flex-col gap-1 cursor-pointer bg-white ${isSelected ? "border-brand-blue ring-1 ring-brand-blue" : "border-dashboard-border hover:bg-slate-50/50"
+                        }`}
                     >
                       <div className="flex items-center justify-between w-full">
                         <span className="font-extrabold text-slate-800 text-sm tracking-tight">{r.title}</span>
@@ -551,18 +563,19 @@ export default function TeamSettingsPage() {
 
       {/* Invite Staff Modal */}
       {isInviteModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm animate-fade-in" role="dialog" aria-modal="true" aria-labelledby="invite-modal-title">
           <div className="bg-white rounded-xl border border-slate-200 shadow-2xl w-full max-w-md p-6 animate-scale-up relative mx-4 animate-slide-in">
             <button
               onClick={() => setIsInviteModalOpen(false)}
               className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1.5 rounded-full hover:bg-slate-50 transition-all cursor-pointer"
+              aria-label="Close modal"
             >
               <X className="w-4 h-4" />
             </button>
 
             <div className="flex items-center gap-2 mb-4">
               <span className="text-xl">👤</span>
-              <h3 className="font-bold text-slate-800 text-lg">Add Team Member</h3>
+              <h3 id="invite-modal-title" className="font-bold text-slate-800 text-lg">Add Team Member</h3>
             </div>
 
             <p className="text-xs text-slate-400 font-semibold mb-6">
@@ -651,18 +664,19 @@ export default function TeamSettingsPage() {
 
       {/* Edit Role Modal */}
       {selectedUserForEdit && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm animate-fade-in" role="dialog" aria-modal="true" aria-labelledby="edit-role-modal-title">
           <div className="bg-white rounded-xl border border-slate-200 shadow-2xl w-full max-w-md p-6 animate-scale-up relative mx-4 animate-slide-in">
             <button
               onClick={() => setSelectedUserForEdit(null)}
               className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1.5 rounded-full hover:bg-slate-50 transition-all cursor-pointer"
+              aria-label="Close modal"
             >
               <X className="w-4 h-4" />
             </button>
 
             <div className="flex items-center gap-2 mb-4">
               <span className="text-xl">✏️</span>
-              <h3 className="font-bold text-slate-800 text-lg">Modify User Role</h3>
+              <h3 id="edit-role-modal-title" className="font-bold text-slate-800 text-lg">Modify User Role</h3>
             </div>
 
             <p className="text-xs text-slate-400 font-semibold mb-6">

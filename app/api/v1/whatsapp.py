@@ -407,13 +407,18 @@ class ProvisionRequest(BaseModel):
 async def provision_whatsapp_instance(payload: ProvisionRequest):
     from app.services.gateway_service import EvolutionGatewayService
     import httpx
-    service = EvolutionGatewayService()
     try:
-        # Step 1: Force Purge (Defensive Delete)
-        delete_url = f"{service.base_url}/instance/delete/{payload.instance_name}"
-        logger.info("Purging legacy instance if it exists: url=%s", delete_url)
-        try:
-            async with httpx.AsyncClient() as client:
+        # Reuse a single HTTP connection across the whole flow (delete, init, webhook,
+        # QR, status) instead of opening a fresh TCP/TLS connection per call — cuts
+        # several round-trips of handshake latency against the remote gateway.
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            service = EvolutionGatewayService(client=client)
+
+            # Step 1: Force Purge (Defensive Delete)
+            delete_url = f"{service.base_url}/instance/delete/{payload.instance_name}"
+            logger.info("Purging legacy instance if it exists: url=%s", delete_url)
+            legacy_instance_deleted = False
+            try:
                 response = await client.delete(delete_url, headers=service._get_headers())
                 if response.status_code == 404:
                     logger.info("No legacy instance found to purge, moving forward.")
@@ -421,22 +426,26 @@ async def provision_whatsapp_instance(payload: ProvisionRequest):
                     logger.info("Outbound delete request returned code %d. Proceeding anyway.", response.status_code)
                 else:
                     logger.info("Successfully purged legacy instance %s.", payload.instance_name)
-        except Exception as delete_exc:
-            logger.info("No legacy instance found to purge, moving forward. Details: %s", str(delete_exc))
+                    legacy_instance_deleted = True
+            except Exception as delete_exc:
+                logger.info("No legacy instance found to purge, moving forward. Details: %s", str(delete_exc))
 
-        # Wait 4 seconds to allow the gateway to fully complete its background WebSocket teardown
-        logger.info("Waiting 4 seconds for delete operation to fully stabilize...")
-        await asyncio.sleep(4)
+            # Only wait for the gateway's background WebSocket teardown when we actually
+            # deleted a live instance — this is the sole scenario the race condition
+            # applies to. Skips a needless 4s stall for first-time/new-tenant provisioning.
+            if legacy_instance_deleted:
+                logger.info("Waiting 4 seconds for delete operation to fully stabilize...")
+                await asyncio.sleep(4)
 
-        # Step 2: Initialize Clean Instance (Do not swallow errors)
-        init_res = await service.initialize_instance(payload.instance_name)
+            # Step 2: Initialize Clean Instance (Do not swallow errors)
+            init_res = await service.initialize_instance(payload.instance_name)
 
-        # Step 3: Configure Webhook
-        webhook_res = await service.configure_webhook(payload.instance_name)
+            # Step 3: Configure Webhook
+            webhook_res = await service.configure_webhook(payload.instance_name)
 
-        # Step 4: Generate QR Session Data
-        qr_base64 = await service.generate_qr_code(payload.instance_name)
-        conn_status = await service.get_connection_status(payload.instance_name)
+            # Step 4: Generate QR Session Data
+            qr_base64 = await service.generate_qr_code(payload.instance_name)
+            conn_status = await service.get_connection_status(payload.instance_name)
 
         return {
             "status": "success",

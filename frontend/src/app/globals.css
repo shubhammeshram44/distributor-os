@@ -12,18 +12,33 @@ body {
   transition: padding-left 300ms ease-in-out !important;
 }
 
-body.sidebar-collapsed .pl-64 {
-  padding-left: 4rem !important;
-  /* matches w-16 */
-}
-
 .left-64 {
   transition: left 300ms ease-in-out !important;
 }
 
-body.sidebar-collapsed .left-64 {
-  left: 4rem !important;
-  /* matches w-16 */
+/* Mobile (<768px): the sidebar is an off-canvas drawer, so the main content and
+   header must span the full viewport width instead of reserving 16rem/4rem. */
+@media (max-width: 767.98px) {
+  .pl-64 {
+    padding-left: 0 !important;
+  }
+
+  .left-64 {
+    left: 0 !important;
+  }
+}
+
+/* Desktop (>=768px): reserve space for the fixed sidebar, respecting the collapsed state. */
+@media (min-width: 768px) {
+  body.sidebar-collapsed .pl-64 {
+    padding-left: 4rem !important;
+    /* matches w-16 */
+  }
+
+  body.sidebar-collapsed .left-64 {
+    left: 4rem !important;
+    /* matches w-16 */
+  }
 }
 
 /* Custom scrollbars for high-density tables */

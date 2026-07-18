@@ -6,6 +6,7 @@ import DashboardHeader from "@/components/DashboardHeader";
 import CatalogIngestion from "@/components/CatalogIngestion";
 import Pagination from "@/components/ui/Pagination";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import { useDebounce, fetchWithTimeout } from "@/lib/debounce";
 import { Search, Loader2, RefreshCw, AlertCircle, Layers, CheckCircle2, X, Trash2 } from "lucide-react";
 
 interface Product {
@@ -21,6 +22,7 @@ export default function ProductsPage() {
   const [activeTenantId, setActiveTenantId] = useState("");
   const [products, setProducts] = useState<Product[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery] = useDebounce(searchQuery, 300);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -79,9 +81,9 @@ export default function ProductsPage() {
     try {
       const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-      const resp = await fetch(
+      const resp = await fetchWithTimeout(
         `${apiBase}/api/v1/products?tenant_id=${targetTenant}&skip=${currentSkip}&limit=${limit}`,
-        { credentials: "include", headers: token ? { Authorization: `Bearer ${token}` } : {} }
+        { credentials: "include", headers: token ? { Authorization: `Bearer ${token}` } : {}, timeout: 12000 }
       );
       if (!resp.ok) throw new Error("Failed to fetch products");
       const data = await resp.json();
@@ -153,10 +155,14 @@ export default function ProductsPage() {
     setSubmitting(true);
     try {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
       const resp = await fetch(`${apiBase}/api/v1/products?tenant_id=${activeTenantId}`, {
         method: "POST",
         credentials: "include",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({
           sku_id: sku_id.trim(),
           brand: brand.trim(),
@@ -176,8 +182,7 @@ export default function ProductsPage() {
           pack_size: "",
           base_price: ""
         });
-        fetchProducts(activeTenantId); // Refresh local list
-
+        setTimeout(() => fetchProducts(activeTenantId, skip), 50);
       } else {
         const detail = data.detail || "Failed to add product manually.";
         showToast(detail, "error");
@@ -192,10 +197,10 @@ export default function ProductsPage() {
 
   // Handle live catalog filtering
   const filteredProducts = products.filter(p =>
-    p.sku_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    p.brand.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    p.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    p.pack_size.toLowerCase().includes(searchQuery.toLowerCase())
+    p.sku_id.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+    p.brand.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+    p.category.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+    p.pack_size.toLowerCase().includes(debouncedSearchQuery.toLowerCase())
   );
 
   const formatCurrency = (val: number) => {
