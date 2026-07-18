@@ -1495,48 +1495,7 @@ def confirm_order_post(order_id: uuid.UUID, db: Session = Depends(get_db)):
     confirm_order(db, order, updated_by="API")
     db.commit()
 
-    # Fire order_confirmed notification (non-blocking)
-    try:
-        customer = db.get(Customer, order.customer_id)
-        if customer:
-            # Eagerly load relationships so they are in-memory before background task starts
-            for item in order.line_items:
-                if item.product:
-                    _ = item.product.brand
 
-            import asyncio
-            from app.services.notification_service import NotificationService
-            import os
-
-            tenant_obj = db.get(DistributorTenant, order.tenant_id)
-
-            async def fire_notifications(tenant_val, customer_val, order_val):
-                try:
-                    notification_service = NotificationService(
-                        evolution_base_url=os.getenv("EVOLUTION_API_URL", "http://34.158.60.42:8080"),
-                        api_key=os.getenv("EVOLUTION_API_KEY", "distributorbotkey2026")
-                    )
-                    await notification_service.notify(
-                        event="order_confirmed",
-                        tenant=tenant_val,
-                        customer=customer_val,
-                        order=order_val,
-                        db=db
-                    )
-                except Exception as inner_ex:
-                    logger.warning("Notification fire failed silently: %s", str(inner_ex))
-
-            try:
-                loop = asyncio.get_running_loop()
-            except RuntimeError:
-                loop = None
-
-            if loop and loop.is_running():
-                loop.create_task(fire_notifications(tenant_obj, customer, order))
-            else:
-                asyncio.run(fire_notifications(tenant_obj, customer, order))
-    except Exception as e:
-        logger.warning("Notification fire setup failed silently: %s", str(e))
 
     return {"status": "success", "order_id": str(order.id), "new_status": "Confirmed"}
 
@@ -1695,13 +1654,11 @@ def batch_confirm_order(
         # Fire order_confirmed notification (non-blocking in background)
         def _fire_confirmed_notification_sync(tenant_id: str, customer_id: str, order_id: str, engine):
             """Sends WhatsApp confirmation after response is sent."""
-            import os, asyncio
+            import os
             from sqlalchemy.orm import sessionmaker
             from app.models.tenant import DistributorTenant
             from app.models.customer import Customer
             from app.models.order import Order
-            from app.services.notification_service import NotificationService
-            import httpx
             
             SessionLocalTask = sessionmaker(bind=engine)
             db_task = SessionLocalTask()
@@ -1713,23 +1670,46 @@ def batch_confirm_order(
                 if not (tenant and customer and order):
                     return
                 
-                # Eagerly load line items
+                prefs = tenant.notification_prefs or {}
+                if not prefs.get("order_confirmed", True):
+                    return
+                if not customer.whatsapp_notifications_enabled:
+                    return
+                if not tenant.whatsapp_phone_id:
+                    return
+
+                import httpx
+                from app.utils.phone import normalize_phone_number
+
+                phone = normalize_phone_number(customer.phone_number or "")
+                if phone.startswith("+"):
+                    phone = phone[1:]
+
+                # Build item summary using allocated quantities
+                items_list = []
                 for item in order.line_items:
+                    qty = item.allocated_quantity if item.allocated_quantity is not None else item.quantity
                     if item.product:
-                        _ = item.product.brand
-                
-                # Use sync httpx directly — no asyncio needed
-                svc = NotificationService(
-                    evolution_base_url=os.getenv("EVOLUTION_API_URL", "http://34.158.60.42:8080"),
-                    api_key=os.getenv("EVOLUTION_API_KEY", "distributorbotkey2026")
+                        items_list.append(f"{item.product.brand} x {qty}")
+                item_summary = ", ".join(items_list) if items_list else "items"
+
+                total = float(order.total_amount or 0)
+                message = (
+                    f"Hi {customer.retailer_name},\n\n"
+                    f"Your order {order.internal_order_id} has been confirmed ✓\n"
+                    f"Items: {item_summary}\n"
+                    f"Total: ₹{total:,.0f}\n\n"
+                    f"— {tenant.name}"
                 )
-                asyncio.run(svc.notify(
-                    event="order_confirmed",
-                    tenant=tenant,
-                    customer=customer,
-                    order=order,
-                    db=db_task
-                ))
+
+                url = f"{os.getenv('EVOLUTION_API_URL', 'http://34.158.60.42:8080')}/message/sendText/{tenant.whatsapp_phone_id}"
+                headers = {"apikey": os.getenv("EVOLUTION_API_KEY", "distributorbotkey2026")}
+
+                try:
+                    resp = httpx.post(url, json={"number": phone, "text": message}, headers=headers, timeout=10.0)
+                    logger.info("Confirmed notification sent for order %s", order_id)
+                except Exception as ex:
+                    logger.warning("Confirmed notification failed: %s", str(ex))
             except Exception as e:
                 logger.warning("Background confirmed notification failed: %s", str(e))
             finally:
