@@ -3,7 +3,7 @@ import io
 import logging
 import typing
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, status, Cookie, Header
+from fastapi import APIRouter, Depends, HTTPException, status, Cookie, Header, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import func, and_, select as sa_select, update as sa_update
@@ -1564,6 +1564,7 @@ class BatchConfirmOrderPayload(BaseModel):
 def batch_confirm_order(
     order_id: uuid.UUID,
     payload: BatchConfirmOrderPayload,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
     """
@@ -1644,74 +1645,103 @@ def batch_confirm_order(
         from app.services.order_confirmation_service import confirm_order
         confirm_order(db, order, updated_by="API")
 
-        # Create PaymentSession eagerly on confirmation
-        try:
-            from app.services.payment_session_service import get_or_create_payment_session
-            from app.models.payment_session import PaymentSession
-            from app.models.invoice import Invoice
+        # Create PaymentSession in background — don't block confirmation response
+        from app.models.invoice import Invoice
+        new_invoice = db.query(Invoice).filter(Invoice.order_id == order.id).first()
+        engine_bind = db.get_bind()
+
+        def _create_payment_session_sync(tenant_id: str, customer_id: str, order_id: str, invoice_id: str, engine):
+            """Creates Razorpay payment session after response is sent."""
+            import os
+            from sqlalchemy.orm import sessionmaker
+            from app.models.tenant import DistributorTenant
             from app.models.customer import Customer
+            from app.models.invoice import Invoice
+            from app.services.payment_session_service import get_or_create_payment_session
             
-            customer = db.get(Customer, order.customer_id)
-            new_invoice = db.query(Invoice).filter(Invoice.order_id == order.id).first()
-            if customer and new_invoice:
-                payment_session = get_or_create_payment_session(
-                    db=db,
-                    invoice=new_invoice,
-                    customer=customer,
-                    order_id=order.id,
-                    tenant_id=order.tenant_id
-                )
-                if payment_session:
-                    logger.info("PaymentSession created: %s link=%s", payment_session.id, payment_session.payment_link_url)
-                else:
-                    logger.info("PaymentSession skipped for order %s (zero amount or limit exceeded)", order.id)
-        except Exception as e:
-            logger.warning("PaymentSession creation failed silently: %s", str(e))
+            SessionLocalTask = sessionmaker(bind=engine)
+            db_task = SessionLocalTask()
+            try:
+                tenant = db_task.get(DistributorTenant, tenant_id)
+                customer = db_task.get(Customer, customer_id)
+                invoice = db_task.get(Invoice, invoice_id)
+                if tenant and customer and invoice and float(invoice.total_amount) > 0:
+                    session = get_or_create_payment_session(
+                        db=db_task,
+                        invoice=invoice,
+                        customer=customer,
+                        order_id=uuid.UUID(order_id),
+                        tenant_id=uuid.UUID(tenant_id)
+                    )
+                    db_task.commit()
+                    logger.info("PaymentSession created in background: %s", session.id if session else "skipped")
+            except Exception as e:
+                logger.warning("Background PaymentSession creation failed: %s", str(e))
+            finally:
+                db_task.close()
+
+        if new_invoice:
+            background_tasks.add_task(
+                _create_payment_session_sync,
+                str(order.tenant_id),
+                str(order.customer_id),
+                str(order.id),
+                str(new_invoice.id),
+                engine_bind
+            )
 
         db.commit()
 
-        # Fire order_confirmed notification (non-blocking)
-        try:
-            customer = db.get(Customer, order.customer_id)
-            if customer:
-                # Eagerly load relationships so they are in-memory before background task starts
+        # Fire order_confirmed notification (non-blocking in background)
+        def _fire_confirmed_notification_sync(tenant_id: str, customer_id: str, order_id: str, engine):
+            """Sends WhatsApp confirmation after response is sent."""
+            import os, asyncio
+            from sqlalchemy.orm import sessionmaker
+            from app.models.tenant import DistributorTenant
+            from app.models.customer import Customer
+            from app.models.order import Order
+            from app.services.notification_service import NotificationService
+            import httpx
+            
+            SessionLocalTask = sessionmaker(bind=engine)
+            db_task = SessionLocalTask()
+            try:
+                tenant = db_task.get(DistributorTenant, tenant_id)
+                customer = db_task.get(Customer, customer_id)
+                order = db_task.get(Order, order_id)
+                
+                if not (tenant and customer and order):
+                    return
+                
+                # Eagerly load line items
                 for item in order.line_items:
                     if item.product:
                         _ = item.product.brand
+                
+                # Use sync httpx directly — no asyncio needed
+                svc = NotificationService(
+                    evolution_base_url=os.getenv("EVOLUTION_API_URL", "http://34.158.60.42:8080"),
+                    api_key=os.getenv("EVOLUTION_API_KEY", "distributorbotkey2026")
+                )
+                asyncio.run(svc.notify(
+                    event="order_confirmed",
+                    tenant=tenant,
+                    customer=customer,
+                    order=order,
+                    db=db_task
+                ))
+            except Exception as e:
+                logger.warning("Background confirmed notification failed: %s", str(e))
+            finally:
+                db_task.close()
 
-                import asyncio
-                from app.services.notification_service import NotificationService
-                import os
-
-                tenant_obj = db.get(DistributorTenant, order.tenant_id)
-
-                async def fire_notifications(tenant_val, customer_val, order_val):
-                    try:
-                        notification_service = NotificationService(
-                            evolution_base_url=os.getenv("EVOLUTION_API_URL", "http://34.158.60.42:8080"),
-                            api_key=os.getenv("EVOLUTION_API_KEY", "distributorbotkey2026")
-                        )
-                        await notification_service.notify(
-                            event="order_confirmed",
-                            tenant=tenant_val,
-                            customer=customer_val,
-                            order=order_val,
-                            db=db
-                        )
-                    except Exception as inner_ex:
-                        logger.warning("Notification fire failed silently: %s", str(inner_ex))
-
-                try:
-                    loop = asyncio.get_running_loop()
-                except RuntimeError:
-                    loop = None
-
-                if loop and loop.is_running():
-                    loop.create_task(fire_notifications(tenant_obj, customer, order))
-                else:
-                    asyncio.run(fire_notifications(tenant_obj, customer, order))
-        except Exception as e:
-            logger.warning("Notification fire setup failed silently: %s", str(e))
+        background_tasks.add_task(
+            _fire_confirmed_notification_sync,
+            str(order.tenant_id),
+            str(order.customer_id),
+            str(order.id),
+            engine_bind
+        )
 
         logger.info(
             "batch_confirm_order: Order %s confirmed with %d staged change(s).",
