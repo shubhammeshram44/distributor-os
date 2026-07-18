@@ -195,7 +195,7 @@ export default function AuthPage() {
         localStorage.setItem("userPhoneNumber", resData.phone_number || "");
         localStorage.removeItem("accessToken");
         localStorage.removeItem("tenant_id");
-        setTimeout(() => router.push("/auth/onboarding"), 1000);
+        router.push("/auth/onboarding");
         return;
       }
 
@@ -211,7 +211,7 @@ export default function AuthPage() {
         localStorage.setItem("tenant_name", resData.tenant_name);
       }
 
-      setTimeout(() => router.push("/dashboard"), 1000);
+      router.push("/dashboard");
     } catch (err: unknown) {
       const message = err instanceof Error && err.message ? err.message : getFirebaseErrorMessage(err);
       setError(message);
@@ -232,7 +232,7 @@ export default function AuthPage() {
   return (
     <div className="flex min-h-screen bg-slate-50 items-center justify-center p-4">
       <div id="recaptcha-container" />
-      <div className="w-full max-w-md bg-white border border-slate-150 rounded-2xl shadow-xl p-8 flex flex-col justify-between">
+      <div className="w-full max-w-md bg-white border border-slate-200 rounded-2xl shadow-xl p-8 flex flex-col justify-between">
 
         <div className="text-center mb-8">
           <div className="w-12 h-12 rounded-2xl bg-blue-600 flex items-center justify-center mx-auto mb-4 text-white text-xl font-black shadow-md shadow-blue-200">

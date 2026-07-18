@@ -190,24 +190,15 @@ export default function DashboardHeader({
 
       {/* Right Actions & User Area */}
       <div className="flex items-center gap-6">
-        {/* Tenant Switcher */}
+        {/* Workspace Label — static (single-tenant per user today). Not a dropdown: don't imply switching that doesn't exist. */}
         <div className="flex items-center gap-2 border-r border-dashboard-border pr-6">
-          <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Workspace:</span>
-          <div className="relative">
-            <select
-              value={activeTenantId}
-              onChange={(e) => { if (onTenantChange) onTenantChange(e.target.value); if (setActiveTenantId) setActiveTenantId(e.target.value); }}
-              className="pl-3 pr-8 py-1.5 border border-dashboard-border rounded-lg text-xs font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-brand-blue cursor-pointer bg-white appearance-none"
-              aria-label="Switch workspace"
-            >
-              {displayProfile?.tenant ? (
-                <option value={displayProfile.tenant.id}>{displayProfile.tenant.name || "My Workspace"}</option>
-              ) : (
-                <option value="">Loading...</option>
-              )}
-            </select>
-            <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-          </div>
+          <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Workspace</span>
+          <span
+            className="px-3 py-1.5 border border-dashboard-border rounded-lg text-xs font-semibold text-slate-700 bg-slate-50 truncate max-w-[160px]"
+            title={displayProfile?.tenant?.name || "My Workspace"}
+          >
+            {displayProfile?.tenant?.name || "Loading..."}
+          </span>
         </div>
 
         {/* Notifications */}
