@@ -75,6 +75,7 @@ export default function Sidebar({ activeTab, setActiveTab, tenantName }: Sidebar
     { type: "category", name: "Settings" },
     { name: "Team Settings", icon: Settings, href: "/dashboard/settings/team" },
     { name: "Integrations", icon: Link2, href: "/dashboard/settings/integrations" },
+    { name: "Integrations V2 (Test)", icon: Link2, href: "/dashboard/settings/integrations-v2" },
     { name: "Notifications", icon: Bell, href: "/dashboard/settings/notifications" },
     { name: "Payments", icon: CreditCard, href: "/dashboard/settings/payments" },
     { name: "Automations", icon: Zap, badge: "Soon" }
