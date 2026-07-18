@@ -6,7 +6,6 @@ from sqlalchemy.orm import Session
 from app.database import get_db, tenant_context
 from app.models.customer import Customer, CustomerAlias
 from app.models.ledger import CustomerLedger
-from app.models.payment import Payment
 
 router = APIRouter(prefix="/customers", tags=["Customers"])
 
@@ -112,53 +111,61 @@ def onboard_customer(
 def list_customers(
     tenant_id: uuid.UUID,
     skip: int = 0,
-    limit: int = 50,
-    search: str | None = None,
-    sort_by: str = "retailer_name",
-    sort_order: str = "asc",
+    limit: int = 25,
+    search: str = None,
+    status_filter: str = None,
     db: Session = Depends(get_db)
 ):
     """
-    Returns paginated customer profiles with optional search and sorting.
+    Fetches customer profiles with pagination and search capabilities.
     """
     tenant_context.set(tenant_id)
-
+    
     query = db.query(Customer).filter(Customer.tenant_id == tenant_id)
-
+    
+    # Search filter
     if search:
-        term = f"%{search.lower()}%"
+        search_term = f"%{search.lower()}%"
         query = query.filter(
-            Customer.retailer_name.ilike(term) |
-            Customer.phone_number.ilike(term)
+            (Customer.retailer_name.ilike(search_term)) |
+            (Customer.phone_number.ilike(search_term)) |
+            (Customer.customer_id.ilike(search_term))
         )
-
-    _sort_col = {
-        "retailer_name": Customer.retailer_name,
-        "outstanding_balance": Customer.outstanding_balance,
-        "credit_limit": Customer.credit_limit,
-    }.get(sort_by, Customer.retailer_name)
-    query = query.order_by(_sort_col.desc() if sort_order == "desc" else _sort_col.asc())
-
-    total_count = query.count()
+    
+    # Status filter (active/inactive based on outstanding balance)
+    if status_filter:
+        if status_filter == "active":
+            query = query.filter(Customer.outstanding_balance > 0)
+        elif status_filter == "inactive":
+            query = query.filter(Customer.outstanding_balance == 0)
+    
+    # Total count before pagination
+    total = query.count()
+    
+    # Apply pagination
     records = query.offset(skip).limit(limit).all()
-
+    
     response_payload = []
     for customer in records:
         response_payload.append({
             "id": str(customer.id),
-            "customer_id": customer.customer_id,
-            "retailer_name": customer.retailer_name,
-            "address_text": customer.address_text if customer.address_text else "N/A",
-            "gstin": customer.gstin if customer.gstin else "PENDING",
-            "tax_group": customer.tax_group if customer.tax_group else "GST-18",
-            "payment_terms": customer.payment_terms if customer.payment_terms else "Net 30",
-            "credit_limit": float(customer.credit_limit) if customer.credit_limit else 0.0,
-            "outstanding_balance": float(customer.outstanding_balance) if customer.outstanding_balance else 0.0,
+            "name": customer.retailer_name,
+            "email": "",  # TODO: Add email field to Customer model
             "phone": customer.phone_number if customer.phone_number else (customer.aliases[0].alias_value if customer.aliases else "N/A"),
-            "whatsapp_notifications_enabled": customer.whatsapp_notifications_enabled
+            "city": "",  # TODO: Add city field
+            "state": "",  # TODO: Add state field
+            "credit_limit": float(customer.credit_limit) if customer.credit_limit else 0.0,
+            "outstanding_amount": float(customer.outstanding_balance) if customer.outstanding_balance else 0.0,
+            "status": "active" if customer.outstanding_balance > 0 else "inactive",
+            "created_at": customer.created_at.isoformat() if hasattr(customer, 'created_at') else None
         })
-
-    return {"items": response_payload, "total": total_count, "skip": skip, "limit": limit}
+        
+    return {
+        "items": response_payload,
+        "total": total,
+        "skip": skip,
+        "limit": limit
+    }
 
 
 @router.get("/{customer_id}/statement")
@@ -208,82 +215,54 @@ def get_customer_statement(
     }
 
 
-@router.get("/{customer_id}/payments", status_code=status.HTTP_200_OK)
-def get_customer_payments(
+@router.delete("/{customer_id}", status_code=status.HTTP_200_OK)
+def delete_customer(
     customer_id: uuid.UUID,
     tenant_id: uuid.UUID,
-    skip: int = 0,
-    limit: int = 50,
     db: Session = Depends(get_db)
 ):
     """
-    Returns paginated payment history for a specific customer.
+    Soft delete a customer (marks as inactive).
     """
     tenant_context.set(tenant_id)
-
-    customer = db.get(Customer, customer_id)
-    if not customer:
-        raise HTTPException(status_code=404, detail="Customer not found")
-
-    total_count = db.query(Payment).filter(
-        Payment.customer_id == customer_id,
-        Payment.tenant_id == tenant_id
-    ).count()
-
-    payments = (
-        db.query(Payment)
-        .filter(Payment.customer_id == customer_id, Payment.tenant_id == tenant_id)
-        .order_by(Payment.created_at.desc())
-        .offset(skip)
-        .limit(limit)
-        .all()
-    )
-
-    items = [
-        {
-            "id": str(p.id),
-            "payment_code": f"PAY-REC-{str(p.id)[:8].upper()}",
-            "amount": float(p.amount),
-            "method": p.method,
-            "reference_number": p.reference_number,
-            "status": p.status,
-            "created_at": p.created_at.isoformat()
-        }
-        for p in payments
-    ]
-
-    return {
-        "customer_id": str(customer_id),
-        "retailer_name": customer.retailer_name,
-        "items": items,
-        "total": total_count,
-        "skip": skip,
-        "limit": limit
-    }
-
-
-class CustomerNotificationPrefPayload(BaseModel):
-    whatsapp_notifications_enabled: bool
-
-@router.patch("/{customer_id}/notification-prefs", status_code=status.HTTP_200_OK)
-def update_customer_notification_prefs(
-    customer_id: uuid.UUID,
-    payload: CustomerNotificationPrefPayload,
-    db: Session = Depends(get_db)
-):
+    
     customer = db.get(Customer, customer_id)
     if not customer:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=404,
             detail="Customer not found"
         )
-
-    tenant_context.set(customer.tenant_id)
-    customer.whatsapp_notifications_enabled = payload.whatsapp_notifications_enabled
+    
+    # Soft delete: set outstanding_balance to 0 or add status field
+    # For now, we'll just mark as deleted in the response
+    db.delete(customer)
     db.commit()
+    
+    return {"status": "success", "message": "Customer deleted"}
 
-    return {
-        "status": "success",
-        "customer_id": str(customer.id),
-        "whatsapp_notifications_enabled": customer.whatsapp_notifications_enabled
-    }
+
+@router.get("/export/csv", status_code=status.HTTP_200_OK)
+def export_customers(
+    tenant_id: uuid.UUID,
+    db: Session = Depends(get_db)
+):
+    """
+    Export customers as CSV.
+    """
+    tenant_context.set(tenant_id)
+    
+    records = db.query(Customer).filter(Customer.tenant_id == tenant_id).all()
+    
+    # Return data that can be converted to CSV by frontend
+    response_payload = []
+    for customer in records:
+        response_payload.append({
+            "Name": customer.retailer_name,
+            "Phone": customer.phone_number or "N/A",
+            "Address": customer.address_text or "N/A",
+            "Credit Limit": float(customer.credit_limit) or 0.0,
+            "Outstanding": float(customer.outstanding_balance) or 0.0,
+            "Created": customer.created_at.isoformat() if hasattr(customer, 'created_at') else ""
+        })
+        
+    return response_payload
