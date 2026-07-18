@@ -662,7 +662,7 @@ export default function IntegrationsPage() {
                         <button
                           type="button"
                           onClick={handleProvisionEvolution}
-                          disabled={provisioningStatus === "provisioning"}
+                          disabled={false}
                           className="px-6 py-2.5 bg-red-600 text-white rounded-lg text-sm font-bold shadow-md hover:bg-red-700 disabled:opacity-55 flex items-center gap-2 cursor-pointer transition-all"
                         >
                           <span>Reconnect WhatsApp</span>
