@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import Sidebar from "@/components/Sidebar";
 import DashboardHeader from "@/components/DashboardHeader";
 import Link from "next/link";
+import { useDebounce } from "@/lib/debounce";
 import {
   Search,
   MessageSquare,
@@ -75,6 +76,7 @@ export default function MessagesPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery] = useDebounce(searchQuery, 300);
   const [loading, setLoading] = useState(true);
   
   const [chatStreams, setChatStreams] = useState<Record<string, Message[]>>({});
@@ -339,10 +341,14 @@ export default function MessagesPage() {
     setSubmittingOrder(true);
     try {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
       const response = await fetch(`${apiBase}/api/v1/orders/${order.id}/confirm`, {
         method: "POST",
         credentials: "include",
-        headers: { "Content-Type": "application/json" }
+        headers: { 
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        }
       });
 
       const result = await response.json();
@@ -350,8 +356,7 @@ export default function MessagesPage() {
       if (response.ok && result.status === "success") {
         showToast(`Order ${order.order_id} confirmed.`, "success");
         setConfirmedOrderIds(prev => ({ ...prev, [order.id]: true }));
-        // Refresh triage feed so any state changes are reflected.
-        fetchTriageData();
+        setTimeout(() => fetchTriageData(), 50);
       } else {
         showToast(result.detail || "Order confirmation failed.", "error");
       }
@@ -365,8 +370,8 @@ export default function MessagesPage() {
 
   // Filter customers by search
   const filteredCustomers = customers.filter(c =>
-    c.retailer_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    c.phone.includes(searchQuery)
+    c.retailer_name.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+    c.phone.includes(debouncedSearchQuery)
   );
 
   // Synthesize a chat bubble from the real ingested order, then append operator-typed messages.

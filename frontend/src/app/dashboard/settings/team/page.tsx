@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import Sidebar from "@/components/Sidebar";
 import DashboardHeader from "@/components/DashboardHeader";
+import { useDebounce } from "@/lib/debounce";
 import {
   Search,
   Loader2,
@@ -94,6 +95,7 @@ export default function TeamSettingsPage() {
   const [activeTab, setActiveTab] = useState<"directory" | "roles">("directory");
   const [users, setUsers] = useState<UserRow[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery] = useDebounce(searchQuery, 300);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -188,10 +190,14 @@ export default function TeamSettingsPage() {
     setSubmitting(true);
     try {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
       const resp = await fetch(`${apiBase}/api/v1/users/invite?tenant_id=${activeTenantId}`, {
         method: "POST",
         credentials: "include",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({
           full_name: fullName.trim(),
           email_or_phone: emailOrPhone.trim(),
@@ -209,7 +215,7 @@ export default function TeamSettingsPage() {
         setPassword("");
         setRole("OPERATOR");
         
-        fetchUsers(activeTenantId);
+        setTimeout(() => fetchUsers(activeTenantId), 50);
       } else {
         const detail = data.detail || "Failed to invite new staff member.";
         showToast(detail, "error");
@@ -225,10 +231,14 @@ export default function TeamSettingsPage() {
   const handleToggleStatus = async (user: UserRow) => {
     try {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
       const resp = await fetch(`${apiBase}/api/v1/users/${user.id}?tenant_id=${activeTenantId}`, {
         method: "PATCH",
         credentials: "include",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({
           is_active: !user.is_active
         })
@@ -237,7 +247,7 @@ export default function TeamSettingsPage() {
       const data = await resp.json();
       if (resp.ok) {
         showToast(`User ${!user.is_active ? "activated" : "deactivated"} successfully!`, "success");
-        fetchUsers(activeTenantId);
+        setTimeout(() => fetchUsers(activeTenantId), 50);
       } else {
         const detail = data.detail || "Failed to update user status.";
         showToast(detail, "error");
@@ -255,10 +265,14 @@ export default function TeamSettingsPage() {
     setSubmitting(true);
     try {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
       const resp = await fetch(`${apiBase}/api/v1/users/${selectedUserForEdit.id}?tenant_id=${activeTenantId}`, {
         method: "PATCH",
         credentials: "include",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({
           role: editRole
         })
@@ -268,7 +282,7 @@ export default function TeamSettingsPage() {
       if (resp.ok) {
         showToast("User role modified successfully!", "success");
         setSelectedUserForEdit(null);
-        fetchUsers(activeTenantId);
+        setTimeout(() => fetchUsers(activeTenantId), 50);
       } else {
         const detail = data.detail || "Failed to modify user role.";
         showToast(detail, "error");
@@ -297,7 +311,7 @@ export default function TeamSettingsPage() {
   };
 
   const filteredUsers = users.filter(u => {
-    const q = searchQuery.toLowerCase();
+    const q = debouncedSearchQuery.toLowerCase();
     return (
       u.full_name.toLowerCase().includes(q) ||
       u.role.toLowerCase().includes(q) ||
