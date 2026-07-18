@@ -18,10 +18,14 @@ export default function CollectionsDonut({ data, viewReportHref, overdue60Count 
   // Sum outstanding total
   const totalOutstanding = data.reduce((sum, item) => sum + item.value, 0);
 
-  // Format amount to Lakhs (e.g. 21,37,200 -> 21.37L)
-  const formatLakhs = (val: number) => {
+  // Format amount (full representation for < 1L, e.g. 9,000; clean Lakhs representation for >= 1L, e.g. 9 L, 9.5 L, 21.37 L)
+  const formatAmount = (val: number) => {
+    if (val < 100000) {
+      return `₹${val.toLocaleString("en-IN")}`;
+    }
     const lakhs = val / 100000;
-    return `₹ ${lakhs.toFixed(2)}L`;
+    const formatted = parseFloat(lakhs.toFixed(2));
+    return `₹${formatted} L`;
   };
 
   const hasData = totalOutstanding > 0;
@@ -72,9 +76,11 @@ export default function CollectionsDonut({ data, viewReportHref, overdue60Count 
           </ResponsiveContainer>
 
           {/* Centered label */}
-          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center px-2">
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Outstanding</span>
-            <span className="text-xl font-extrabold text-slate-800 mt-0.5">₹ {totalOutstanding === 0 ? "0.00L" : (totalOutstanding / 100000).toFixed(2) + "L"}</span>
+            <span className="text-sm font-extrabold text-slate-800 mt-0.5 break-all">
+              {totalOutstanding === 0 ? "₹0" : formatAmount(totalOutstanding)}
+            </span>
           </div>
         </div>
 
@@ -90,7 +96,7 @@ export default function CollectionsDonut({ data, viewReportHref, overdue60Count 
                 <span className="text-slate-600 font-semibold">{item.name}</span>
               </div>
               <span className="font-bold text-slate-800">
-                {formatLakhs(item.value)} <span className="text-[10px] text-slate-400 font-normal">({item.percentage}%)</span>
+                {formatAmount(item.value)} <span className="text-[10px] text-slate-400 font-normal">({item.percentage}%)</span>
               </span>
             </div>
           ))}

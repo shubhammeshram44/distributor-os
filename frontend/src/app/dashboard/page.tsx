@@ -532,28 +532,11 @@ export default function DashboardPage() {
 
               {/* Row 4: Operational Controls (Col A: Collections + Credit Risk | Col B: Orders Status | Col C: Health Details) */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-6 mb-6">
-                {/* Column A (lg:col-span-5): Stacked Outstanding Collections and Credit Risk Alerts */}
-                <div className="md:col-span-1 lg:col-span-5 space-y-6 flex flex-col">
-                  {/* Outstanding Collections Summary Card */}
-                  {metrics?.outstanding_collections !== undefined && (
-                    <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                          Outstanding Collections
-                        </span>
-                        <span className="text-lg">💰</span>
-                      </div>
-                      <div className="mt-2 flex items-baseline gap-2">
-                        <h2 className="text-2xl font-bold text-slate-800 tracking-tight">
-                          ₹{metrics.outstanding_collections.toLocaleString("en-IN")}
-                        </h2>
-                      </div>
-                    </div>
-                  )}
-
+                {/* Column A (lg:col-span-5): Credit Risk Alerts */}
+                <div className="md:col-span-1 lg:col-span-5">
                   {/* Credit Risk Alerts List */}
-                  {creditRisk && creditRisk.alerts.length > 0 && (
-                    <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm flex-1 flex flex-col justify-between">
+                  {creditRisk && creditRisk.alerts.length > 0 ? (
+                    <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm h-full flex flex-col justify-between">
                       <div>
                         <div className="flex items-center justify-between mb-4">
                           <div>
@@ -656,6 +639,14 @@ export default function DashboardPage() {
                           </p>
                         )}
                       </div>
+                    </div>
+                  ) : (
+                    <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm h-full flex flex-col justify-center items-center text-center min-h-[300px]">
+                      <span className="text-3xl mb-3">🛡️</span>
+                      <p className="text-sm font-semibold text-slate-700">No Credit Risks</p>
+                      <p className="text-xs text-slate-400 mt-1.5 max-w-[240px] leading-relaxed">
+                        All customers are within their credit limits and payment terms.
+                      </p>
                     </div>
                   )}
                 </div>
@@ -823,7 +814,8 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              {/* Row 6: Recent Activity Footer */}
+              {/* Row 6: Recent Activity Footer (Hidden for now) */}
+              {/*
               {activities && activities.length > 0 && (
                 <div className="bg-white rounded-xl border border-slate-200 p-6 mt-6 shadow-sm">
                   <div className="flex items-center justify-between mb-4">
@@ -852,6 +844,7 @@ export default function DashboardPage() {
                   </div>
                 </div>
               )}
+              */}
             </>
           )}
         </main>
