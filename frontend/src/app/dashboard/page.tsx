@@ -180,7 +180,7 @@ export default function DashboardPage() {
       const res = await fetch(`${apiBase}/api/v1/orders?tenant_id=${tenantId}&limit=100`);
       if (res.ok) {
         const data = await res.json();
-        setOrders(data);
+        setOrders(data.items || []);
       }
     } catch (e) {
       console.error("Failed to fetch orders:", e);
