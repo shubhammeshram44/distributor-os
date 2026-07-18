@@ -1752,7 +1752,7 @@ class DispatchPayload(BaseModel):
     vehicle_number: str
 
 @router.post("/{order_id}/dispatch", status_code=200)
-def dispatch_order_post(order_id: uuid.UUID, payload: DispatchPayload, db: Session = Depends(get_db)):
+def dispatch_order_post(order_id: uuid.UUID, payload: DispatchPayload, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     order = db.get(Order, order_id)
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
@@ -1806,47 +1806,52 @@ def dispatch_order_post(order_id: uuid.UUID, payload: DispatchPayload, db: Sessi
         
     db.commit()
 
-    # Fire order_dispatched notification (non-blocking)
-    try:
-        if customer:
-            # Eagerly load relationships so they are in-memory before background task starts
-            for item in order.line_items:
-                if item.product:
-                    _ = item.product.brand
+    # Fire order_dispatched notification via a real background task (runs after the
+    # response is sent — the previous asyncio.get_running_loop()/asyncio.run() fallback
+    # always took the asyncio.run() branch on this sync endpoint, since there is no
+    # running event loop in FastAPI's threadpool worker, which meant it blocked the
+    # HTTP response for the full WhatsApp API round-trip, up to a 10s timeout).
+    if customer:
+        engine_bind = db.get_bind()
 
+        def _fire_dispatched_notification_task(tenant_id: str, customer_id: str, order_id_str: str, engine):
             import asyncio
+            from sqlalchemy.orm import sessionmaker
             from app.services.notification_service import NotificationService
             import os
 
-            tenant_obj = db.get(DistributorTenant, order.tenant_id)
-
-            async def fire_notifications(tenant_val, customer_val, order_val):
-                try:
-                    notification_service = NotificationService(
-                        evolution_base_url=os.getenv("EVOLUTION_API_URL", "http://34.158.60.42:8080"),
-                        api_key=os.getenv("EVOLUTION_API_KEY", "distributorbotkey2026")
-                    )
-                    await notification_service.notify(
-                        event="order_dispatched",
-                        tenant=tenant_val,
-                        customer=customer_val,
-                        order=order_val,
-                        db=db
-                    )
-                except Exception as inner_ex:
-                    logger.warning("Notification fire failed silently: %s", str(inner_ex))
-
+            SessionLocalTask = sessionmaker(bind=engine)
+            db_task = SessionLocalTask()
             try:
-                loop = asyncio.get_running_loop()
-            except RuntimeError:
-                loop = None
+                tenant_val = db_task.get(DistributorTenant, tenant_id)
+                customer_val = db_task.get(Customer, customer_id)
+                order_val = db_task.get(Order, order_id_str)
+                if not (tenant_val and customer_val and order_val):
+                    return
 
-            if loop and loop.is_running():
-                loop.create_task(fire_notifications(tenant_obj, customer, order))
-            else:
-                asyncio.run(fire_notifications(tenant_obj, customer, order))
-    except Exception as e:
-        logger.warning("Notification fire setup failed silently: %s", str(e))
+                notification_service = NotificationService(
+                    evolution_base_url=os.getenv("EVOLUTION_API_URL", "http://34.158.60.42:8080"),
+                    api_key=os.getenv("EVOLUTION_API_KEY", "distributorbotkey2026")
+                )
+                asyncio.run(notification_service.notify(
+                    event="order_dispatched",
+                    tenant=tenant_val,
+                    customer=customer_val,
+                    order=order_val,
+                    db=db_task
+                ))
+            except Exception as inner_ex:
+                logger.warning("Notification fire failed silently: %s", str(inner_ex))
+            finally:
+                db_task.close()
+
+        background_tasks.add_task(
+            _fire_dispatched_notification_task,
+            str(order.tenant_id),
+            str(customer.id),
+            str(order.id),
+            engine_bind
+        )
 
     return {"status": "success", "order_id": str(order_id)}
 
@@ -1862,6 +1867,7 @@ class DeliveryEventRequest(BaseModel):
 def record_delivery_event(
     order_id: uuid.UUID,
     payload: DeliveryEventRequest,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
     # 1. Fetch order by order_id and tenant_id
@@ -1904,47 +1910,51 @@ def record_delivery_event(
     db.commit()
     db.refresh(order)
 
-    # 6. Fire order_delivered notification via NotificationService (non-blocking)
-    try:
-        customer = db.get(Customer, order.customer_id)
-        if customer:
-            for item in order.line_items:
-                if item.product:
-                    _ = item.product.brand
+    # 6. Fire order_delivered notification via a real background task (runs after the
+    # response is sent — see dispatch_order_post above for why the previous
+    # asyncio.get_running_loop()/asyncio.run() fallback blocked the HTTP response).
+    customer = db.get(Customer, order.customer_id)
+    if customer:
+        engine_bind = db.get_bind()
 
+        def _fire_delivered_notification_task(tenant_id: str, customer_id: str, order_id_str: str, engine):
             import asyncio
+            from sqlalchemy.orm import sessionmaker
             from app.services.notification_service import NotificationService
             import os
 
-            tenant_obj = db.get(DistributorTenant, order.tenant_id)
-
-            async def fire_notifications(tenant_val, customer_val, order_val):
-                try:
-                    notification_service = NotificationService(
-                        evolution_base_url=os.getenv("EVOLUTION_API_URL", "http://34.158.60.42:8080"),
-                        api_key=os.getenv("EVOLUTION_API_KEY", "distributorbotkey2026")
-                    )
-                    await notification_service.notify(
-                        event="order_delivered",
-                        tenant=tenant_val,
-                        customer=customer_val,
-                        order=order_val,
-                        db=db
-                    )
-                except Exception as inner_ex:
-                    logger.warning("Notification fire failed silently: %s", str(inner_ex))
-
+            SessionLocalTask = sessionmaker(bind=engine)
+            db_task = SessionLocalTask()
             try:
-                loop = asyncio.get_running_loop()
-            except RuntimeError:
-                loop = None
+                tenant_val = db_task.get(DistributorTenant, tenant_id)
+                customer_val = db_task.get(Customer, customer_id)
+                order_val = db_task.get(Order, order_id_str)
+                if not (tenant_val and customer_val and order_val):
+                    return
 
-            if loop and loop.is_running():
-                loop.create_task(fire_notifications(tenant_obj, customer, order))
-            else:
-                asyncio.run(fire_notifications(tenant_obj, customer, order))
-    except Exception as e:
-        logger.warning("Notification fire setup failed silently: %s", str(e))
+                notification_service = NotificationService(
+                    evolution_base_url=os.getenv("EVOLUTION_API_URL", "http://34.158.60.42:8080"),
+                    api_key=os.getenv("EVOLUTION_API_KEY", "distributorbotkey2026")
+                )
+                asyncio.run(notification_service.notify(
+                    event="order_delivered",
+                    tenant=tenant_val,
+                    customer=customer_val,
+                    order=order_val,
+                    db=db_task
+                ))
+            except Exception as inner_ex:
+                logger.warning("Notification fire failed silently: %s", str(inner_ex))
+            finally:
+                db_task.close()
+
+        background_tasks.add_task(
+            _fire_delivered_notification_task,
+            str(order.tenant_id),
+            str(customer.id),
+            str(order.id),
+            engine_bind
+        )
 
     # 7. Return updated order details
     return {
