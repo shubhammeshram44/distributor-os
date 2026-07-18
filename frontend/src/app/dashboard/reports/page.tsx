@@ -1,178 +1,214 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Sidebar from "@/components/Sidebar";
 import DashboardHeader from "@/components/DashboardHeader";
-import ErrorBoundary from "@/components/ErrorBoundary";
-import { Download, FileText, BarChart3, CreditCard, Users, Package } from "lucide-react";
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer
+} from "recharts";
+import { Loader2, AlertCircle, FileText, IndianRupee, LineChart, ShieldAlert } from "lucide-react";
 
-const reportTemplates = [
-  {
-    id: "sales_summary",
-    name: "Sales Summary",
-    description: "Total sales, orders count, and revenue trends",
-    icon: BarChart3,
-    color: "emerald"
-  },
-  {
-    id: "customer_analysis",
-    name: "Customer Analysis",
-    description: "Customer acquisition, retention, and lifetime value",
-    icon: Users,
-    color: "blue"
-  },
-  {
-    id: "product_performance",
-    name: "Product Performance",
-    description: "Best selling products and inventory status",
-    icon: Package,
-    color: "purple"
-  },
-  {
-    id: "collections_report",
-    name: "Collections Report",
-    description: "Outstanding receivables and aging analysis",
-    icon: CreditCard,
-    color: "amber"
-  }
-];
+interface TimeSeriesPoint {
+  date: string;
+  sales: number;
+}
 
-const savedReports = [
-  { id: 1, name: "Monthly Sales Report", type: "Sales Summary", date: "2025-06-20", status: "ready" },
-  { id: 2, name: "Q2 Customer Analysis", type: "Customer Analysis", date: "2025-06-15", status: "ready" },
-  { id: 3, name: "Inventory Status June", type: "Product Performance", date: "2025-06-10", status: "ready" }
-];
+interface RevenueData {
+  total_revenue: number;
+  total_receivables: number;
+  time_series: TimeSeriesPoint[];
+}
 
 export default function ReportsPage() {
-  const [tenantId, setTenantId] = React.useState("");
-  const [selectedReport, setSelectedReport] = React.useState<string | null>(null);
+  const [activeTenantId, setActiveTenantId] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [data, setData] = useState<RevenueData | null>(null);
 
-  React.useEffect(() => {
-    const storedTenant = localStorage.getItem("tenant_id");
-    if (storedTenant) setTenantId(storedTenant);
+  // Sync tenant from localStorage on load
+  useEffect(() => {
+    const currentWorkspace = localStorage.getItem("tenant_id");
+    if (currentWorkspace) {
+      setActiveTenantId(currentWorkspace);
+    }
   }, []);
 
-  const handleGenerateReport = (reportId: string) => {
-    // TODO: Implement report generation
-    console.log("Generating report:", reportId);
+  const handleTenantChange = (id: string) => {
+    setActiveTenantId(id);
+    localStorage.setItem("tenant_id", id);
   };
 
-  const handleDownloadReport = (reportId: number) => {
-    // TODO: Implement report download
-    console.log("Downloading report:", reportId);
+  const getTenantName = () => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("tenant_name");
+      if (stored) return stored;
+    }
+    return "Loading Workspace...";
   };
+
+  const fetchRevenueAnalytics = useCallback(async (tenantId?: string) => {
+    const targetTenant = tenantId || activeTenantId;
+    if (!targetTenant) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    try {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const resp = await fetch(`${apiBase}/api/v1/analytics/revenue-trend?tenant_id=${targetTenant}`, {
+        credentials: "include"
+      });
+      if (!resp.ok) throw new Error("Failed to fetch revenue reports data");
+      const resData = await resp.json();
+      setData(resData);
+      setError(null);
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || "Failed to load revenue reports");
+    } finally {
+      setLoading(false);
+    }
+  }, [activeTenantId]);
+
+  useEffect(() => {
+    if (activeTenantId) {
+      fetchRevenueAnalytics(activeTenantId);
+    }
+  }, [activeTenantId, fetchRevenueAnalytics]);
+
+  const formatCurrency = (val: number) => {
+    return new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency: "INR",
+      maximumFractionDigits: 0
+    }).format(val);
+  };
+
+  if (!activeTenantId) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-slate-50">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-blue" />
+      </div>
+    );
+  }
 
   return (
-    <ErrorBoundary>
-      <div className="flex bg-dashboard-bg min-h-screen text-slate-800">
-        <Sidebar activeTab="Reports" setActiveTab={() => {}} tenantName="Workspace" />
+    <div className="flex bg-dashboard-bg min-h-screen text-slate-800">
+      <Sidebar
+        activeTab="Reports"
+        setActiveTab={() => {}}
+        tenantName={getTenantName()}
+      />
 
-        <div className="flex-1 pl-64 flex flex-col h-screen overflow-hidden">
-          <DashboardHeader activeTenantId={tenantId} setActiveTenantId={() => {}} tenantName="Workspace" userProfile={null} />
+      <div className="flex-1 pl-64 flex flex-col h-screen overflow-hidden">
+        <DashboardHeader
+          activeTenantId={activeTenantId}
+          setActiveTenantId={handleTenantChange}
+          tenantName={getTenantName()}
+        />
 
-          <main className="flex-1 mt-16 p-6 overflow-y-auto space-y-8">
-            <div>
-              <h1 className="text-2xl font-bold text-slate-800">Reports</h1>
-              <p className="text-xs text-slate-400 font-semibold mt-1">Generate and manage custom reports</p>
+        <main className="flex-1 mt-16 p-6 overflow-y-auto space-y-6">
+          <div>
+            <h1 className="text-xl font-bold text-slate-800 tracking-tight flex items-center gap-2">
+              <FileText className="w-5 h-5 text-brand-blue" />
+              <span>Financial Reports Workspace</span>
+            </h1>
+            <p className="text-xs text-slate-400 font-semibold mt-0.5">
+              Consolidate gross revenues, aggregate outstanding credit accounts, and track multi-tenant collections performance
+            </p>
+          </div>
+
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-32 gap-3">
+              <Loader2 className="w-8 h-8 text-brand-blue animate-spin" />
+              <span className="text-sm font-semibold text-slate-500">Aggregating database financial metrics...</span>
             </div>
-
-            {/* Report Templates */}
-            <div>
-              <h2 className="text-lg font-bold text-slate-800 mb-4">Report Templates</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                {reportTemplates.map((template) => {
-                  const Icon = template.icon;
-                  const colorClasses = {
-                    emerald: "bg-emerald-50 text-emerald-600 border-emerald-200",
-                    blue: "bg-blue-50 text-blue-600 border-blue-200",
-                    purple: "bg-purple-50 text-purple-600 border-purple-200",
-                    amber: "bg-amber-50 text-amber-600 border-amber-200"
-                  };
-
-                  return (
-                    <button
-                      key={template.id}
-                      onClick={() => handleGenerateReport(template.id)}
-                      className={`p-6 rounded-lg border-2 transition-all hover:shadow-md ${colorClasses[template.color as keyof typeof colorClasses]}`}
-                    >
-                      <Icon className="w-8 h-8 mb-3" />
-                      <h3 className="text-sm font-bold text-slate-800 mb-1">{template.name}</h3>
-                      <p className="text-xs text-slate-600 mb-4">{template.description}</p>
-                      <span className="text-xs font-semibold opacity-70">Generate</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Saved Reports */}
-            <div>
-              <h2 className="text-lg font-bold text-slate-800 mb-4">Saved Reports</h2>
-              {savedReports.length === 0 ? (
-                <div className="p-8 bg-white rounded-lg border border-dashboard-border text-center">
-                  <FileText className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                  <p className="text-slate-500 text-sm font-semibold">No saved reports yet</p>
-                  <p className="text-xs text-slate-400 mt-1">Generate your first report from templates above</p>
-                </div>
-              ) : (
-                <div className="bg-white rounded-lg border border-dashboard-border shadow-sm overflow-hidden">
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead className="border-b border-dashboard-border bg-slate-50">
-                        <tr>
-                          <th className="px-6 py-3 text-left text-xs font-bold text-slate-600 uppercase">Report Name</th>
-                          <th className="px-6 py-3 text-left text-xs font-bold text-slate-600 uppercase">Type</th>
-                          <th className="px-6 py-3 text-left text-xs font-bold text-slate-600 uppercase">Generated</th>
-                          <th className="px-6 py-3 text-left text-xs font-bold text-slate-600 uppercase">Status</th>
-                          <th className="px-6 py-3 text-left text-xs font-bold text-slate-600 uppercase">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-dashboard-border">
-                        {savedReports.map((report) => (
-                          <tr key={report.id} className="hover:bg-slate-50 transition-colors">
-                            <td className="px-6 py-4">
-                              <p className="text-sm font-semibold text-slate-800">{report.name}</p>
-                            </td>
-                            <td className="px-6 py-4">
-                              <p className="text-sm text-slate-600">{report.type}</p>
-                            </td>
-                            <td className="px-6 py-4">
-                              <p className="text-sm text-slate-600">{new Date(report.date).toLocaleDateString()}</p>
-                            </td>
-                            <td className="px-6 py-4">
-                              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700">
-                                {report.status}
-                              </span>
-                            </td>
-                            <td className="px-6 py-4">
-                              <button
-                                onClick={() => handleDownloadReport(report.id)}
-                                className="flex items-center gap-2 px-3 py-1.5 bg-brand-blue text-white text-xs font-semibold rounded hover:bg-brand-blueHover transition-colors"
-                              >
-                                <Download className="w-3.5 h-3.5" />
-                                Download
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Report Scheduling */}
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
-              <h2 className="text-lg font-bold text-blue-900 mb-2">Schedule Reports</h2>
-              <p className="text-sm text-blue-700 mb-4">Set up automatic reports to be generated and emailed to you on a regular basis</p>
-              <button className="px-4 py-2 bg-brand-blue text-white text-sm font-semibold rounded-lg hover:bg-brand-blueHover transition-colors">
-                Create Schedule
+          ) : error ? (
+            <div className="flex flex-col items-center justify-center py-32 gap-3 text-rose-600">
+              <AlertCircle className="w-8 h-8" />
+              <span className="text-sm font-semibold">{error}</span>
+              <button
+                onClick={() => fetchRevenueAnalytics(activeTenantId)}
+                className="mt-2 px-4 py-2 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg text-xs font-bold hover:bg-rose-100 transition-all cursor-pointer"
+              >
+                Try Again
               </button>
             </div>
-          </main>
-        </div>
+          ) : (
+            <div className="space-y-6">
+              {/* Financial Accounting Grid Banners */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="bg-white p-6 rounded-xl border border-dashboard-border shadow-sm flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Gross Revenue</p>
+                    <h3 className="text-2xl font-extrabold text-slate-800 mt-1">
+                      {formatCurrency(data?.total_revenue || 0)}
+                    </h3>
+                    <p className="text-[10px] text-slate-400 font-semibold mt-1">Confirmed orders billing sum</p>
+                  </div>
+                  <div className="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center text-brand-blue shadow-sm">
+                    <IndianRupee className="w-5 h-5" />
+                  </div>
+                </div>
+
+                <div className="bg-white p-6 rounded-xl border border-dashboard-border shadow-sm flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Outstanding Receivables</p>
+                    <h3 className="text-2xl font-extrabold text-amber-600 mt-1">
+                      {formatCurrency(data?.total_receivables || 0)}
+                    </h3>
+                    <p className="text-[10px] text-slate-400 font-semibold mt-1">Pending collection balances</p>
+                  </div>
+                  <div className="w-12 h-12 rounded-xl bg-amber-50 flex items-center justify-center text-amber-600 shadow-sm">
+                    <ShieldAlert className="w-5 h-5" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Area Time-Series Chart */}
+              <div className="bg-white p-6 rounded-xl border border-dashboard-border shadow-sm flex flex-col h-[400px]">
+                <h3 className="text-sm font-bold text-slate-700 mb-4 flex items-center gap-1.5">
+                  <LineChart className="w-4 h-4 text-brand-blue" />
+                  <span>Revenue Trend over Time (Daily Sales Volume)</span>
+                </h3>
+                <div className="flex-1 w-full min-h-0">
+                  {data && data.time_series.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart
+                        data={data.time_series}
+                        margin={{ top: 10, right: 30, left: 20, bottom: 0 }}
+                      >
+                        <defs>
+                          <linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.2}/>
+                            <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                          </linearGradient>
+                        </defs>
+                        <XAxis dataKey="date" stroke="#94a3b8" fontSize={10} />
+                        <YAxis stroke="#94a3b8" fontSize={10} tickFormatter={(tick) => `₹${tick/1000}k`} />
+                        <Tooltip
+                          contentStyle={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "8px" }}
+                          formatter={(value: any) => [formatCurrency(value), "Sales"]}
+                        />
+                        <Area type="monotone" dataKey="sales" stroke="#3b82f6" strokeWidth={2} fillOpacity={1} fill="url(#colorSales)" />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-slate-400 text-xs font-semibold">
+                      No transactional sales data available.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </main>
       </div>
-    </ErrorBoundary>
+    </div>
   );
 }
