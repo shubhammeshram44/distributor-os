@@ -158,6 +158,19 @@ export default function DashboardPage() {
     }
     return "Loading Workspace...";
   };
+  const {
+    metrics,
+    recentOrders,
+    donutData,
+    activities,
+    selectedOrderDetails,
+    loadingDetails,
+    fetchOrderDetails,
+    closeDetails,
+    refreshAll: originalRefreshAll,
+    error
+  } = useDashboardData(isHydrating ? "" : tenantId, undefined, undefined);
+
   const [orders, setOrders] = useState<any[]>([]);
 
   const fetchOrders = useCallback(async () => {
@@ -177,19 +190,6 @@ export default function DashboardPage() {
   useEffect(() => {
     fetchOrders();
   }, [fetchOrders]);
-
-  const {
-    metrics,
-    recentOrders,
-    donutData,
-    activities,
-    selectedOrderDetails,
-    loadingDetails,
-    fetchOrderDetails,
-    closeDetails,
-    refreshAll: originalRefreshAll,
-    error
-  } = useDashboardData(isHydrating ? "" : tenantId, undefined, undefined);
 
   const fetchCreditRisk = useCallback(async () => {
     if (!tenantId) return;
