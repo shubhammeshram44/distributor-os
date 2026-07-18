@@ -5,7 +5,7 @@ import Link from "next/link";
 export default function PrivacyPage() {
   return (
     <div className="max-w-3xl mx-auto px-6 py-16">
-      <Link href="/" className="text-sm text-indigo-600 hover:text-indigo-800 mb-8 inline-block">
+      <Link href="/" className="text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 mb-8 inline-block">
         ← Back to Home
       </Link>
       <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-50 mb-2">Privacy Policy</h1>
@@ -17,7 +17,7 @@ export default function PrivacyPage() {
           DistributorOS is a WhatsApp-based order management platform for Indian FMCG distributors. We are operated by Shubham Meshram, based in Bangalore, India.
         </p>
         <p className="text-slate-600 dark:text-slate-400 text-sm leading-relaxed mb-4">
-          Contact: <a href="mailto:contact@distroos.in" className="text-indigo-600 hover:underline">contact@distroos.in</a>
+          Contact: <a href="mailto:contact@distroos.in" className="text-indigo-600 dark:text-indigo-400 hover:underline">contact@distroos.in</a>
         </p>
 
         <hr className="my-8 border-slate-200 dark:border-white/10" />
@@ -113,7 +113,7 @@ export default function PrivacyPage() {
             </tbody>
           </table>
         </div>
-        <p className="text-slate-500 dark:text-slate-500 text-xs italic mb-4">
+        <p className="text-slate-500 dark:text-slate-400 text-xs italic mb-4">
           Each of these services has their own privacy policy. We share only the minimum data needed for each service to function.
         </p>
 
@@ -149,7 +149,7 @@ export default function PrivacyPage() {
           <li>Export your order and customer data</li>
         </ul>
         <p className="text-slate-600 dark:text-slate-400 text-sm leading-relaxed mb-4">
-          To exercise any of these rights, email us at <a href="mailto:contact@distroos.in" className="text-indigo-600 hover:underline">contact@distroos.in</a>
+          To exercise any of these rights, email us at <a href="mailto:contact@distroos.in" className="text-indigo-600 dark:text-indigo-400 hover:underline">contact@distroos.in</a>
         </p>
 
         <hr className="my-8 border-slate-200 dark:border-white/10" />
@@ -180,7 +180,7 @@ export default function PrivacyPage() {
           For any privacy-related questions:
         </p>
         <p className="text-slate-600 dark:text-slate-400 text-sm leading-relaxed mb-1">
-          <strong>Email:</strong> <a href="mailto:contact@distroos.in" className="text-indigo-600 hover:underline">contact@distroos.in</a>
+          <strong>Email:</strong> <a href="mailto:contact@distroos.in" className="text-indigo-600 dark:text-indigo-400 hover:underline">contact@distroos.in</a>
         </p>
         <p className="text-slate-600 dark:text-slate-400 text-sm leading-relaxed mb-4">
           <strong>Response time:</strong> Within 2 business days

@@ -501,19 +501,19 @@ export default function OrdersPage() {
     switch (type) {
       case InvoiceTypes.GST:
         return (
-          <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-full text-xs font-bold leading-none bg-purple-50 text-purple-700 border border-purple-200 shadow-sm">
+          <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-full text-xs font-bold leading-none bg-purple-50 dark:bg-purple-500/10 text-purple-700 dark:text-purple-400 border border-purple-200 dark:border-purple-500/20 shadow-sm">
             GST Bill
           </span>
         );
       case InvoiceTypes.RETAIL:
         return (
-          <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-full text-xs font-bold leading-none bg-blue-50 text-blue-700 border border-blue-200 shadow-sm">
+          <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-full text-xs font-bold leading-none bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20 shadow-sm">
             Retail Bill
           </span>
         );
       default:
         return (
-          <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-full text-xs font-bold leading-none bg-slate-50 dark:bg-dashboard-inset text-slate-500 dark:text-slate-500 border border-slate-200 dark:border-white/10 shadow-sm">
+          <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-full text-xs font-bold leading-none bg-slate-50 dark:bg-dashboard-inset text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-white/10 shadow-sm">
             Unspecified
           </span>
         );
@@ -715,11 +715,11 @@ export default function OrdersPage() {
                 onClick={() => setSelectedStatus("All")}
                 className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${selectedStatus === "All"
                   ? "bg-white dark:bg-dashboard-card text-brand-blue shadow-sm"
-                  : "text-slate-500 dark:text-slate-500 hover:text-slate-800 dark:hover:text-slate-100"
+                  : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-100"
                   }`}
               >
                 <span>All</span>
-                <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${selectedStatus === "All" ? "bg-blue-50 text-brand-blue" : "bg-slate-200 text-slate-600 dark:text-slate-400"}`}>
+                <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${selectedStatus === "All" ? "bg-blue-50 dark:bg-blue-500/10 text-brand-blue" : "bg-slate-200 text-slate-600 dark:text-slate-400"}`}>
                   {countAll}
                 </span>
               </button>
@@ -728,11 +728,11 @@ export default function OrdersPage() {
                 onClick={() => setSelectedStatus("Pending")}
                 className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${selectedStatus === "Pending"
                   ? "bg-white dark:bg-dashboard-card text-brand-blue shadow-sm"
-                  : "text-slate-500 dark:text-slate-500 hover:text-slate-800 dark:hover:text-slate-100"
+                  : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-100"
                   }`}
               >
                 <span>Pending</span>
-                <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${selectedStatus === "Pending" ? "bg-amber-50 text-amber-700" : "bg-slate-200 text-slate-600 dark:text-slate-400"}`}>
+                <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${selectedStatus === "Pending" ? "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400" : "bg-slate-200 text-slate-600 dark:text-slate-400"}`}>
                   {countPending}
                 </span>
               </button>
@@ -741,11 +741,11 @@ export default function OrdersPage() {
                 onClick={() => setSelectedStatus("Confirmed")}
                 className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${selectedStatus === "Confirmed"
                   ? "bg-white dark:bg-dashboard-card text-brand-blue shadow-sm"
-                  : "text-slate-500 dark:text-slate-500 hover:text-slate-800 dark:hover:text-slate-100"
+                  : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-100"
                   }`}
               >
                 <span>Confirmed</span>
-                <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${selectedStatus === "Confirmed" ? "bg-emerald-50 text-emerald-700" : "bg-slate-200 text-slate-600 dark:text-slate-400"}`}>
+                <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${selectedStatus === "Confirmed" ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "bg-slate-200 text-slate-600 dark:text-slate-400"}`}>
                   {countConfirmed}
                 </span>
               </button>
@@ -754,11 +754,11 @@ export default function OrdersPage() {
                 onClick={() => setSelectedStatus("Needs Review")}
                 className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${selectedStatus === "Needs Review"
                   ? "bg-white dark:bg-dashboard-card text-brand-blue shadow-sm"
-                  : "text-slate-500 dark:text-slate-500 hover:text-slate-800 dark:hover:text-slate-100"
+                  : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-100"
                   }`}
               >
                 <span>Needs Review</span>
-                <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${selectedStatus === "Needs Review" ? "bg-rose-50 text-rose-700" : "bg-slate-200 text-slate-600 dark:text-slate-400"}`}>
+                <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${selectedStatus === "Needs Review" ? "bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400" : "bg-slate-200 text-slate-600 dark:text-slate-400"}`}>
                   {countNeedsReview}
                 </span>
               </button>
@@ -783,7 +783,7 @@ export default function OrdersPage() {
               {loading ? (
                 <table className="w-full text-left text-sm border-collapse">
                   <thead>
-                    <tr className="text-slate-400 font-semibold text-xs border-b border-dashboard-border bg-slate-50/50">
+                    <tr className="text-slate-400 font-semibold text-xs border-b border-dashboard-border bg-slate-50/50 dark:bg-transparent">
                       <th className="py-3 px-6">Order ID</th>
                       <th className="py-3 px-6">Customer</th>
                       <th className="py-3 px-6 text-center">Channel</th>
@@ -798,7 +798,7 @@ export default function OrdersPage() {
                   <SkeletonTable rows={8} cols={9} />
                 </table>
               ) : error ? (
-                <div className="flex flex-col items-center justify-center py-24 gap-3 text-rose-600">
+                <div className="flex flex-col items-center justify-center py-24 gap-3 text-rose-600 dark:text-rose-400">
                   <AlertCircle className="w-8 h-8" />
                   <span className="text-sm font-semibold">{error}</span>
                   <button
@@ -807,7 +807,7 @@ export default function OrdersPage() {
                         fetchOrders(activeTenantId);
                       }
                     }}
-                    className="mt-2 px-4 py-2 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg text-xs font-bold hover:bg-rose-100 transition-all cursor-pointer"
+                    className="mt-2 px-4 py-2 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 text-rose-700 dark:text-rose-400 rounded-lg text-xs font-bold hover:bg-rose-100 transition-all cursor-pointer"
                   >
                     Try Again
                   </button>
@@ -815,12 +815,12 @@ export default function OrdersPage() {
                 </div>
               ) : filteredOrders.length === 0 ? (
                 orders.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed border-slate-200 dark:border-white/10 rounded-xl bg-slate-50/40 text-center my-4">
+                  <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed border-slate-200 dark:border-white/10 rounded-xl bg-slate-50/40 dark:bg-white/6 text-center my-4">
                     <div className="p-3 bg-slate-100 dark:bg-white/5 text-slate-400 rounded-full mb-3">
                       <MessageSquare className="w-6 h-6" />
                     </div>
                     <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">No orders yet</h3>
-                    <p className="text-xs text-slate-500 dark:text-slate-500 max-w-xs mt-1">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xs mt-1">
                       Orders placed via WhatsApp or the portal will show up here in real time.
                     </p>
                     <button
@@ -831,12 +831,12 @@ export default function OrdersPage() {
                     </button>
                   </div>
                 ) : (
-                  <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed border-slate-200 dark:border-white/10 rounded-xl bg-slate-50/40 text-center my-4">
+                  <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed border-slate-200 dark:border-white/10 rounded-xl bg-slate-50/40 dark:bg-white/6 text-center my-4">
                     <div className="p-3 bg-slate-100 dark:bg-white/5 text-slate-400 rounded-full mb-3">
                       <Search className="w-6 h-6" />
                     </div>
                     <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">No orders match your filters</h3>
-                    <p className="text-xs text-slate-500 dark:text-slate-500 max-w-xs mt-1">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xs mt-1">
                       Try a different search term or reset the status filter to see everything.
                     </p>
                     <button
@@ -853,7 +853,7 @@ export default function OrdersPage() {
               ) : (
                 <table className="w-full text-left text-sm border-collapse">
                   <thead>
-                    <tr className="text-slate-400 font-semibold text-xs border-b border-dashboard-border bg-slate-50/50">
+                    <tr className="text-slate-400 font-semibold text-xs border-b border-dashboard-border bg-slate-50/50 dark:bg-transparent">
                       <th className="py-3 px-6">Order ID</th>
                       <th className="py-3 px-6">Customer</th>
                       <th className="py-3 px-6 text-center">Channel</th>
@@ -882,11 +882,11 @@ export default function OrdersPage() {
                         <td className="py-4 px-6 text-center">
                           <div className="flex items-center justify-center">
                             {order.channel.toLowerCase() === "whatsapp" ? (
-                              <div className="w-7 h-7 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 shadow-sm" title="WhatsApp Channel">
+                              <div className="w-7 h-7 rounded-full bg-emerald-50 dark:bg-emerald-500/10 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shadow-sm" title="WhatsApp Channel">
                                 <MessageSquare className="w-4 h-4" />
                               </div>
                             ) : (
-                              <div className="w-7 h-7 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 shadow-sm" title="Portal Channel">
+                              <div className="w-7 h-7 rounded-full bg-blue-50 dark:bg-blue-500/10 flex items-center justify-center text-blue-600 dark:text-blue-400 shadow-sm" title="Portal Channel">
                                 <Globe className="w-4 h-4" />
                               </div>
                             )}
@@ -902,41 +902,54 @@ export default function OrdersPage() {
                             const hasShortfall = totalAllocated < totalRequested;
                             if (order.status === "Confirmed" && hasShortfall) {
                               return (
-                                <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-full text-xs font-bold leading-none bg-amber-50 text-amber-700 border border-amber-200">
+                                <span className="inline-flex items-center justify-center whitespace-nowrap px-2.5 py-1 rounded-full text-xs font-bold leading-none bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/20">
                                   Confirmed ({totalAllocated} of {totalRequested} allocated)
                                 </span>
                               );
                             }
+                            // Distinct color per status so the pipeline stage is recognizable at a glance
+                            // instead of every non-Confirmed/Needs-Review status collapsing to amber.
+                            const STATUS_STYLES: Record<string, string> = {
+                              Pending: "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/20",
+                              Confirmed: "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20",
+                              Dispatched: "bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-500/20",
+                              Delivered: "bg-teal-50 dark:bg-teal-500/10 text-teal-700 dark:text-teal-400 border-teal-200 dark:border-teal-500/20",
+                              "Needs Review": "bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-500/20",
+                              Cancelled: "bg-slate-100 dark:bg-white/5 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-white/10",
+                              Draft: "bg-slate-100 dark:bg-white/5 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-white/10",
+                            };
+                            const style = STATUS_STYLES[order.status] || STATUS_STYLES.Pending;
                             return (
-                              <span className={`inline-flex items-center justify-center px-2.5 py-1 rounded-full text-xs font-bold leading-none ${order.status === "Confirmed"
-                                  ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                                  : order.status === "Needs Review"
-                                    ? "bg-rose-50 text-rose-700 border border-rose-200"
-                                    : "bg-amber-50 text-amber-700 border border-amber-200"
-                                }`}>
+                              <span className={`inline-flex items-center justify-center whitespace-nowrap px-2.5 py-1 rounded-full text-xs font-bold leading-none border ${style}`}>
                                 {order.status}
                               </span>
                             );
                           })()}
                         </td>
                         <td className="py-4 px-6 text-center">
-                          <span className={`inline-flex items-center justify-center w-24 px-2.5 py-1 rounded-full text-xs font-bold leading-none ${order.payment_status === "PAID"
-                            ? "bg-emerald-50 text-emerald-700 border border-emerald-200/60"
+                          <span className={`inline-flex items-center justify-center gap-1.5 whitespace-nowrap w-24 px-2.5 py-1 rounded-full text-xs font-bold leading-none border ${order.payment_status === "PAID"
+                            ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20"
                             : order.payment_status === "PARTIALLY_PAID"
-                              ? "bg-amber-50 text-amber-700 border border-amber-200/60"
-                              : "bg-rose-50 text-rose-700 border border-rose-200/60"
+                              ? "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/20"
+                              : "bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-500/20"
                             }`}>
-                            {order.payment_status === "PAID"
-                              ? "🟢 Paid"
+                            <span className={`w-1.5 h-1.5 rounded-full ${order.payment_status === "PAID"
+                              ? "bg-emerald-500"
                               : order.payment_status === "PARTIALLY_PAID"
-                                ? "🟡 Partial"
-                                : "🔴 Unpaid"}
+                                ? "bg-amber-500"
+                                : "bg-rose-500"
+                              }`} />
+                            {order.payment_status === "PAID"
+                              ? "Paid"
+                              : order.payment_status === "PARTIALLY_PAID"
+                                ? "Partial"
+                                : "Unpaid"}
                           </span>
                         </td>
                         <td className="py-4 px-6 text-center">
                           {renderInvoiceTypeBadge(order.invoice_type)}
                         </td>
-                        <td className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-500">
+                        <td className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400">
                           {formatDateTime(order.created_on, "datetime")}
                         </td>
                         <td className="py-4 px-6 text-right">
@@ -989,12 +1002,12 @@ export default function OrdersPage() {
               {loadingDetails ? (
                 <div className="flex flex-col items-center justify-center h-48 gap-3">
                   <Loader2 className="w-8 h-8 text-brand-blue animate-spin" />
-                  <span className="text-sm font-semibold text-slate-500 dark:text-slate-500">Loading line items...</span>
+                  <span className="text-sm font-semibold text-slate-500 dark:text-slate-400">Loading line items...</span>
                 </div>
               ) : editedLineItems && editedLineItems.length > 0 ? (
                 <>
                   {/* Order Overview / Settings */}
-                  <div className="bg-slate-50/50 border border-dashboard-border rounded-xl p-4 mb-4 space-y-3 relative z-30">
+                  <div className="bg-slate-50/50 dark:bg-dashboard-inset border border-dashboard-border rounded-xl p-4 mb-4 space-y-3 relative z-30">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Retailer</span>
                       <span className="text-sm font-bold text-slate-700 dark:text-slate-300">{selectedOrder?.customer}</span>
@@ -1039,7 +1052,7 @@ export default function OrdersPage() {
                     <div className="bg-gray-50 dark:bg-dashboard-inset border border-gray-100 dark:border-white/5 rounded-lg p-3 text-sm text-gray-700 dark:text-slate-300 italic my-3 flex items-start gap-2">
                       <MessageSquare className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
                       <div>
-                        <span className="font-bold text-xs text-slate-500 dark:text-slate-500 uppercase not-italic block mb-0.5">Original Message:</span>
+                        <span className="font-bold text-xs text-slate-500 dark:text-slate-400 uppercase not-italic block mb-0.5">Original Message:</span>
                         "{selectedOrder.raw_source_text}"
                       </div>
                     </div>
@@ -1052,12 +1065,12 @@ export default function OrdersPage() {
                     const displayQty = item.allocated_quantity ?? item.quantity;
                     const lineTotal = displayQty * item.unit_price;
                     return (
-                      <div key={idx} className="p-4 rounded-xl border border-dashboard-border bg-slate-50/50 flex flex-col justify-between gap-2">
+                      <div key={idx} className="p-4 rounded-xl border border-dashboard-border bg-slate-50/50 dark:bg-dashboard-inset flex flex-col justify-between gap-2">
                         <div className="flex items-start justify-between">
                           <div className="flex-1 pr-4">
                             {isUnmatched ? (
                               <div className="space-y-2">
-                                <p className="font-bold text-sm text-rose-600 flex items-center gap-1.5 animate-pulse">
+                                <p className="font-bold text-sm text-rose-600 dark:text-rose-400 flex items-center gap-1.5 animate-pulse">
                                   <AlertCircle className="w-4 h-4 shrink-0" />
                                   <span>Unmatched Line Item</span>
                                 </p>
@@ -1068,7 +1081,7 @@ export default function OrdersPage() {
                                 <select
                                   value={item.product_id || ""}
                                   onChange={(e) => handleProductChange(item.id, e.target.value)}
-                                  className="w-full mt-1 p-2 border border-rose-200 rounded-lg text-xs bg-white dark:bg-dashboard-card text-slate-700 dark:text-slate-300 font-semibold focus:outline-none focus:ring-1 focus:ring-rose-500 cursor-pointer animate-pulse"
+                                  className="w-full mt-1 p-2 border border-rose-200 dark:border-rose-500/20 rounded-lg text-xs bg-white dark:bg-dashboard-card text-slate-700 dark:text-slate-300 font-semibold focus:outline-none focus:ring-1 focus:ring-rose-500 cursor-pointer animate-pulse"
                                 >
                                   <option value="">-- Select SKU --</option>
                                   {productsList.map((p) => (
@@ -1085,7 +1098,7 @@ export default function OrdersPage() {
                               </>
                             )}
                           </div>
-                          <div className="flex flex-col items-end shrink-0 text-right text-xs font-bold text-slate-500 dark:text-slate-500">
+                          <div className="flex flex-col items-end shrink-0 text-right text-xs font-bold text-slate-500 dark:text-slate-400">
                             {/* Show allocated quantity if partial, otherwise show full quantity */}
                             {item.allocated_quantity !== null && item.allocated_quantity !== undefined && item.allocated_quantity < item.quantity ? (
                               <span>
@@ -1108,11 +1121,11 @@ export default function OrdersPage() {
 
                   {/* Financial Summary */}
                   <div className="border-t border-slate-200 dark:border-white/10 pt-4 mt-6 space-y-2 text-sm">
-                    <div className="flex justify-between text-slate-500 dark:text-slate-500 font-medium">
+                    <div className="flex justify-between text-slate-500 dark:text-slate-400 font-medium">
                       <span>Subtotal</span>
                       <span>{formatCurrency(editedLineItems.reduce((a, b) => a + b.total_price, 0) / 1.18)}</span>
                     </div>
-                    <div className="flex justify-between text-slate-500 dark:text-slate-500 font-medium">
+                    <div className="flex justify-between text-slate-500 dark:text-slate-400 font-medium">
                       <span>GST (18%)</span>
                       <span>{formatCurrency(editedLineItems.reduce((a, b) => a + b.total_price, 0) * 0.18 / 1.18)}</span>
                     </div>
@@ -1124,7 +1137,7 @@ export default function OrdersPage() {
 
                   {/* Payment Receipt Audit Trail Box */}
                   {selectedOrderPayments && (selectedOrderPayments.payments_allocated.length > 0 || selectedOrderPayments.payment_status === "UNPAID") && (
-                    <div className="border border-slate-200/80 rounded-lg p-4 mt-4 bg-slate-50/50">
+                    <div className="border border-slate-200/80 dark:border-white/10 rounded-lg p-4 mt-4 bg-slate-50/50 dark:bg-dashboard-inset">
                       <h5 className="font-bold text-slate-800 dark:text-slate-100 text-xs uppercase tracking-wider mb-3 flex items-center gap-1.5">
                         <span>💳 Payment Audit Trail</span>
                       </h5>
@@ -1144,7 +1157,7 @@ export default function OrdersPage() {
                               </div>
                               <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-400 mt-1">
                                 <span>Amount Applied to this Order:</span>
-                                <span className="font-extrabold text-emerald-700">{formatCurrency(payment.amount_allocated)}</span>
+                                <span className="font-extrabold text-emerald-700 dark:text-emerald-400">{formatCurrency(payment.amount_allocated)}</span>
                               </div>
                               <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-400 mt-1">
                                 <span>Method: <strong className="font-semibold text-slate-700 dark:text-slate-300">{payment.method}</strong></span>
@@ -1159,7 +1172,7 @@ export default function OrdersPage() {
                           ))}
                         </div>
                       ) : (
-                        <p className="text-xs text-rose-700 font-medium flex items-center gap-1.5">
+                        <p className="text-xs text-rose-700 dark:text-rose-400 font-medium flex items-center gap-1.5">
                           <span>❌ No payments recorded yet against this invoice.</span>
                         </p>
                       )}
@@ -1175,10 +1188,10 @@ export default function OrdersPage() {
             <div className="p-6 border-t border-dashboard-border bg-slate-50 dark:bg-dashboard-inset flex flex-col gap-3">
               {riskAssessment && selectedOrder?.status !== "Confirmed" && (
                 <div className={`rounded-lg p-4 mb-4 border ${riskAssessment.level === "high_risk"
-                    ? "bg-red-50 border-red-200"
+                    ? "bg-red-50 dark:bg-red-500/10 border-red-200 dark:border-red-500/20"
                     : riskAssessment.level === "caution"
-                      ? "bg-yellow-50 border-yellow-200"
-                      : "bg-green-50 border-green-200"
+                      ? "bg-yellow-50 dark:bg-yellow-500/10 border-yellow-200 dark:border-yellow-500/20"
+                      : "bg-green-50 dark:bg-green-500/10 border-green-200 dark:border-green-500/20"
                   }`}>
                   <div className="flex items-center gap-2 mb-2">
                     <span className="text-lg">
@@ -1193,17 +1206,17 @@ export default function OrdersPage() {
                   {/* Key metrics row */}
                   <div className="flex gap-4 mb-3 text-sm">
                     <div>
-                      <span className="text-gray-500 dark:text-slate-500">Outstanding</span>
+                      <span className="text-gray-500 dark:text-slate-400">Outstanding</span>
                       <div className="font-medium text-slate-800 dark:text-slate-100">₹{riskAssessment.outstanding_balance.toLocaleString("en-IN")}</div>
                     </div>
                     <div>
-                      <span className="text-gray-500 dark:text-slate-500">Credit Used</span>
+                      <span className="text-gray-500 dark:text-slate-400">Credit Used</span>
                       <div className="font-medium text-slate-800 dark:text-slate-100">{riskAssessment.credit_utilisation_pct}%</div>
                     </div>
                     {riskAssessment.overdue_days > 0 && (
                       <div>
-                        <span className="text-gray-500 dark:text-slate-500">Overdue</span>
-                        <div className="font-medium text-red-600">{riskAssessment.overdue_days} days</div>
+                        <span className="text-gray-500 dark:text-slate-400">Overdue</span>
+                        <div className="font-medium text-red-600 dark:text-red-400">{riskAssessment.overdue_days} days</div>
                       </div>
                     )}
                   </div>
@@ -1231,7 +1244,7 @@ export default function OrdersPage() {
                 {selectedOrder && (selectedOrder.status === "Draft" || selectedOrder.status === "Pending" || selectedOrder.status === "Confirmed") && (
                   <button
                     onClick={() => setIsCancelDialogOpen(true)}
-                    className="px-4 py-2.5 bg-rose-50 border border-rose-200 text-rose-700 hover:bg-rose-100 text-sm font-bold rounded-lg transition-all cursor-pointer"
+                    className="px-4 py-2.5 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 text-rose-700 dark:text-rose-400 hover:bg-rose-100 text-sm font-bold rounded-lg transition-all cursor-pointer"
                   >
                     Cancel Order
                   </button>
@@ -1367,13 +1380,13 @@ export default function OrdersPage() {
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <p className="text-xs text-slate-500 dark:text-slate-500 font-semibold mb-4">
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-semibold mb-4">
               Downloads Confirmed/Dispatched/Delivered orders in this range as a Tally-importable
               XML (Sales Vouchers). Import via Gateway of Tally &rarr; Import Data &rarr; Vouchers.
             </p>
             <div className="grid grid-cols-2 gap-3 mb-4">
               <div>
-                <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-500 mb-1.5 uppercase tracking-wider">From</label>
+                <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1.5 uppercase tracking-wider">From</label>
                 <input
                   type="date"
                   value={tallyStartDate}
@@ -1382,7 +1395,7 @@ export default function OrdersPage() {
                 />
               </div>
               <div>
-                <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-500 mb-1.5 uppercase tracking-wider">To</label>
+                <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1.5 uppercase tracking-wider">To</label>
                 <input
                   type="date"
                   value={tallyEndDate}
@@ -1392,7 +1405,7 @@ export default function OrdersPage() {
               </div>
             </div>
             {tallyExportError && (
-              <div className="flex items-center gap-2 p-3 bg-rose-50 border border-rose-100 rounded-lg text-rose-600 text-xs font-semibold mb-4">
+              <div className="flex items-center gap-2 p-3 bg-rose-50 dark:bg-rose-500/10 border border-rose-100 dark:border-rose-500/20 rounded-lg text-rose-600 dark:text-rose-400 text-xs font-semibold mb-4">
                 <AlertCircle className="w-4 h-4 shrink-0" />
                 <span>{tallyExportError}</span>
               </div>
@@ -1400,7 +1413,7 @@ export default function OrdersPage() {
             <div className="flex justify-end gap-2">
               <button
                 onClick={() => setShowTallyExportModal(false)}
-                className="px-4 py-2 text-xs font-bold text-slate-500 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/5 rounded-lg transition-all cursor-pointer"
+                className="px-4 py-2 text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/5 rounded-lg transition-all cursor-pointer"
               >
                 Cancel
               </button>
@@ -1421,12 +1434,12 @@ export default function OrdersPage() {
           <div className="flex items-center justify-between">
             <h4 className="font-bold text-slate-800 dark:text-slate-100 text-sm">Bulk Invoice Download</h4>
             <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${bulkStatus === "COMPLETED"
-              ? "bg-emerald-50 text-emerald-700 border border-emerald-100"
+              ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-500/20"
               : bulkStatus === "PARTIALLY_COMPLETED"
-                ? "bg-amber-50 text-amber-700 border border-amber-100"
+                ? "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-100 dark:border-amber-500/20"
                 : bulkStatus === "FAILED"
-                  ? "bg-rose-50 text-rose-700 border border-rose-100"
-                  : "bg-blue-50 text-brand-blue border border-blue-100 animate-pulse"
+                  ? "bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-100 dark:border-rose-500/20"
+                  : "bg-blue-50 dark:bg-blue-500/10 text-brand-blue border border-blue-100 dark:border-blue-500/20 animate-pulse"
               }`}>
               {bulkStatus}
             </span>
@@ -1459,8 +1472,8 @@ export default function OrdersPage() {
             )}
 
             {bulkFailedOrders && bulkFailedOrders.length > 0 && (
-              <div className="max-h-24 overflow-y-auto bg-rose-50/50 border border-rose-100/50 rounded-lg p-2.5 text-[10px] text-rose-700 font-medium space-y-1">
-                <p className="font-bold uppercase tracking-wider text-[9px] text-rose-800">Failed Orders ({bulkFailedOrders.length}):</p>
+              <div className="max-h-24 overflow-y-auto bg-rose-50/50 dark:bg-rose-500/8 border border-rose-100 dark:border-rose-500/20 rounded-lg p-2.5 text-[10px] text-rose-700 dark:text-rose-400 font-medium space-y-1">
+                <p className="font-bold uppercase tracking-wider text-[9px] text-rose-800 dark:text-rose-300">Failed Orders ({bulkFailedOrders.length}):</p>
                 {bulkFailedOrders.map((fail, idx) => (
                   <div key={idx} className="flex justify-between font-mono">
                     <span>{fail.order_id.slice(0, 8)}...</span>

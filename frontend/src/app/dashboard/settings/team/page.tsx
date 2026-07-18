@@ -298,13 +298,13 @@ export default function TeamSettingsPage() {
   const getRoleBadgeStyle = (userRole: string) => {
     switch (userRole.toUpperCase()) {
       case "SUPER_ADMIN":
-        return "bg-purple-50 text-purple-700 border-purple-200";
+        return "bg-purple-50 dark:bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-500/20";
       case "FINANCE":
-        return "bg-emerald-50 text-emerald-700 border-emerald-200";
+        return "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20";
       case "OPERATOR":
-        return "bg-blue-50 text-blue-700 border-blue-200";
+        return "bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-500/20";
       case "DRIVER":
-        return "bg-amber-50 text-amber-700 border-amber-200";
+        return "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/20";
       default:
         return "bg-slate-50 dark:bg-dashboard-inset text-slate-700 dark:text-slate-300 border-slate-200 dark:border-white/10";
     }
@@ -386,7 +386,7 @@ export default function TeamSettingsPage() {
           {/* Tab Panel Content */}
           {activeTab === "directory" ? (
             <div className="bg-white dark:bg-dashboard-card rounded-xl border border-dashboard-border shadow-sm flex flex-col min-h-[400px]">
-              <div className="p-5 border-b border-dashboard-border flex items-center justify-between bg-slate-50/50 rounded-t-xl gap-4">
+              <div className="p-5 border-b border-dashboard-border flex items-center justify-between bg-slate-50/50 dark:bg-dashboard-inset rounded-t-xl gap-4">
                 <div className="relative max-w-sm w-full">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                   <input
@@ -407,15 +407,15 @@ export default function TeamSettingsPage() {
                 {loading ? (
                   <div className="flex flex-col items-center justify-center py-24 gap-3">
                     <Loader2 className="w-8 h-8 text-brand-blue animate-spin" />
-                    <span className="text-sm font-semibold text-slate-500 dark:text-slate-500">Loading active roster...</span>
+                    <span className="text-sm font-semibold text-slate-500 dark:text-slate-400">Loading active roster...</span>
                   </div>
                 ) : error ? (
-                  <div className="flex flex-col items-center justify-center py-24 gap-3 text-rose-600">
+                  <div className="flex flex-col items-center justify-center py-24 gap-3 text-rose-600 dark:text-rose-400">
                     <AlertCircle className="w-8 h-8" />
                     <span className="text-sm font-semibold">{error}</span>
                     <button
                       onClick={() => fetchUsers(activeTenantId)}
-                      className="mt-2 px-4 py-2 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg text-xs font-bold hover:bg-rose-100 transition-all cursor-pointer"
+                      className="mt-2 px-4 py-2 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 text-rose-700 dark:text-rose-400 rounded-lg text-xs font-bold hover:bg-rose-100 transition-all cursor-pointer"
                     >
                       Try Again
                     </button>
@@ -428,7 +428,7 @@ export default function TeamSettingsPage() {
                 ) : (
                   <table className="w-full text-left text-sm border-collapse">
                     <thead>
-                      <tr className="text-slate-400 font-semibold text-xs border-b border-dashboard-border bg-slate-50/50">
+                      <tr className="text-slate-400 font-semibold text-xs border-b border-dashboard-border bg-slate-50/50 dark:bg-dashboard-inset">
                         <th className="py-3 px-6">Name</th>
                         <th className="py-3 px-6">Assigned Role</th>
                         <th className="py-3 px-6">Credential Locator</th>
@@ -447,16 +447,16 @@ export default function TeamSettingsPage() {
                               {u.role.replace("_", " ")}
                             </span>
                           </td>
-                          <td className="py-4 px-6 font-semibold text-slate-500 dark:text-slate-500 text-xs">
+                          <td className="py-4 px-6 font-semibold text-slate-500 dark:text-slate-400 text-xs">
                             {u.email_or_phone || u.phone_number || "—"}
                           </td>
                           <td className="py-4 px-6 text-center">
                             {u.is_active ? (
-                              <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full text-[10px] font-bold">
+                              <span className="inline-flex items-center gap-1 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20 px-2 py-0.5 rounded-full text-[10px] font-bold">
                                 Active
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-1 bg-rose-50 text-rose-700 border border-rose-200 px-2 py-0.5 rounded-full text-[10px] font-bold">
+                              <span className="inline-flex items-center gap-1 bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-500/20 px-2 py-0.5 rounded-full text-[10px] font-bold">
                                 Deactivated
                               </span>
                             )}
@@ -468,7 +468,7 @@ export default function TeamSettingsPage() {
                                   setSelectedUserForEdit(u);
                                   setEditRole(u.role);
                                 }}
-                                className="p-1.5 hover:bg-slate-100 dark:hover:bg-white/5 rounded-lg text-slate-500 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 transition-all cursor-pointer border border-transparent hover:border-slate-200"
+                                className="p-1.5 hover:bg-slate-100 dark:hover:bg-white/5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-all cursor-pointer border border-transparent hover:border-slate-200"
                                 title="Edit Role"
                               >
                                 <Edit2 className="w-3.5 h-3.5" />
@@ -476,8 +476,8 @@ export default function TeamSettingsPage() {
                               <button
                                 onClick={() => handleToggleStatus(u)}
                                 className={`w-24 text-center block px-2.5 py-1 text-xs rounded-md border font-bold transition-all cursor-pointer ${u.is_active
-                                    ? "bg-rose-50 border-rose-200 text-rose-500 hover:bg-rose-100 hover:text-rose-600"
-                                    : "bg-emerald-50 border-emerald-200 text-emerald-500 hover:bg-emerald-100 hover:text-emerald-600"
+                                    ? "bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-500/20 text-rose-500 hover:bg-rose-100 hover:text-rose-600"
+                                    : "bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/20 text-emerald-500 hover:bg-emerald-100 hover:text-emerald-600"
                                   }`}
                               >
                                 {u.is_active ? "Deactivate" : "Activate"}
@@ -541,12 +541,12 @@ export default function TeamSettingsPage() {
 
                       <div>
                         {p.allowed ? (
-                          <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-lg text-[10px] font-bold">
+                          <span className="inline-flex items-center gap-1 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20 px-2.5 py-1 rounded-lg text-[10px] font-bold">
                             <UserCheck className="w-3.5 h-3.5" />
                             <span>Permitted</span>
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 bg-rose-50 text-rose-700 border border-rose-200 px-2.5 py-1 rounded-lg text-[10px] font-bold">
+                          <span className="inline-flex items-center gap-1 bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-500/20 px-2.5 py-1 rounded-lg text-[10px] font-bold">
                             <Lock className="w-3.5 h-3.5" />
                             <span>Restricted</span>
                           </span>
@@ -584,7 +584,7 @@ export default function TeamSettingsPage() {
 
             <form onSubmit={handleInviteSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-500 mb-1.5 uppercase">Full Name *</label>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5 uppercase">Full Name *</label>
                 <input
                   type="text"
                   value={fullName}
@@ -596,7 +596,7 @@ export default function TeamSettingsPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-500 mb-1.5 uppercase">Credential Locator (Email or Phone) *</label>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5 uppercase">Credential Locator (Email or Phone) *</label>
                 <input
                   type="text"
                   value={emailOrPhone}
@@ -608,7 +608,7 @@ export default function TeamSettingsPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-500 mb-1.5 uppercase">Assigned Privilege Role *</label>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5 uppercase">Assigned Privilege Role *</label>
                 <select
                   value={role}
                   onChange={(e) => setRole(e.target.value)}
@@ -623,7 +623,7 @@ export default function TeamSettingsPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-500 mb-1.5 uppercase">Account Password *</label>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5 uppercase">Account Password *</label>
                 <input
                   type="password"
                   value={password}
@@ -685,7 +685,7 @@ export default function TeamSettingsPage() {
 
             <form onSubmit={handleEditSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-500 mb-1.5 uppercase">Assigned Privilege Role *</label>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5 uppercase">Assigned Privilege Role *</label>
                 <select
                   value={editRole}
                   onChange={(e) => setEditRole(e.target.value)}
@@ -731,17 +731,17 @@ export default function TeamSettingsPage() {
       {toast.show && (
         <div className="fixed top-5 right-5 z-50 flex items-center gap-3 bg-white/95 dark:bg-dashboard-card/95 backdrop-blur-md border border-slate-100 dark:border-white/5 shadow-2xl px-4 py-3.5 rounded-xl animate-slide-in pointer-events-auto max-w-sm">
           {toast.type === "success" ? (
-            <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0 shadow-sm">
+            <div className="w-8 h-8 rounded-full bg-emerald-50 dark:bg-emerald-500/10 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0 shadow-sm">
               <CheckCircle2 className="w-4.5 h-4.5" />
             </div>
           ) : (
-            <div className="w-8 h-8 rounded-full bg-rose-50 flex items-center justify-center text-rose-600 shrink-0 shadow-sm">
+            <div className="w-8 h-8 rounded-full bg-rose-50 dark:bg-rose-500/10 flex items-center justify-center text-rose-600 dark:text-rose-400 shrink-0 shadow-sm">
               <AlertCircle className="w-4.5 h-4.5" />
             </div>
           )}
           <div className="flex-1 min-w-0">
             <p className="text-xs font-bold text-slate-800 dark:text-slate-100">{toast.type === "success" ? "Success" : "Error"}</p>
-            <p className="text-[11px] text-slate-500 dark:text-slate-500 font-semibold mt-0.5 break-words">{toast.message}</p>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold mt-0.5 break-words">{toast.message}</p>
           </div>
           <button
             onClick={() => setToast(prev => ({ ...prev, show: false }))}

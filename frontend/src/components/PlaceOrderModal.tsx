@@ -113,7 +113,7 @@ export default function PlaceOrderModal({
                 {/* Header */}
                 <div className="flex items-center justify-between p-5 border-b border-slate-100 dark:border-white/5">
                     <div className="flex items-center gap-2">
-                        <ShoppingCart className="w-5 h-5 text-emerald-600" />
+                        <ShoppingCart className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
                         <h2 id="place-order-modal-title" className="font-semibold text-slate-800 dark:text-slate-100">Place Order</h2>
                     </div>
                     <button onClick={onClose} className="text-slate-400 hover:text-slate-600" aria-label="Close order modal">
@@ -124,7 +124,7 @@ export default function PlaceOrderModal({
                 <div className="p-5 space-y-4">
                     {/* Customer selector */}
                     <div>
-                        <label className="text-xs font-semibold text-slate-500 dark:text-slate-500 uppercase tracking-wide mb-1.5 block">
+                        <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1.5 block">
                             Placing order for
                         </label>
                         <select
@@ -145,7 +145,7 @@ export default function PlaceOrderModal({
 
                     {/* Order text input */}
                     <div>
-                        <label className="text-xs font-semibold text-slate-500 dark:text-slate-500 uppercase tracking-wide mb-1.5 block">
+                        <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1.5 block">
                             Order message
                         </label>
                         <div className="relative">
@@ -160,8 +160,8 @@ export default function PlaceOrderModal({
                             <button
                                 onClick={isListening ? stopListening : startListening}
                                 className={`absolute bottom-3 right-3 p-2 rounded-lg transition-all ${isListening
-                                        ? "bg-red-100 text-red-600 animate-pulse"
-                                        : "bg-slate-100 dark:bg-white/5 text-slate-500 dark:text-slate-500 hover:bg-emerald-100 hover:text-emerald-600"
+                                        ? "bg-red-100 dark:bg-red-500/15 text-red-600 dark:text-red-400 animate-pulse"
+                                        : "bg-slate-100 dark:bg-white/5 text-slate-500 dark:text-slate-400 hover:bg-emerald-100 hover:text-emerald-600"
                                     }`}
                                 title={isListening ? "Stop listening" : "Speak order"}
                             >
@@ -179,8 +179,8 @@ export default function PlaceOrderModal({
                     {/* Result message */}
                     {result && (
                         <div className={`text-sm font-medium p-3 rounded-lg ${result.success
-                                ? "bg-emerald-50 text-emerald-700"
-                                : "bg-red-50 text-red-700"
+                                ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                                : "bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400"
                             }`}>
                             {result.message}
                         </div>

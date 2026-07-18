@@ -214,7 +214,7 @@ export default function SalesAnalyticsPage() {
                   </div>
                   <div className="text-2xl font-bold text-slate-800 dark:text-slate-100">{card.value}</div>
                   <div className={`text-xs font-semibold mt-1 ${
-                    card.change >= 0 ? "text-emerald-600" : "text-red-500"
+                    card.change >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-500"
                   }`}>
                     {card.change >= 0 ? "↑" : "↓"}{Math.abs(card.change).toFixed(1)}% vs previous period
                   </div>
@@ -226,15 +226,15 @@ export default function SalesAnalyticsPage() {
           {loading ? (
             <div className="flex flex-col items-center justify-center py-32 gap-3">
               <Loader2 className="w-8 h-8 text-brand-blue animate-spin" />
-              <span className="text-sm font-semibold text-slate-500 dark:text-slate-500">Aggregating database sales metrics...</span>
+              <span className="text-sm font-semibold text-slate-500 dark:text-slate-400">Aggregating database sales metrics...</span>
             </div>
           ) : error ? (
-            <div className="flex flex-col items-center justify-center py-32 gap-3 text-rose-600">
+            <div className="flex flex-col items-center justify-center py-32 gap-3 text-rose-600 dark:text-rose-400">
               <AlertCircle className="w-8 h-8" />
               <span className="text-sm font-semibold">{error}</span>
               <button
                 onClick={() => fetchSalesAnalytics(activeTenantId)}
-                className="mt-2 px-4 py-2 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg text-xs font-bold hover:bg-rose-100 transition-all cursor-pointer"
+                className="mt-2 px-4 py-2 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 text-rose-700 dark:text-rose-400 rounded-lg text-xs font-bold hover:bg-rose-100 transition-all cursor-pointer"
               >
                 Try Again
               </button>
@@ -249,7 +249,7 @@ export default function SalesAnalyticsPage() {
                     <h3 className="text-2xl font-extrabold text-slate-800 dark:text-slate-100 mt-1">{data?.total_orders}</h3>
                     <p className="text-[10px] text-slate-400 font-semibold mt-1">Processed in current tenant context</p>
                   </div>
-                  <div className="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center text-brand-blue shadow-sm">
+                  <div className="w-12 h-12 rounded-xl bg-blue-50 dark:bg-blue-500/10 flex items-center justify-center text-brand-blue shadow-sm">
                     <ShoppingBag className="w-5 h-5" />
                   </div>
                 </div>
@@ -262,7 +262,7 @@ export default function SalesAnalyticsPage() {
                     </h3>
                     <p className="text-[10px] text-slate-400 font-semibold mt-1">Leading product catalog manufacturer</p>
                   </div>
-                  <div className="w-12 h-12 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600 shadow-sm">
+                  <div className="w-12 h-12 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shadow-sm">
                     <TrendingUp className="w-5 h-5" />
                   </div>
                 </div>

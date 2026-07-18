@@ -17,18 +17,18 @@ function reasonStyle(reasonCode: string): {
   switch (reasonCode) {
     case "STOCK_SHORTAGE":
       return {
-        bg: "bg-amber-50",
-        text: "text-amber-700",
-        border: "border-amber-200",
-        badge: "bg-amber-100 text-amber-700",
+        bg: "bg-amber-50 dark:bg-amber-500/10",
+        text: "text-amber-700 dark:text-amber-400",
+        border: "border-amber-200 dark:border-amber-500/20",
+        badge: "bg-amber-100 dark:bg-amber-500/15 text-amber-700 dark:text-amber-400",
         Icon: Package,
       };
     case "CREDIT_LIMIT":
       return {
-        bg: "bg-rose-50",
-        text: "text-rose-700",
-        border: "border-rose-200",
-        badge: "bg-rose-100 text-rose-700",
+        bg: "bg-rose-50 dark:bg-rose-500/10",
+        text: "text-rose-700 dark:text-rose-400",
+        border: "border-rose-200 dark:border-rose-500/20",
+        badge: "bg-rose-100 dark:bg-rose-500/15 text-rose-700 dark:text-rose-400",
         Icon: CreditCard,
       };
     default:
@@ -117,7 +117,7 @@ export default function DemandGapCard({ activeTenantId }: DemandGapCardProps) {
 
     if (total_revenue_at_risk === 0) {
       return (
-        <p className="text-xs text-emerald-600 font-semibold mt-1">
+        <p className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold mt-1">
           No demand gaps recorded in the last{" "}
           <span className="font-bold">{window_days}</span>{" "}
           {window_days === 1 ? "day" : "days"} ✓
@@ -126,11 +126,11 @@ export default function DemandGapCard({ activeTenantId }: DemandGapCardProps) {
     }
 
     return (
-      <p className="text-xs text-slate-500 dark:text-slate-500 font-semibold mt-1 leading-relaxed">
+      <p className="text-xs text-slate-500 dark:text-slate-400 font-semibold mt-1 leading-relaxed">
         In the last{" "}
         <span className="font-bold text-slate-700 dark:text-slate-300">{window_days}</span>{" "}
         {window_days === 1 ? "day" : "days"} you lost{" "}
-        <span className="font-bold text-rose-600">
+        <span className="font-bold text-rose-600 dark:text-rose-400">
           {formatCurrency(total_revenue_at_risk)}
         </span>{" "}
         —{" "}
@@ -148,7 +148,7 @@ export default function DemandGapCard({ activeTenantId }: DemandGapCardProps) {
       <div className="flex items-start justify-between pb-4 border-b border-dashboard-border mb-4">
         <div>
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-rose-50 flex items-center justify-center text-rose-500 shrink-0">
+            <div className="w-7 h-7 rounded-lg bg-rose-50 dark:bg-rose-500/10 flex items-center justify-center text-rose-500 shrink-0">
               <TrendingDown className="w-4 h-4" />
             </div>
             <h3 className="font-bold text-slate-800 dark:text-slate-100 text-base">Demand Gap</h3>
@@ -176,7 +176,7 @@ export default function DemandGapCard({ activeTenantId }: DemandGapCardProps) {
         {!loading && !error && summary && summary.by_reason.length === 0 && (
           <div className="flex flex-col items-center justify-center h-32 gap-2 text-slate-400">
             <TrendingDown className="w-6 h-6 text-emerald-300" />
-            <span className="text-xs font-semibold text-emerald-600">
+            <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
               All demand fulfilled in this window
             </span>
           </div>

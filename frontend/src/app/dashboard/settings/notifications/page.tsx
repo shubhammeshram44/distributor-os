@@ -227,10 +227,10 @@ export default function NotificationsSettingsPage() {
           {toast.show && (
             <div className={`fixed top-20 right-4 z-50 flex items-center gap-2 px-4 py-3 rounded-lg shadow-md border transition-all duration-300 ${
               toast.type === "success" 
-                ? "bg-emerald-50 border-emerald-200 text-emerald-800" 
-                : "bg-rose-50 border-rose-200 text-rose-800"
+                ? "bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/20 text-emerald-800 dark:text-emerald-300" 
+                : "bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-500/20 text-rose-800 dark:text-rose-300"
             }`}>
-              {toast.type === "success" ? <CheckCircle2 className="w-5 h-5 text-emerald-600" /> : <AlertCircle className="w-5 h-5 text-rose-600" />}
+              {toast.type === "success" ? <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" /> : <AlertCircle className="w-5 h-5 text-rose-600 dark:text-rose-400" />}
               <span className="text-sm font-semibold">{toast.message}</span>
             </div>
           )}
@@ -243,7 +243,7 @@ export default function NotificationsSettingsPage() {
                   <Bell className="w-6 h-6 text-brand-blue" />
                   WhatsApp Notifications
                 </h2>
-                <p className="text-slate-500 dark:text-slate-500 text-sm mt-1">
+                <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
                   Configure automated WhatsApp notifications triggered by key order lifecycle events.
                 </p>
               </div>
@@ -255,14 +255,14 @@ export default function NotificationsSettingsPage() {
             {loading ? (
               <div className="flex flex-col items-center justify-center py-20 gap-3">
                 <Loader2 className="w-10 h-10 text-brand-blue animate-spin" />
-                <span className="text-slate-500 dark:text-slate-500 text-sm font-medium animate-pulse">Loading notification preferences...</span>
+                <span className="text-slate-500 dark:text-slate-400 text-sm font-medium animate-pulse">Loading notification preferences...</span>
               </div>
             ) : (
               <div className="space-y-6">
                 {/* Operational Section */}
                 <div className="bg-white dark:bg-dashboard-card border border-dashboard-border rounded-xl overflow-hidden shadow-sm">
                   <div className="px-6 py-4 border-b border-dashboard-border bg-slate-50 dark:bg-dashboard-inset flex items-center justify-between">
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-500">Operational Notifications</span>
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Operational Notifications</span>
                     <span className="text-xs text-slate-400 font-medium">Auto-saves on change</span>
                   </div>
                   <div className="divide-y divide-dashboard-border">
@@ -273,7 +273,7 @@ export default function NotificationsSettingsPage() {
                         <div key={key} className="px-6 py-5 flex items-center justify-between hover:bg-slate-50/50 transition-all duration-200">
                           <div className="space-y-1 pr-6">
                             <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-100">{label.title}</h4>
-                            <p className="text-xs text-slate-500 dark:text-slate-500 leading-relaxed max-w-xl">{label.desc}</p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed max-w-xl">{label.desc}</p>
                           </div>
                           
                           {/* Toggle Switch */}
@@ -298,7 +298,7 @@ export default function NotificationsSettingsPage() {
                 {/* Financial Section */}
                 <div className="bg-white dark:bg-dashboard-card border border-dashboard-border rounded-xl overflow-hidden shadow-sm">
                   <div className="px-6 py-4 border-b border-dashboard-border bg-slate-50 dark:bg-dashboard-inset flex items-center justify-between">
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-500">Financial Notifications</span>
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Financial Notifications</span>
                     <span className="text-xs text-slate-400 font-medium">Auto-saves on change</span>
                   </div>
                   <div className="divide-y divide-dashboard-border">
@@ -309,7 +309,7 @@ export default function NotificationsSettingsPage() {
                         <div key={key} className="px-6 py-5 flex items-center justify-between hover:bg-slate-50/50 transition-all duration-200">
                           <div className="space-y-1 pr-6">
                             <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-100">{label.title}</h4>
-                            <p className="text-xs text-slate-500 dark:text-slate-500 leading-relaxed max-w-xl">{label.desc}</p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed max-w-xl">{label.desc}</p>
                           </div>
                           
                           {/* Toggle Switch */}
@@ -337,7 +337,7 @@ export default function NotificationsSettingsPage() {
             <div className="bg-slate-50 dark:bg-dashboard-inset border border-dashboard-border rounded-xl p-5 flex gap-4">
               <MessageSquareCode className="w-8 h-8 text-slate-400 flex-shrink-0 mt-0.5" />
               <div className="space-y-1">
-                <h5 className="text-xs font-bold uppercase text-slate-500 dark:text-slate-500 tracking-wider">Templated Messaging</h5>
+                <h5 className="text-xs font-bold uppercase text-slate-500 dark:text-slate-400 tracking-wider">Templated Messaging</h5>
                 <p className="text-xs text-slate-400 leading-relaxed">
                   All alerts use pre-formatted country-code validated templates to optimize delivery success. Ensure your WhatsApp instance is correctly connected via the <a href="/dashboard/settings/integrations" className="text-brand-blue hover:underline">Integrations</a> page.
                 </p>

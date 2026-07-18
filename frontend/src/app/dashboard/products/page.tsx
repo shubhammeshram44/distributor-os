@@ -285,7 +285,7 @@ export default function ProductsPage() {
                 <form onSubmit={handleManualSubmit} className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs font-medium text-slate-500 dark:text-slate-500 mb-1">SKU ID</label>
+                      <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">SKU ID</label>
                       <input
                         type="text"
                         placeholder="e.g. PROD-HUL-SOAP"
@@ -296,7 +296,7 @@ export default function ProductsPage() {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-medium text-slate-500 dark:text-slate-500 mb-1">Brand</label>
+                      <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Brand</label>
                       <input
                         type="text"
                         placeholder="e.g. HUL"
@@ -309,7 +309,7 @@ export default function ProductsPage() {
 
                   <div className="grid grid-cols-3 gap-4">
                     <div className="col-span-1">
-                      <label className="block text-xs font-medium text-slate-500 dark:text-slate-500 mb-1">Category</label>
+                      <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Category</label>
                       <input
                         type="text"
                         placeholder="e.g. Soap"
@@ -320,7 +320,7 @@ export default function ProductsPage() {
                     </div>
 
                     <div className="col-span-1">
-                      <label className="block text-xs font-medium text-slate-500 dark:text-slate-500 mb-1">Pack Size</label>
+                      <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Pack Size</label>
                       <input
                         type="text"
                         placeholder="e.g. 100g"
@@ -331,7 +331,7 @@ export default function ProductsPage() {
                     </div>
 
                     <div className="col-span-1">
-                      <label className="block text-xs font-medium text-slate-500 dark:text-slate-500 mb-1">Wholesale Price</label>
+                      <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Wholesale Price</label>
                       <input
                         type="number"
                         step="0.01"
@@ -365,7 +365,7 @@ export default function ProductsPage() {
           {/* Master Grid / Card Panel */}
           <div className="bg-white dark:bg-dashboard-card rounded-xl border border-dashboard-border shadow-sm flex flex-col min-h-[400px]">
             {/* Search filter utility bar */}
-            <div className="p-5 border-b border-dashboard-border flex items-center justify-between bg-slate-50/50 rounded-t-xl gap-4">
+            <div className="p-5 border-b border-dashboard-border flex items-center justify-between bg-slate-50/50 dark:bg-dashboard-inset rounded-t-xl gap-4">
               <div className="relative max-w-sm w-full">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input
@@ -387,10 +387,10 @@ export default function ProductsPage() {
               {loading ? (
                 <div className="flex flex-col items-center justify-center py-24 gap-3">
                   <Loader2 className="w-8 h-8 text-brand-blue animate-spin" />
-                  <span className="text-sm font-semibold text-slate-500 dark:text-slate-500">Loading catalog items...</span>
+                  <span className="text-sm font-semibold text-slate-500 dark:text-slate-400">Loading catalog items...</span>
                 </div>
               ) : error ? (
-                <div className="flex flex-col items-center justify-center py-24 gap-3 text-rose-600">
+                <div className="flex flex-col items-center justify-center py-24 gap-3 text-rose-600 dark:text-rose-400">
                   <AlertCircle className="w-8 h-8" />
                   <span className="text-sm font-semibold">{error}</span>
                   <button
@@ -399,7 +399,7 @@ export default function ProductsPage() {
                         fetchProducts(activeTenantId);
                       }
                     }}
-                    className="mt-2 px-4 py-2 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg text-xs font-bold hover:bg-rose-100 transition-all cursor-pointer"
+                    className="mt-2 px-4 py-2 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 text-rose-700 dark:text-rose-400 rounded-lg text-xs font-bold hover:bg-rose-100 transition-all cursor-pointer"
                   >
                     Try Again
                   </button>
@@ -413,7 +413,7 @@ export default function ProductsPage() {
               ) : (
                 <table className="w-full text-left text-sm border-collapse">
                   <thead>
-                    <tr className="text-slate-400 font-semibold text-xs border-b border-dashboard-border bg-slate-50/50">
+                    <tr className="text-slate-400 font-semibold text-xs border-b border-dashboard-border bg-slate-50/50 dark:bg-dashboard-inset">
                       <th className="py-3 px-6">SKU ID</th>
                       <th className="py-3 px-6">Brand</th>
                       <th className="py-3 px-6">Category</th>
@@ -431,11 +431,11 @@ export default function ProductsPage() {
                         <td className="py-4 px-6 font-semibold text-slate-600 dark:text-slate-400">
                           {p.brand}
                         </td>
-                        <td className="py-4 px-6 font-medium text-slate-500 dark:text-slate-500">
+                        <td className="py-4 px-6 font-medium text-slate-500 dark:text-slate-400">
                           {p.category}
                         </td>
                         <td className="py-4 px-6 text-slate-600 dark:text-slate-400 font-semibold text-xs">
-                          <span className="bg-slate-100 dark:bg-white/5 px-2.5 py-1 rounded-md border border-slate-200/50">
+                          <span className="bg-slate-100 dark:bg-white/5 px-2.5 py-1 rounded-md border border-slate-200/50 dark:border-white/8">
                             {p.pack_size}
                           </span>
                         </td>
@@ -486,17 +486,17 @@ export default function ProductsPage() {
       {toast.show && (
         <div className="fixed top-5 right-5 z-50 flex items-center gap-3 bg-white/95 dark:bg-dashboard-card/95 backdrop-blur-md border border-slate-100 dark:border-white/5 shadow-2xl px-4 py-3.5 rounded-xl animate-slide-in pointer-events-auto max-w-sm">
           {toast.type === "success" ? (
-            <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0 shadow-sm">
+            <div className="w-8 h-8 rounded-full bg-emerald-50 dark:bg-emerald-500/10 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0 shadow-sm">
               <CheckCircle2 className="w-4.5 h-4.5" />
             </div>
           ) : (
-            <div className="w-8 h-8 rounded-full bg-rose-50 flex items-center justify-center text-rose-600 shrink-0 shadow-sm">
+            <div className="w-8 h-8 rounded-full bg-rose-50 dark:bg-rose-500/10 flex items-center justify-center text-rose-600 dark:text-rose-400 shrink-0 shadow-sm">
               <AlertCircle className="w-4.5 h-4.5" />
             </div>
           )}
           <div className="flex-1 min-w-0">
             <p className="text-xs font-bold text-slate-800 dark:text-slate-100">{toast.type === "success" ? "Success" : "Error"}</p>
-            <p className="text-[11px] text-slate-500 dark:text-slate-500 font-semibold mt-0.5 break-words">{toast.message}</p>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold mt-0.5 break-words">{toast.message}</p>
           </div>
           <button
             onClick={() => setToast(prev => ({ ...prev, show: false }))}

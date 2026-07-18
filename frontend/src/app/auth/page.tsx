@@ -254,7 +254,7 @@ export default function AuthPage() {
         </div>
 
         {!isFirebaseConfigured && (
-          <div className="flex items-center gap-2 p-3.5 mb-5 bg-amber-50 border border-amber-200 rounded-xl text-amber-700 text-xs font-semibold">
+          <div className="flex items-center gap-2 p-3.5 mb-5 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-xl text-amber-700 dark:text-amber-400 text-xs font-semibold">
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>
               Phone sign-in is temporarily unavailable (authentication service is not configured).
@@ -266,7 +266,7 @@ export default function AuthPage() {
         {step === 1 ? (
           <form onSubmit={handleRequestOtp} className="space-y-5">
             <div>
-              <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-500 mb-1.5 uppercase tracking-wider">
+              <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1.5 uppercase tracking-wider">
                 Mobile Number
               </label>
               <div className="relative">
@@ -275,7 +275,7 @@ export default function AuthPage() {
                   placeholder="e.g. +91 98765 43210"
                   value={mobileNumber}
                   onChange={(e) => setMobileNumber(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 border border-slate-200 dark:border-white/10 rounded-xl text-sm font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500 bg-slate-50/20 text-slate-700 dark:text-slate-300"
+                  className="w-full pl-10 pr-4 py-3 border border-slate-200 dark:border-white/10 rounded-xl text-sm font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500 bg-slate-50/20 dark:bg-white/5 text-slate-700 dark:text-slate-300"
                   disabled={loading}
                   required
                 />
@@ -284,7 +284,7 @@ export default function AuthPage() {
             </div>
 
             {error && (
-              <div className="flex items-center gap-2 p-3.5 bg-rose-50 border border-rose-100 rounded-xl text-rose-600 text-xs font-semibold">
+              <div className="flex items-center gap-2 p-3.5 bg-rose-50 dark:bg-rose-500/10 border border-rose-100 dark:border-rose-500/20 rounded-xl text-rose-600 dark:text-rose-400 text-xs font-semibold">
                 <AlertCircle className="w-4 h-4 shrink-0" />
                 <span>{error}</span>
               </div>
@@ -311,7 +311,7 @@ export default function AuthPage() {
         ) : (
           <form onSubmit={handleVerifyOtp} className="space-y-5">
             <div>
-              <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-500 mb-1.5 uppercase tracking-wider">
+              <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1.5 uppercase tracking-wider">
                 Verification Code
               </label>
               <OtpInput
@@ -323,14 +323,14 @@ export default function AuthPage() {
             </div>
 
             {error && (
-              <div className="flex items-center gap-2 p-3.5 bg-rose-50 border border-rose-100 rounded-xl text-rose-600 text-xs font-semibold">
+              <div className="flex items-center gap-2 p-3.5 bg-rose-50 dark:bg-rose-500/10 border border-rose-100 dark:border-rose-500/20 rounded-xl text-rose-600 dark:text-rose-400 text-xs font-semibold">
                 <AlertCircle className="w-4 h-4 shrink-0" />
                 <span>{error}</span>
               </div>
             )}
 
             {successMessage && (
-              <div className="flex items-center gap-2 p-3.5 bg-emerald-50 border border-emerald-100 rounded-xl text-emerald-600 text-xs font-semibold">
+              <div className="flex items-center gap-2 p-3.5 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-100 dark:border-emerald-500/20 rounded-xl text-emerald-600 dark:text-emerald-400 text-xs font-semibold">
                 <ShieldCheck className="w-4 h-4 shrink-0" />
                 <span>{successMessage}</span>
               </div>
@@ -358,7 +358,7 @@ export default function AuthPage() {
               <button
                 type="button"
                 onClick={handleResendOtp}
-                className="w-full py-2 bg-transparent text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-xl text-xs font-bold transition-all cursor-pointer disabled:text-slate-400 disabled:hover:bg-transparent disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="w-full py-2 bg-transparent text-blue-600 dark:text-blue-400 hover:text-blue-700 hover:bg-blue-50 rounded-xl text-xs font-bold transition-all cursor-pointer disabled:text-slate-400 disabled:hover:bg-transparent disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 disabled={loading || resending || resendCooldown > 0}
               >
                 {resending ? (
@@ -376,7 +376,7 @@ export default function AuthPage() {
               <button
                 type="button"
                 onClick={handleChangePhone}
-                className="w-full py-2 bg-transparent text-slate-500 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/5 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                className="w-full py-2 bg-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/5 rounded-xl text-xs font-bold transition-all cursor-pointer"
                 disabled={loading}
               >
                 Change Phone Number

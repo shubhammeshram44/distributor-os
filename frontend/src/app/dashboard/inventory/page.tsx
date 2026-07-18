@@ -16,9 +16,9 @@ interface InventoryItem {
 }
 
 const getStockStatus = (quantity: number, threshold: number) => {
-  if (quantity === 0) return { label: "Out of Stock", style: "bg-rose-50 text-rose-700 border-rose-200" };
-  if (quantity < threshold) return { label: "Low Stock", style: "bg-amber-50 text-amber-700 border-amber-200" };
-  return { label: "Healthy", style: "bg-emerald-50 text-emerald-700 border-emerald-200" };
+  if (quantity === 0) return { label: "Out of Stock", style: "bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-500/20" };
+  if (quantity < threshold) return { label: "Low Stock", style: "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/20" };
+  return { label: "Healthy", style: "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20" };
 };
 
 export default function InventoryPage() {
@@ -258,11 +258,11 @@ export default function InventoryPage() {
               <div className="bg-white dark:bg-dashboard-card p-5 rounded-xl border border-dashboard-border shadow-sm flex items-center justify-between h-full">
                 <div>
                   <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Low Stock SKUs</p>
-                  <h3 className={`text-2xl font-extrabold mt-1 ${lowStockCount > 0 ? "text-amber-600" : "text-slate-800 dark:text-slate-100"}`}>
+                  <h3 className={`text-2xl font-extrabold mt-1 ${lowStockCount > 0 ? "text-amber-600 dark:text-amber-400" : "text-slate-800 dark:text-slate-100"}`}>
                     {lowStockCount}
                   </h3>
                 </div>
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center border shadow-sm ${lowStockCount > 0 ? "bg-amber-50 text-amber-600 border-amber-100 animate-pulse" : "bg-slate-50 dark:bg-dashboard-inset text-slate-400 border-slate-100 dark:border-white/5"
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center border shadow-sm ${lowStockCount > 0 ? "bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-100 dark:border-amber-500/20 animate-pulse" : "bg-slate-50 dark:bg-dashboard-inset text-slate-400 border-slate-100 dark:border-white/5"
                   }`}>
                   <AlertTriangle className="w-5 h-5" />
                 </div>
@@ -271,11 +271,11 @@ export default function InventoryPage() {
               <div className="bg-white dark:bg-dashboard-card p-5 rounded-xl border border-dashboard-border shadow-sm flex items-center justify-between h-full">
                 <div>
                   <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Out of Stock SKUs</p>
-                  <h3 className={`text-2xl font-extrabold mt-1 ${outOfStockCount > 0 ? "text-rose-600" : "text-slate-800 dark:text-slate-100"}`}>
+                  <h3 className={`text-2xl font-extrabold mt-1 ${outOfStockCount > 0 ? "text-rose-600 dark:text-rose-400" : "text-slate-800 dark:text-slate-100"}`}>
                     {outOfStockCount}
                   </h3>
                 </div>
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center border shadow-sm ${outOfStockCount > 0 ? "bg-rose-50 text-rose-600 border-rose-100 animate-pulse" : "bg-slate-50 dark:bg-dashboard-inset text-slate-400 border-slate-100 dark:border-white/5"
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center border shadow-sm ${outOfStockCount > 0 ? "bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-100 dark:border-rose-500/20 animate-pulse" : "bg-slate-50 dark:bg-dashboard-inset text-slate-400 border-slate-100 dark:border-white/5"
                   }`}>
                   <AlertCircle className="w-5 h-5" />
                 </div>
@@ -338,7 +338,7 @@ export default function InventoryPage() {
           {/* Master Table / Ledger Panel */}
           <div className="bg-white dark:bg-dashboard-card rounded-xl border border-dashboard-border shadow-sm flex flex-col min-h-[400px]">
             {/* Search filter utility bar */}
-            <div className="p-5 border-b border-dashboard-border flex items-center justify-between bg-slate-50/50 rounded-t-xl gap-4">
+            <div className="p-5 border-b border-dashboard-border flex items-center justify-between bg-slate-50/50 dark:bg-dashboard-inset rounded-t-xl gap-4">
               <div className="relative max-w-sm w-full">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input
@@ -351,7 +351,7 @@ export default function InventoryPage() {
               </div>
 
               {(lowStockCount > 0 || outOfStockCount > 0) && (
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 border border-amber-100 rounded-lg text-amber-700 text-xs font-semibold animate-pulse">
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 dark:bg-amber-500/10 border border-amber-100 dark:border-amber-500/20 rounded-lg text-amber-700 dark:text-amber-400 text-xs font-semibold animate-pulse">
                   <AlertTriangle className="w-3.5 h-3.5" />
                   <span>Attention Required: Stock levels dropping critical</span>
                 </div>
@@ -363,10 +363,10 @@ export default function InventoryPage() {
               {loading ? (
                 <div className="flex flex-col items-center justify-center py-24 gap-3">
                   <Loader2 className="w-8 h-8 text-brand-blue animate-spin" />
-                  <span className="text-sm font-semibold text-slate-500 dark:text-slate-500">Loading inventory data...</span>
+                  <span className="text-sm font-semibold text-slate-500 dark:text-slate-400">Loading inventory data...</span>
                 </div>
               ) : error ? (
-                <div className="flex flex-col items-center justify-center py-24 gap-3 text-rose-600">
+                <div className="flex flex-col items-center justify-center py-24 gap-3 text-rose-600 dark:text-rose-400">
                   <AlertCircle className="w-8 h-8" />
                   <span className="text-sm font-semibold">{error}</span>
                   <button
@@ -375,26 +375,26 @@ export default function InventoryPage() {
                         fetchInventory(activeTenantId);
                       }
                     }}
-                    className="mt-2 px-4 py-2 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg text-xs font-bold hover:bg-rose-100 transition-all cursor-pointer"
+                    className="mt-2 px-4 py-2 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 text-rose-700 dark:text-rose-400 rounded-lg text-xs font-bold hover:bg-rose-100 transition-all cursor-pointer"
                   >
                     Try Again
                   </button>
 
                 </div>
               ) : filteredInventory.length === 0 ? (
-                <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed border-slate-200 dark:border-white/10 rounded-xl bg-slate-50/40 text-center my-4">
+                <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed border-slate-200 dark:border-white/10 rounded-xl bg-slate-50/40 dark:bg-white/6 text-center my-4">
                   <div className="p-3 bg-slate-100 dark:bg-white/5 text-slate-400 rounded-full mb-3">
                     <Box className="w-6 h-6" />
                   </div>
                   <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Your workspace is clean</h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-500 max-w-xs mt-1">
+                  <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xs mt-1">
                     Connect your warehouse stock or send your first WhatsApp text order to see live tracking metrics update instantly.
                   </p>
                 </div>
               ) : (
                 <table className="w-full text-left text-sm border-collapse">
                   <thead>
-                    <tr className="text-slate-400 font-semibold text-xs border-b border-dashboard-border bg-slate-50/50">
+                    <tr className="text-slate-400 font-semibold text-xs border-b border-dashboard-border bg-slate-50/50 dark:bg-dashboard-inset">
                       <th className="py-3 px-6">SKU ID</th>
                       <th className="py-3 px-6">Product Name</th>
                       <th className="py-3 px-6 text-center">Stock Status</th>
@@ -417,9 +417,9 @@ export default function InventoryPage() {
                       let qtyClass = "text-slate-800 dark:text-slate-100 font-extrabold";
 
                       if (isOutOfStock) {
-                        qtyClass = "text-rose-600 font-black animate-pulse";
+                        qtyClass = "text-rose-600 dark:text-rose-400 font-black animate-pulse";
                       } else if (isLowStock) {
-                        qtyClass = "text-amber-600 font-black animate-pulse";
+                        qtyClass = "text-amber-600 dark:text-amber-400 font-black animate-pulse";
                       }
 
                       return (
@@ -451,17 +451,17 @@ export default function InventoryPage() {
       {toast.show && (
         <div className="fixed top-5 right-5 z-50 flex items-center gap-3 bg-white/95 dark:bg-dashboard-card/95 backdrop-blur-md border border-slate-100 dark:border-white/5 shadow-2xl px-4 py-3.5 rounded-xl animate-slide-in pointer-events-auto max-w-sm">
           {toast.type === "success" ? (
-            <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0 shadow-sm">
+            <div className="w-8 h-8 rounded-full bg-emerald-50 dark:bg-emerald-500/10 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0 shadow-sm">
               <CheckCircle2 className="w-4.5 h-4.5" />
             </div>
           ) : (
-            <div className="w-8 h-8 rounded-full bg-rose-50 flex items-center justify-center text-rose-600 shrink-0 shadow-sm">
+            <div className="w-8 h-8 rounded-full bg-rose-50 dark:bg-rose-500/10 flex items-center justify-center text-rose-600 dark:text-rose-400 shrink-0 shadow-sm">
               <AlertCircle className="w-4.5 h-4.5" />
             </div>
           )}
           <div className="flex-1 min-w-0">
             <p className="text-xs font-bold text-slate-800 dark:text-slate-100">{toast.type === "success" ? "Success" : "Error"}</p>
-            <p className="text-[11px] text-slate-500 dark:text-slate-500 font-semibold mt-0.5 break-words">{toast.message}</p>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold mt-0.5 break-words">{toast.message}</p>
           </div>
           <button
             onClick={() => setToast(prev => ({ ...prev, show: false }))}

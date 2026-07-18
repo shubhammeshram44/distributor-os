@@ -202,7 +202,7 @@ export default function WhatsAppSimulator({ activeTenantId, onSuccess }: WhatsAp
                   value={customName}
                   onChange={(e) => setCustomName(e.target.value)}
                   disabled={selectedCustomerId !== "custom"}
-                  className="w-full bg-slate-50/50 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2 text-xs font-semibold text-slate-600 dark:text-slate-400 disabled:opacity-60 disabled:cursor-not-allowed outline-none"
+                  className="w-full bg-slate-50/50 dark:bg-dashboard-inset border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2 text-xs font-semibold text-slate-600 dark:text-slate-400 disabled:opacity-60 disabled:cursor-not-allowed outline-none"
                 />
               </div>
               <div className="space-y-1">
@@ -214,7 +214,7 @@ export default function WhatsAppSimulator({ activeTenantId, onSuccess }: WhatsAp
                   value={customPhone}
                   onChange={(e) => setCustomPhone(e.target.value)}
                   disabled={selectedCustomerId !== "custom"}
-                  className="w-full bg-slate-50/50 border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2 text-xs font-semibold text-slate-600 dark:text-slate-400 disabled:opacity-60 disabled:cursor-not-allowed outline-none"
+                  className="w-full bg-slate-50/50 dark:bg-dashboard-inset border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2 text-xs font-semibold text-slate-600 dark:text-slate-400 disabled:opacity-60 disabled:cursor-not-allowed outline-none"
                   placeholder="+91"
                 />
               </div>

@@ -160,7 +160,7 @@ export default function DashboardHeader({
           {searchOpen && searchQuery && (
             <div className="absolute top-full mt-1.5 left-0 right-0 bg-white dark:bg-dashboard-card border border-dashboard-border rounded-xl shadow-xl z-50 overflow-hidden">
               {searchLoading ? (
-                <div className="px-4 py-3 text-xs text-slate-500 dark:text-slate-500 font-medium animate-pulse">Searching...</div>
+                <div className="px-4 py-3 text-xs text-slate-500 dark:text-slate-400 font-medium animate-pulse">Searching...</div>
               ) : searchResults.length === 0 ? (
                 <div className="px-4 py-3 text-xs text-slate-400 font-medium">No results for &ldquo;{searchQuery}&rdquo;</div>
               ) : (
@@ -205,7 +205,7 @@ export default function DashboardHeader({
         {/* Notifications */}
         <div className="flex items-center gap-4">
           <ThemeToggle />
-          <Link href="/dashboard/messages" className="relative p-2 text-slate-500 dark:text-slate-500 hover:bg-slate-50 dark:hover:bg-white/5 rounded-full transition-all" aria-label="Messages">
+          <Link href="/dashboard/messages" className="relative p-2 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-white/5 rounded-full transition-all" aria-label="Messages">
             <MessageSquare className="w-5 h-5 text-emerald-600" />
           </Link>
         </div>

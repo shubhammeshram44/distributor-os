@@ -126,15 +126,15 @@ export default function ReportsPage() {
           {loading ? (
             <div className="flex flex-col items-center justify-center py-32 gap-3">
               <Loader2 className="w-8 h-8 text-brand-blue animate-spin" />
-              <span className="text-sm font-semibold text-slate-500 dark:text-slate-500">Aggregating database financial metrics...</span>
+              <span className="text-sm font-semibold text-slate-500 dark:text-slate-400">Aggregating database financial metrics...</span>
             </div>
           ) : error ? (
-            <div className="flex flex-col items-center justify-center py-32 gap-3 text-rose-600">
+            <div className="flex flex-col items-center justify-center py-32 gap-3 text-rose-600 dark:text-rose-400">
               <AlertCircle className="w-8 h-8" />
               <span className="text-sm font-semibold">{error}</span>
               <button
                 onClick={() => fetchRevenueAnalytics(activeTenantId)}
-                className="mt-2 px-4 py-2 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg text-xs font-bold hover:bg-rose-100 transition-all cursor-pointer"
+                className="mt-2 px-4 py-2 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 text-rose-700 dark:text-rose-400 rounded-lg text-xs font-bold hover:bg-rose-100 transition-all cursor-pointer"
               >
                 Try Again
               </button>
@@ -151,7 +151,7 @@ export default function ReportsPage() {
                     </h3>
                     <p className="text-[10px] text-slate-400 font-semibold mt-1">Confirmed orders billing sum</p>
                   </div>
-                  <div className="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center text-brand-blue shadow-sm">
+                  <div className="w-12 h-12 rounded-xl bg-blue-50 dark:bg-blue-500/10 flex items-center justify-center text-brand-blue shadow-sm">
                     <IndianRupee className="w-5 h-5" />
                   </div>
                 </div>
@@ -159,12 +159,12 @@ export default function ReportsPage() {
                 <div className="bg-white dark:bg-dashboard-card p-6 rounded-xl border border-dashboard-border shadow-sm flex items-center justify-between">
                   <div>
                     <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Outstanding Receivables</p>
-                    <h3 className="text-2xl font-extrabold text-amber-600 mt-1">
+                    <h3 className="text-2xl font-extrabold text-amber-600 dark:text-amber-400 mt-1">
                       {formatCurrency(data?.total_receivables || 0)}
                     </h3>
                     <p className="text-[10px] text-slate-400 font-semibold mt-1">Pending collection balances</p>
                   </div>
-                  <div className="w-12 h-12 rounded-xl bg-amber-50 flex items-center justify-center text-amber-600 shadow-sm">
+                  <div className="w-12 h-12 rounded-xl bg-amber-50 dark:bg-amber-500/10 flex items-center justify-center text-amber-600 dark:text-amber-400 shadow-sm">
                     <ShieldAlert className="w-5 h-5" />
                   </div>
                 </div>
