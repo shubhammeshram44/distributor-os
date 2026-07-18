@@ -89,7 +89,7 @@ export default function IntegrationsPageV2() {
     
     const checkStatus = async () => {
       try {
-        const resp = await fetch(`${apiBase}/api/v1/evolution/status?instance_name=${instanceName}`);
+        const resp = await fetch(`${apiBase}/api/v1/evolution/status?instance_name=${instanceName}&tenant_id=${activeTenantId}`);
         if (resp.ok) {
           const data = await resp.json();
           if (data.status === "open") {
