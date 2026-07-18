@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import Sidebar from "@/components/Sidebar";
 import DashboardHeader from "@/components/DashboardHeader";
 import { formatDateTime } from "@/utils/datetime";
+import { useDebounce, fetchWithTimeout } from "@/lib/debounce";
 import {
   Loader2,
   AlertCircle,
@@ -128,8 +129,8 @@ export default function ShipmentsPage() {
       activeParams.append("limit", "20");
 
       const [pendingResp, activeResp] = await Promise.all([
-        fetch(`${apiBase}/api/v1/shipments/pending?${pendingParams.toString()}`, { credentials: "include" }),
-        fetch(`${apiBase}/api/v1/shipments/active?${activeParams.toString()}`, { credentials: "include" })
+        fetchWithTimeout(`${apiBase}/api/v1/shipments/pending?${pendingParams.toString()}`, { credentials: "include", timeout: 12000 }),
+        fetchWithTimeout(`${apiBase}/api/v1/shipments/active?${activeParams.toString()}`, { credentials: "include", timeout: 12000 })
       ]);
 
       if (!pendingResp.ok || !activeResp.ok) {
@@ -279,10 +280,14 @@ export default function ShipmentsPage() {
     setSavingRun(true);
     try {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
       const resp = await fetch(`${apiBase}/api/v1/shipments`, {
         method: "POST",
         credentials: "include",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({
           driver_id: selectedDriverId,
           vehicle_number: vehicleNumber.trim(),
@@ -295,7 +300,7 @@ export default function ShipmentsPage() {
         showToast(`Delivery Run created with ${selectedOrderIds.length} orders dispatched!`, "success");
         setVehicleNumber("");
         setSelectedOrderIds([]);
-        fetchShipmentData();
+        setTimeout(() => fetchShipmentData(), 50);
       } else {
         showToast(resData.detail || "Failed to dispatch run.", "error");
       }
@@ -313,10 +318,14 @@ export default function ShipmentsPage() {
     setMarkingDeliveredId(shipmentId);
     try {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
       const resp = await fetch(`${apiBase}/api/v1/shipments/${shipmentId}/status`, {
         method: "PATCH",
         credentials: "include",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({
           status: "Delivered",
           source: "back_office"
@@ -326,7 +335,7 @@ export default function ShipmentsPage() {
       const resData = await resp.json();
       if (resp.ok) {
         showToast("Shipment marked as Delivered successfully!", "success");
-        fetchShipmentData();
+        setTimeout(() => fetchShipmentData(), 50);
       } else {
         showToast(resData.detail || "Failed to mark delivered.", "error");
       }

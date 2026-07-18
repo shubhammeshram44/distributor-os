@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import Sidebar from "@/components/Sidebar";
 import DashboardHeader from "@/components/DashboardHeader";
 import { Search, Loader2, RefreshCw, AlertCircle, Box, AlertTriangle, CheckCircle2, X } from "lucide-react";
+import { useDebounce, fetchWithTimeout } from "@/lib/debounce";
 
 interface InventoryItem {
   id: string;
@@ -25,6 +26,7 @@ export default function InventoryPage() {
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
   const [skuList, setSkuList] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery] = useDebounce(searchQuery, 300);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -73,8 +75,9 @@ export default function InventoryPage() {
     setLoading(true);
     try {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-      const resp = await fetch(`${apiBase}/api/v1/products/inventory?tenant_id=${targetTenant}&limit=200`, {
-        credentials: "include"
+      const resp = await fetchWithTimeout(`${apiBase}/api/v1/products/inventory?tenant_id=${targetTenant}&limit=200`, {
+        credentials: "include",
+        timeout: 12000
       });
       if (!resp.ok) throw new Error("Failed to fetch inventory levels");
       const data = await resp.json();
@@ -133,10 +136,14 @@ export default function InventoryPage() {
     setSubmitting(true);
     try {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
       const response = await fetch(`${apiBase}/api/v1/products/adjust-stock?tenant_id=${activeTenantId}`, {
         method: "POST",
         credentials: "include",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({
           sku_id,
           quantity_received: qtyInt
@@ -157,8 +164,7 @@ export default function InventoryPage() {
           return [responseData, ...prevItems];
         });
 
-        fetchInventory(activeTenantId); // Instantly reload stock data grid and warnings
-
+        setTimeout(() => fetchInventory(activeTenantId), 50);
       } else {
         const detail = responseData.detail || "Failed to inward stock batch.";
         showToast(detail, "error");
@@ -173,8 +179,8 @@ export default function InventoryPage() {
 
   // Handle live catalog filtering
   const filteredInventory = inventoryItems.filter(item =>
-    item.sku_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    item.product_name.toLowerCase().includes(searchQuery.toLowerCase())
+    item.sku_id.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+    item.product_name.toLowerCase().includes(debouncedSearchQuery.toLowerCase())
   );
 
   // Calculate statistics

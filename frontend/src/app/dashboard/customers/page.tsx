@@ -6,6 +6,7 @@ import DashboardHeader from "@/components/DashboardHeader";
 import { useSearchParams } from "next/navigation";
 import Pagination from "@/components/ui/Pagination";
 import { formatDateTime } from "@/utils/datetime";
+import { useDebounce, fetchWithTimeout } from "@/lib/debounce";
 import {
   Search,
   Loader2,
@@ -40,6 +41,7 @@ function CustomersContent() {
   const [activeTenantId, setActiveTenantId] = useState("");
   const [customers, setCustomers] = useState<CustomerRow[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery] = useDebounce(searchQuery, 300);
   const [totalRetailers, setTotalRetailers] = useState(0);
   const [totalOutstanding, setTotalOutstanding] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -122,9 +124,9 @@ function CustomersContent() {
     try {
       const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-      const resp = await fetch(
+      const resp = await fetchWithTimeout(
         `${apiBase}/api/v1/customers?tenant_id=${targetTenant}&skip=${currentSkip}&limit=${limit}`,
-        { credentials: "include", headers: token ? { Authorization: `Bearer ${token}` } : {} }
+        { credentials: "include", headers: token ? { Authorization: `Bearer ${token}` } : {}, timeout: 12000 }
       );
       if (!resp.ok) throw new Error("Failed to fetch customers");
       const data = await resp.json();
@@ -359,7 +361,7 @@ function CustomersContent() {
       if (!isOverdue60) return false;
     }
 
-    const query = searchQuery.toLowerCase();
+    const query = debouncedSearchQuery.toLowerCase();
     return (
       c.customer_id.toLowerCase().includes(query) ||
       c.retailer_name.toLowerCase().includes(query) ||
