@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import Sidebar from "@/components/Sidebar";
 import DashboardHeader from "@/components/DashboardHeader";
-import { Search, Loader2, RefreshCw, AlertCircle, Box, AlertTriangle, CheckCircle2, X } from "lucide-react";
+import { Search, Loader2, RefreshCw, AlertCircle, Box, AlertTriangle, CheckCircle2, X, Sparkles, MessageCircle } from "lucide-react";
 import { useDebounce, fetchWithTimeout } from "@/lib/debounce";
 
 interface InventoryItem {
@@ -13,6 +13,21 @@ interface InventoryItem {
   product_name: string;
   stock_quantity: number;
   low_stock_threshold?: number;
+}
+
+interface ReorderSuggestion {
+  product_id: string;
+  sku_id: string;
+  brand: string;
+  category: string;
+  current_quantity_on_hand: number;
+  current_net_available: number;
+  sales_velocity_per_day: number;
+  reorder_point: number;
+  suggested_reorder_quantity: number;
+  supplier_id?: string;
+  supplier_name?: string;
+  supplier_phone?: string | null;
 }
 
 const getStockStatus = (quantity: number, threshold: number) => {
@@ -29,6 +44,8 @@ export default function InventoryPage() {
   const [debouncedSearchQuery] = useDebounce(searchQuery, 300);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [reorderSuggestions, setReorderSuggestions] = useState<ReorderSuggestion[]>([]);
+  const [reorderLoading, setReorderLoading] = useState(false);
 
   const [formData, setFormData] = useState({
     sku_id: "",
@@ -109,12 +126,39 @@ export default function InventoryPage() {
     }
   }, [activeTenantId]);
 
+  // Fetch AI-assisted reorder suggestions (silently degrades — this is an
+  // advisory widget, not core functionality, so a failure here must never
+  // block or error out the main inventory table).
+  const fetchReorderSuggestions = useCallback(async (tenantId?: string) => {
+    const targetTenant = tenantId || activeTenantId;
+    if (!targetTenant) return;
+    setReorderLoading(true);
+    try {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const resp = await fetchWithTimeout(`${apiBase}/api/v1/products/reorder-suggestions?tenant_id=${targetTenant}`, {
+        credentials: "include",
+        timeout: 12000
+      });
+      if (!resp.ok) throw new Error("Failed to fetch reorder suggestions");
+      const data = await resp.json();
+      setReorderSuggestions(data.suggestions ?? []);
+    } catch (err) {
+      console.error("Reorder suggestions load failed:", err);
+      setReorderSuggestions([]);
+    } finally {
+      setReorderLoading(false);
+    }
+  }, [activeTenantId]);
+
   useEffect(() => {
     if (!activeTenantId) return;
     setInventoryItems([]);
-    fetchInventory(activeTenantId);
-    fetchSkuList(activeTenantId);
-  }, [activeTenantId, fetchInventory, fetchSkuList]);
+    Promise.all([
+      fetchInventory(activeTenantId),
+      fetchSkuList(activeTenantId),
+      fetchReorderSuggestions(activeTenantId)
+    ]);
+  }, [activeTenantId, fetchInventory, fetchSkuList, fetchReorderSuggestions]);
 
 
   // Handle stock inward replenishment form submit
@@ -189,6 +233,17 @@ export default function InventoryPage() {
     return item.stock_quantity > 0 && item.stock_quantity < threshold;
   }).length;
   const outOfStockCount = filteredInventory.filter(item => item.stock_quantity <= 0).length;
+
+  // Builds a wa.me deep link so the distributor can message a supplier
+  // directly with the suggested reorder quantity, without any backend
+  // WhatsApp-send integration (client-side only, zero regression risk to
+  // the existing WhatsApp order-ingestion pipeline).
+  const buildSupplierWhatsAppLink = (s: ReorderSuggestion) => {
+    const phone = (s.supplier_phone || "").replace(/[^\d]/g, "");
+    const message = `Hi ${s.supplier_name || ""}, we'd like to reorder ${s.suggested_reorder_quantity} units of ${s.brand} ${s.category} (SKU ${s.sku_id}). Please confirm availability and lead time.`;
+    return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+  };
+
   if (!activeTenantId) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-slate-50 dark:bg-dashboard-inset">
@@ -334,6 +389,57 @@ export default function InventoryPage() {
               </form>
             </div>
           </div>
+
+          {/* AI Reorder Suggestions Panel — only rendered when there is something
+              actionable, so it never clutters the page for a healthy catalog. */}
+          {!reorderLoading && reorderSuggestions.length > 0 && (
+            <div className="bg-white dark:bg-dashboard-card rounded-xl border border-dashboard-border shadow-sm overflow-hidden">
+              <div className="p-5 border-b border-dashboard-border flex items-center justify-between bg-gradient-to-r from-indigo-50/60 to-transparent dark:from-indigo-500/10">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-full bg-indigo-50 dark:bg-indigo-500/10 flex items-center justify-center text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-500/20">
+                    <Sparkles className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-bold text-slate-800 dark:text-slate-100">Smart Reorder Suggestions</h2>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold">
+                      {reorderSuggestions.length} SKU{reorderSuggestions.length === 1 ? "" : "s"} projected to run out based on recent sales velocity
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className="divide-y divide-slate-100 dark:divide-white/5 max-h-80 overflow-y-auto">
+                {reorderSuggestions.map((s) => (
+                  <div key={s.product_id} className="flex items-center justify-between gap-4 px-5 py-3.5 hover:bg-slate-50/50 dark:hover:bg-white/5 transition-colors">
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-slate-800 dark:text-slate-100 truncate">{s.brand} {s.category}</p>
+                      <p className="text-[11px] text-slate-400 font-semibold">
+                        SKU {s.sku_id} &middot; {s.current_net_available} units left &middot; ~{s.sales_velocity_per_day}/day sold
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <div className="text-right">
+                        <p className="text-xs font-bold text-indigo-600 dark:text-indigo-400">Reorder {s.suggested_reorder_quantity} units</p>
+                        {s.supplier_name && (
+                          <p className="text-[11px] text-slate-400 font-semibold truncate max-w-[160px]">from {s.supplier_name}</p>
+                        )}
+                      </div>
+                      {s.supplier_phone && (
+                        <a
+                          href={buildSupplierWhatsAppLink(s)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-400 rounded-lg text-xs font-bold hover:bg-emerald-100 dark:hover:bg-emerald-500/20 transition-all cursor-pointer whitespace-nowrap"
+                        >
+                          <MessageCircle className="w-3.5 h-3.5" />
+                          <span>Message Supplier</span>
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Master Table / Ledger Panel */}
           <div className="bg-white dark:bg-dashboard-card rounded-xl border border-dashboard-border shadow-sm flex flex-col min-h-[400px]">
