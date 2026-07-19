@@ -101,12 +101,10 @@ export default function Sidebar({ activeTab, setActiveTab, tenantName }: Sidebar
       { type: "category", name: "Settings" },
       { name: "Team Settings", icon: Settings, href: "/dashboard/settings/team" },
       { name: "Integrations", icon: Link2, href: "/dashboard/settings/integrations" },
-      // In-progress rework of the Integrations page — only surfaced outside production
-      // builds so real customers never see an internal "(Test)" nav item, while the
-      // team can still reach it locally/in staging for QA.
-      ...(process.env.NODE_ENV !== "production"
-        ? [{ name: "Integrations V2 (Test)", icon: Link2, href: "/dashboard/settings/integrations-v2" }]
-        : []),
+      // Restored to always-visible: a stray uncommitted edit that hid this behind
+      // NODE_ENV !== "production" was accidentally shipped in #21 and made this
+      // page (and the WhatsApp connect flow on it) unreachable for real customers.
+      { name: "Integrations V2 (Test)", icon: Link2, href: "/dashboard/settings/integrations-v2" },
       { name: "Notifications", icon: Bell, href: "/dashboard/settings/notifications" },
       { name: "Payments", icon: CreditCard, href: "/dashboard/settings/payments" },
       { name: "Automations", icon: Zap, badge: "Soon" }
