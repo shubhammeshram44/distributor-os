@@ -9,6 +9,7 @@ import CollectionsDonut from "@/components/CollectionsDonut";
 import InventorySummary from "@/components/InventorySummary";
 import DemandGapCard from "@/components/DemandGapCard";
 import CashFlowForecastCard from "@/components/CashFlowForecastCard";
+import TopProductsCard from "@/components/TopProductsCard";
 // ActivityFeed replaced with simple link (see bottom of dashboard layout)
 import OnboardingChecklist from "@/components/OnboardingChecklist";
 import { useDashboardData, DashboardMetrics } from "@/hooks/useDashboardData";
@@ -941,9 +942,10 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              {/* Row 5.5: Cash Flow Forecast */}
-              <div className="grid grid-cols-1 gap-6">
+              {/* Row 5.5: Cash Flow Forecast | Top Products */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
                 <CashFlowForecastCard activeTenantId={tenantId} />
+                <TopProductsCard activeTenantId={tenantId} />
               </div>
 
               {/* Row 6: Recent Activity Footer (Hidden for now) */}
