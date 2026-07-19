@@ -415,7 +415,7 @@ export default function ShipmentsPage() {
                 <h3 className="text-2xl font-extrabold text-slate-800 dark:text-slate-100 mt-1">{pendingAllocationCount}</h3>
                 <p className="text-[10px] text-slate-400 font-semibold mt-1">Confirmed orders waiting dispatch</p>
               </div>
-              <div className="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center text-brand-blue shadow-sm">
+              <div className="w-12 h-12 rounded-xl bg-blue-50 dark:bg-blue-500/10 flex items-center justify-center text-brand-blue shadow-sm">
                 <Navigation className="w-5 h-5" />
               </div>
             </div>
@@ -426,7 +426,7 @@ export default function ShipmentsPage() {
                 <h3 className="text-2xl font-extrabold text-slate-800 dark:text-slate-100 mt-1">{activeDispatchedRunsCount}</h3>
                 <p className="text-[10px] text-slate-400 font-semibold mt-1">Vehicles currently on route</p>
               </div>
-              <div className="w-12 h-12 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600 shadow-sm">
+              <div className="w-12 h-12 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shadow-sm">
                 <Truck className="w-5 h-5" />
               </div>
             </div>
@@ -435,12 +435,12 @@ export default function ShipmentsPage() {
           {loading && (
             <div className="flex flex-col items-center justify-center py-24 gap-3 bg-white dark:bg-dashboard-card rounded-xl border border-dashboard-border">
               <Loader2 className="w-8 h-8 text-brand-blue animate-spin" />
-              <span className="text-sm font-semibold text-slate-500 dark:text-slate-500">Retrieving logistics status...</span>
+              <span className="text-sm font-semibold text-slate-500 dark:text-slate-400">Retrieving logistics status...</span>
             </div>
           )}
 
           {error && (
-            <div className="flex flex-col items-center justify-center py-24 gap-3 text-rose-600 bg-white dark:bg-dashboard-card rounded-xl border border-dashboard-border">
+            <div className="flex flex-col items-center justify-center py-24 gap-3 text-rose-600 dark:text-rose-400 bg-white dark:bg-dashboard-card rounded-xl border border-dashboard-border">
               <AlertCircle className="w-8 h-8" />
               <span className="text-sm font-semibold">{error}</span>
             </div>
@@ -488,12 +488,12 @@ export default function ShipmentsPage() {
                   </h3>
                   <div className="flex-1 overflow-y-auto border border-slate-100 dark:border-white/5 rounded-lg mb-3">
                     {pendingOrders.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed border-slate-200 dark:border-white/10 rounded-xl bg-slate-50/40 text-center my-4 mx-6">
+                      <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed border-slate-200 dark:border-white/10 rounded-xl bg-slate-50/40 dark:bg-white/6 text-center my-4 mx-6">
                         <div className="p-3 bg-slate-100 dark:bg-white/5 text-slate-400 rounded-full mb-3">
                           <Truck className="w-6 h-6" />
                         </div>
                         <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Your workspace is clean</h3>
-                        <p className="text-xs text-slate-500 dark:text-slate-500 max-w-xs mt-1">
+                        <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xs mt-1">
                           Connect your warehouse stock or send your first WhatsApp text order to see live tracking metrics update instantly.
                         </p>
                       </div>
@@ -515,11 +515,11 @@ export default function ShipmentsPage() {
                                   type="checkbox"
                                   checked={selectedOrderIds.includes(o.order_id)}
                                   onChange={() => handleCheckboxToggle(o.order_id)}
-                                  className="w-3.5 h-3.5 rounded border-slate-300 dark:border-white/10 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                  className="w-3.5 h-3.5 rounded border-slate-300 dark:border-white/10 text-blue-600 dark:text-blue-400 focus:ring-blue-500 cursor-pointer"
                                 />
                               </td>
                               <td className="py-3 px-4 font-bold text-slate-700 dark:text-slate-300">{o.internal_order_id}</td>
-                              <td className="py-3 px-4 text-slate-500 dark:text-slate-500">{o.customer_name}</td>
+                              <td className="py-3 px-4 text-slate-500 dark:text-slate-400">{o.customer_name}</td>
                               <td className="py-3 px-4 text-right font-bold text-slate-700 dark:text-slate-300">
                                 {formatCurrency(o.invoice_amount)}
                               </td>
@@ -555,7 +555,7 @@ export default function ShipmentsPage() {
                   <form onSubmit={handleCreateDeliveryRun} className="space-y-4 flex-1 flex flex-col justify-between">
                     <div className="space-y-3">
                       <div>
-                        <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-500 mb-1 uppercase">Driver Name</label>
+                        <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 mb-1 uppercase">Driver Name</label>
                         <div className="relative">
                           <select
                             value={selectedDriverId}
@@ -575,7 +575,7 @@ export default function ShipmentsPage() {
                       </div>
 
                       <div>
-                        <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-500 mb-1 uppercase">Vehicle Number</label>
+                        <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 mb-1 uppercase">Vehicle Number</label>
                         <input
                           type="text"
                           value={vehicleNumber}
@@ -614,12 +614,12 @@ export default function ShipmentsPage() {
                 </div>
 
                 {hasNoShipments ? (
-                  <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed border-slate-200 dark:border-white/10 rounded-xl bg-slate-50/40 text-center my-4 mx-6">
+                  <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed border-slate-200 dark:border-white/10 rounded-xl bg-slate-50/40 dark:bg-white/6 text-center my-4 mx-6">
                     <div className="p-3 bg-slate-100 dark:bg-white/5 text-slate-400 rounded-full mb-3">
                       <Truck className="w-6 h-6" />
                     </div>
                     <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Your workspace is clean</h3>
-                    <p className="text-xs text-slate-500 dark:text-slate-500 max-w-xs mt-1">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xs mt-1">
                       Connect your warehouse stock or send your first WhatsApp text order to see live tracking metrics update instantly.
                     </p>
                   </div>
@@ -627,7 +627,7 @@ export default function ShipmentsPage() {
                   <div className="overflow-x-auto">
                     <table className="w-full text-left text-xs border-collapse">
                       <thead>
-                        <tr className="text-slate-400 font-bold border-b border-dashboard-border bg-slate-50/50">
+                        <tr className="text-slate-400 font-bold border-b border-dashboard-border bg-slate-50/50 dark:bg-dashboard-inset">
                           <th className="py-3 px-6">Shipment Context</th>
                           <th className="py-3 px-6">Driver & Vehicle</th>
                           <th className="py-3 px-6">Commercial Link</th>
@@ -653,19 +653,19 @@ export default function ShipmentsPage() {
                             <td className="py-4 px-6">
                               <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold border ${
                                 s.status === "Delivered"
-                                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                                  : "bg-amber-50 text-amber-700 border-amber-200"
+                                  ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20"
+                                  : "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/20"
                               }`}>
                                 {s.status}
                               </span>
                             </td>
                             <td className="py-4 px-6">
                               {s.is_paid ? (
-                                <span className="text-emerald-600 font-bold flex items-center gap-1">
+                                <span className="text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
                                   <span>🟢 Paid</span>
                                 </span>
                               ) : (
-                                <span className="text-rose-600 font-bold flex items-center gap-1">
+                                <span className="text-rose-600 dark:text-rose-400 font-bold flex items-center gap-1">
                                   <span>🔴 Unpaid (Credit Account)</span>
                                 </span>
                               )}
@@ -675,7 +675,7 @@ export default function ShipmentsPage() {
                                 <button
                                   onClick={() => handleMarkDelivered(s.shipment_id)}
                                   disabled={markingDeliveredId === s.shipment_id}
-                                  className="px-3 py-1.5 bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 text-[10px] font-bold rounded-lg transition-all cursor-pointer inline-flex items-center gap-1"
+                                  className="px-3 py-1.5 bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 text-blue-700 dark:text-blue-400 hover:bg-blue-100 text-[10px] font-bold rounded-lg transition-all cursor-pointer inline-flex items-center gap-1"
                                 >
                                   {markingDeliveredId === s.shipment_id ? (
                                     <Loader2 className="w-3 h-3 animate-spin" />
@@ -716,17 +716,17 @@ export default function ShipmentsPage() {
       {toast.show && (
         <div className="fixed top-5 right-5 z-50 flex items-center gap-3 bg-white/95 dark:bg-dashboard-card/95 backdrop-blur-md border border-slate-100 dark:border-white/5 shadow-2xl px-4 py-3.5 rounded-xl animate-slide-in pointer-events-auto max-w-sm">
           {toast.type === "success" ? (
-            <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0 shadow-sm">
+            <div className="w-8 h-8 rounded-full bg-emerald-50 dark:bg-emerald-500/10 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0 shadow-sm">
               <CheckCircle2 className="w-4.5 h-4.5" />
             </div>
           ) : (
-            <div className="w-8 h-8 rounded-full bg-rose-50 flex items-center justify-center text-rose-600 shrink-0 shadow-sm">
+            <div className="w-8 h-8 rounded-full bg-rose-50 dark:bg-rose-500/10 flex items-center justify-center text-rose-600 dark:text-rose-400 shrink-0 shadow-sm">
               <AlertCircle className="w-4.5 h-4.5" />
             </div>
           )}
           <div className="flex-1 min-w-0">
             <p className="text-xs font-bold text-slate-800 dark:text-slate-100">{toast.type === "success" ? "Success" : "Error"}</p>
-            <p className="text-[11px] text-slate-500 dark:text-slate-500 font-semibold mt-0.5 break-words">{toast.message}</p>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold mt-0.5 break-words">{toast.message}</p>
           </div>
           <button
             onClick={() => setToast(prev => ({ ...prev, show: false }))}

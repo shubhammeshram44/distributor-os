@@ -30,7 +30,7 @@ export default function InventorySummary({ data }: InventorySummaryProps) {
         {/* Total SKUs */}
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-blue-500 bg-blue-50">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-blue-500 bg-blue-50 dark:bg-blue-500/10">
               <Layers className="w-4.5 h-4.5" />
             </div>
             <span className="text-sm font-semibold text-slate-600 dark:text-slate-400">Total SKUs</span>
@@ -47,7 +47,7 @@ export default function InventorySummary({ data }: InventorySummaryProps) {
         {/* Low Stock Items */}
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-amber-500 bg-amber-50">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-amber-500 bg-amber-50 dark:bg-amber-500/10">
               <AlertCircle className="w-4.5 h-4.5" />
             </div>
             <span className="text-sm font-semibold text-slate-600 dark:text-slate-400">Low Stock Items</span>
@@ -64,7 +64,7 @@ export default function InventorySummary({ data }: InventorySummaryProps) {
         {/* Out of Stock Items */}
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-rose-500 bg-rose-50">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-rose-500 bg-rose-50 dark:bg-rose-500/10">
               <AlertCircle className="w-4.5 h-4.5" />
             </div>
             <span className="text-sm font-semibold text-slate-600 dark:text-slate-400">Out of Stock Items</span>
@@ -81,7 +81,7 @@ export default function InventorySummary({ data }: InventorySummaryProps) {
         {/* Inventory Value */}
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-emerald-500 bg-emerald-50">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-emerald-500 bg-emerald-50 dark:bg-emerald-500/10">
               <DollarSign className="w-4.5 h-4.5" />
             </div>
             <span className="text-sm font-semibold text-slate-600 dark:text-slate-400">Inventory Value</span>
@@ -100,8 +100,8 @@ export default function InventorySummary({ data }: InventorySummaryProps) {
 
       {/* Warning notice */}
       {data?.low_stock_count !== undefined && data.low_stock_count > 0 && (
-        <div className="mt-4 p-3 bg-amber-50/70 border border-amber-200 rounded-xl flex items-center gap-2.5 text-xs text-amber-800">
-          <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+        <div className="mt-4 p-3 bg-amber-50/70 dark:bg-amber-500/8 border border-amber-200 dark:border-amber-500/20 rounded-xl flex items-center gap-2.5 text-xs text-amber-800 dark:text-amber-300">
+          <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
           <span>{data.low_stock_count} SKUs are below minimum stock level</span>
         </div>
       )}

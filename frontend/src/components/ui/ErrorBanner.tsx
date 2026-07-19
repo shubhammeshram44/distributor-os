@@ -14,7 +14,7 @@ export default function ErrorBanner({ message, onRetry }: ErrorBannerProps) {
       className="flex flex-col items-center justify-center py-24 gap-4"
       role="alert"
     >
-      <div className="w-12 h-12 rounded-full bg-rose-50 flex items-center justify-center">
+      <div className="w-12 h-12 rounded-full bg-rose-50 dark:bg-rose-500/10 flex items-center justify-center">
         <AlertCircle className="w-6 h-6 text-rose-500" />
       </div>
       <div className="text-center">

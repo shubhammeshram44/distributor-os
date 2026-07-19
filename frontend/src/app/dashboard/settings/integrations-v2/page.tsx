@@ -479,7 +479,7 @@ export default function IntegrationsPageV2() {
         
         {loading ? (
           <div className="flex flex-col items-center justify-center flex-1 py-20 space-y-4">
-            <Loader2 className="w-10 h-10 text-emerald-600 animate-spin" />
+            <Loader2 className="w-10 h-10 text-emerald-600 dark:text-emerald-400 animate-spin" />
             <p className="text-sm font-semibold text-slate-400">Loading configurations...</p>
           </div>
         ) : (
@@ -488,7 +488,7 @@ export default function IntegrationsPageV2() {
             {/* Page header */}
             <div className="mb-4">
               <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-50">Integrations</h1>
-              <p className="text-slate-500 dark:text-slate-500 text-sm mt-1">
+              <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
                 Connect your tools to automate your distribution business.
               </p>
             </div>
@@ -504,19 +504,19 @@ export default function IntegrationsPageV2() {
               <div className="space-y-4 mt-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-500 mb-2 uppercase tracking-wider">
+                    <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-wider">
                       Business Name
                     </label>
                     <input
                       type="text"
                       value={businessName}
                       onChange={(e) => setBusinessName(e.target.value)}
-                      className="w-full px-4 py-2 border border-slate-200 dark:border-white/10 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-slate-50/20 text-slate-700 dark:text-slate-300"
+                      className="w-full px-4 py-2 border border-slate-200 dark:border-white/10 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-slate-50/20 dark:bg-white/5 text-slate-700 dark:text-slate-300"
                       disabled={savingProfile}
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-500 mb-2 uppercase tracking-wider">
+                    <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-wider">
                       GSTIN <span className="normal-case font-medium text-slate-400">(optional)</span>
                     </label>
                     <input
@@ -525,7 +525,7 @@ export default function IntegrationsPageV2() {
                       value={businessGstin}
                       onChange={(e) => setBusinessGstin(e.target.value.toUpperCase())}
                       maxLength={15}
-                      className="w-full px-4 py-2 border border-slate-200 dark:border-white/10 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-slate-50/20 text-slate-700 dark:text-slate-300 uppercase"
+                      className="w-full px-4 py-2 border border-slate-200 dark:border-white/10 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-slate-50/20 dark:bg-white/5 text-slate-700 dark:text-slate-300 uppercase"
                       disabled={savingProfile}
                     />
                   </div>
@@ -553,8 +553,8 @@ export default function IntegrationsPageV2() {
                   onClick={() => setActiveTab(tab)}
                   className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
                     activeTab === tab
-                      ? "border-emerald-600 text-emerald-700"
-                      : "border-transparent text-slate-500 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200"
+                      ? "border-emerald-600 text-emerald-700 dark:text-emerald-400"
+                      : "border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
                   }`}
                 >
                   {tab}
@@ -574,7 +574,7 @@ export default function IntegrationsPageV2() {
                   <div className="bg-white dark:bg-dashboard-card rounded-xl border border-slate-200 dark:border-white/10 p-5">
                     <div className="flex items-start justify-between mb-3">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-green-50 rounded-xl flex items-center justify-center text-xl">
+                        <div className="w-10 h-10 bg-green-50 dark:bg-green-500/10 rounded-xl flex items-center justify-center text-xl">
                           💬
                         </div>
                         <div>
@@ -583,23 +583,23 @@ export default function IntegrationsPageV2() {
                         </div>
                       </div>
                        {provisioningStatus === "connected" ? (
-                        <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full">
+                        <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-2.5 py-1 rounded-full">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                           Connected
                         </span>
                       ) : provisioningStatus === "disconnected" ? (
-                        <span className="flex items-center gap-1.5 text-xs font-semibold text-red-700 bg-red-50 px-2.5 py-1 rounded-full">
+                        <span className="flex items-center gap-1.5 text-xs font-semibold text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-500/10 px-2.5 py-1 rounded-full">
                           <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
                           Disconnected
                         </span>
                       ) : (
-                        <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 dark:text-slate-500 bg-slate-100 dark:bg-white/5 px-2.5 py-1 rounded-full">
+                        <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-white/5 px-2.5 py-1 rounded-full">
                           <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
                           Not Connected
                         </span>
                       )}
                     </div>
-                    <p className="text-xs text-slate-500 dark:text-slate-500 mb-4">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
                       Retailers order via WhatsApp as usual. Orders appear in your dashboard automatically.
                     </p>
                     
@@ -607,7 +607,7 @@ export default function IntegrationsPageV2() {
                     <button
                       type="button"
                       onClick={() => setWhatsappExpanded(!whatsappExpanded)}
-                      className="text-xs font-semibold text-emerald-600 hover:text-emerald-700 cursor-pointer"
+                      className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 cursor-pointer"
                     >
                       {whatsappExpanded ? "Hide details ▲" : (whatsappPhoneId ? "Manage →" : "Connect →")}
                     </button>
@@ -617,16 +617,16 @@ export default function IntegrationsPageV2() {
                       <div className="mt-4 pt-4 border-t border-slate-100 dark:border-white/5">
                         {provisioningStatus === "connected" ? (
                           <div className="space-y-4">
-                            <div className="bg-slate-50 dark:bg-dashboard-inset border border-slate-200/60 rounded-xl p-4 flex flex-col gap-2">
+                            <div className="bg-slate-50 dark:bg-dashboard-inset border border-slate-200/60 dark:border-white/8 rounded-xl p-4 flex flex-col gap-2">
                               <div className="flex justify-between items-center">
-                                <span className="text-xs font-bold text-slate-500 dark:text-slate-500 uppercase tracking-wide">Connected Phone Number</span>
+                                <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Connected Phone Number</span>
                                 <span className="text-sm font-bold text-slate-800 dark:text-slate-100">
                                   +{displayPhone.replace("+", "")}
                                 </span>
                               </div>
-                              <div className="flex justify-between items-center border-t border-slate-200/60 pt-2 mt-1">
-                                <span className="text-xs font-bold text-slate-500 dark:text-slate-500 uppercase tracking-wide">Instance ID</span>
-                                <span className="text-xs font-semibold text-slate-500 dark:text-slate-500 font-mono">
+                              <div className="flex justify-between items-center border-t border-slate-200/60 dark:border-white/8 pt-2 mt-1">
+                                <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Instance ID</span>
+                                <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 font-mono">
                                   {instanceName}
                                 </span>
                               </div>
@@ -644,11 +644,11 @@ export default function IntegrationsPageV2() {
                           </div>
                         ) : provisioningStatus === "disconnected" ? (
                           <div className="space-y-4">
-                            <div className="bg-red-50 border border-red-200 rounded-xl p-5">
+                            <div className="bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 rounded-xl p-5">
                               <div className="flex items-start gap-3">
                                 <XCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
                                 <div>
-                                  <p className="text-sm font-bold text-red-700">
+                                  <p className="text-sm font-bold text-red-700 dark:text-red-400">
                                     WhatsApp Disconnected
                                   </p>
                                   <p className="text-xs text-red-500 mt-1 leading-relaxed">
@@ -664,9 +664,9 @@ export default function IntegrationsPageV2() {
                               </div>
                             </div>
 
-                            <div className="bg-slate-50 dark:bg-dashboard-inset border border-slate-200/60 rounded-xl p-4 text-xs text-slate-500 dark:text-slate-500 leading-relaxed font-semibold">
+                            <div className="bg-slate-50 dark:bg-dashboard-inset border border-slate-200/60 dark:border-white/8 rounded-xl p-4 text-xs text-slate-500 dark:text-slate-400 leading-relaxed font-semibold">
                               <p className="font-semibold text-slate-700 dark:text-slate-300 mb-1">To reconnect:</p>
-                              <ol className="list-decimal pl-4 space-y-1 text-slate-500 dark:text-slate-500 font-medium">
+                              <ol className="list-decimal pl-4 space-y-1 text-slate-500 dark:text-slate-400 font-medium">
                                 <li>Click "Reconnect WhatsApp" below</li>
                                 <li>Scan the QR code with your WhatsApp</li>
                                 <li>Orders will resume automatically</li>
@@ -674,8 +674,8 @@ export default function IntegrationsPageV2() {
                             </div>
 
                             {evolutionError && (
-                              <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl text-xs font-semibold text-rose-800 flex items-center gap-2">
-                                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                              <div className="p-4 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 rounded-xl text-xs font-semibold text-rose-800 dark:text-rose-300 flex items-center gap-2">
+                                <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
                                 <span>{evolutionError}</span>
                               </div>
                             )}
@@ -693,11 +693,11 @@ export default function IntegrationsPageV2() {
                           </div>
                         ) : (
                           <>
-                            <div className="bg-slate-50 dark:bg-dashboard-inset border border-slate-200/60 rounded-xl p-4 flex gap-3 text-slate-600 dark:text-slate-400 text-xs leading-relaxed font-semibold">
+                            <div className="bg-slate-50 dark:bg-dashboard-inset border border-slate-200/60 dark:border-white/8 rounded-xl p-4 flex gap-3 text-slate-600 dark:text-slate-400 text-xs leading-relaxed font-semibold">
                               <AlertCircle className="w-5 h-5 text-brand-blue flex-shrink-0 mt-0.5" />
                               <div>
                                 <span className="text-slate-800 dark:text-slate-100 font-bold">Evolution API Connection Instructions:</span>
-                                <ul className="list-disc pl-4 mt-1.5 space-y-1 text-slate-500 dark:text-slate-500 font-medium">
+                                <ul className="list-disc pl-4 mt-1.5 space-y-1 text-slate-500 dark:text-slate-400 font-medium">
                                   <li>Click "Connect WhatsApp" to initialize the connection.</li>
                                   <li>The system will auto-generate a unique instance ID for your workspace.</li>
                                   <li>Scan the generated QR code using the "Link a Device" option in your WhatsApp app.</li>
@@ -709,7 +709,7 @@ export default function IntegrationsPageV2() {
                             <form onSubmit={handleProvisionEvolution} className="space-y-5 mt-4">
                               {qrCodeBase64 && (provisioningStatus === "connecting" || provisioningStatus === "provisioning") && (
                                 <div className="flex flex-col items-center justify-center p-6 bg-slate-50 dark:bg-dashboard-inset border border-dashed border-slate-200 dark:border-white/10 rounded-xl space-y-4">
-                                  <p className="text-xs font-bold text-slate-500 dark:text-slate-500 uppercase tracking-wide">Scan this QR code with WhatsApp</p>
+                                  <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Scan this QR code with WhatsApp</p>
                                   <div className="bg-white dark:bg-dashboard-card p-4 rounded-xl shadow-md border border-slate-100 dark:border-white/5">
                                     <img src={qrCodeBase64} alt="WhatsApp QR Code" className="w-48 h-48" />
                                   </div>
@@ -721,8 +721,8 @@ export default function IntegrationsPageV2() {
                               )}
 
                               {evolutionError && (
-                                <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl text-xs font-semibold text-rose-800 flex items-center gap-2">
-                                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                                <div className="p-4 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 rounded-xl text-xs font-semibold text-rose-800 dark:text-rose-300 flex items-center gap-2">
+                                  <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
                                   <span>{evolutionError}</span>
                                 </div>
                               )}
@@ -756,7 +756,7 @@ export default function IntegrationsPageV2() {
                   <div className="bg-white dark:bg-dashboard-card rounded-xl border border-slate-200 dark:border-white/10 p-5">
                     <div className="flex items-start justify-between mb-3">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center text-xl">
+                        <div className="w-10 h-10 bg-blue-50 dark:bg-blue-500/10 rounded-xl flex items-center justify-center text-xl">
                           💳
                         </div>
                         <div>
@@ -765,25 +765,25 @@ export default function IntegrationsPageV2() {
                         </div>
                       </div>
                       {razorpayConnected ? (
-                        <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full">
+                        <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-2.5 py-1 rounded-full">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                           {razorpayMode === "test" ? "Connected · Test Mode" : "Connected · Live"}
                         </span>
                       ) : (
-                        <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 dark:text-slate-500 bg-slate-100 dark:bg-white/5 px-2.5 py-1 rounded-full">
+                        <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-white/5 px-2.5 py-1 rounded-full">
                           <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
                           Not Connected
                         </span>
                       )}
                     </div>
-                    <p className="text-xs text-slate-500 dark:text-slate-500 mb-4">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
                       Send UPI payment links to retailers on WhatsApp. Payments reconcile automatically.
                     </p>
 
                     <button
                       type="button"
                       onClick={() => setRazorpayExpanded(!razorpayExpanded)}
-                      className="text-xs font-semibold text-emerald-600 hover:text-emerald-700 cursor-pointer"
+                      className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 cursor-pointer"
                     >
                       {razorpayExpanded ? "Hide details ▲" : (razorpayConnected ? "Manage →" : "Connect →")}
                     </button>
@@ -793,13 +793,13 @@ export default function IntegrationsPageV2() {
                       <div className="mt-4 pt-4 border-t border-slate-100 dark:border-white/5">
                         {razorpayConnected && !showUpdateForm ? (
                           <div className="space-y-4">
-                            <div className="bg-slate-50 dark:bg-dashboard-inset border border-slate-200/60 rounded-xl p-4 flex flex-col gap-2 font-semibold">
+                            <div className="bg-slate-50 dark:bg-dashboard-inset border border-slate-200/60 dark:border-white/8 rounded-xl p-4 flex flex-col gap-2 font-semibold">
                               <div className="flex justify-between items-center">
-                                <span className="text-xs text-slate-500 dark:text-slate-500 uppercase tracking-wide">Account Name</span>
+                                <span className="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wide">Account Name</span>
                                 <span className="text-sm text-slate-800 dark:text-slate-100">{accountName || "—"}</span>
                               </div>
-                              <div className="flex justify-between items-center border-t border-slate-200/60 pt-2 mt-1">
-                                <span className="text-xs text-slate-500 dark:text-slate-500 uppercase tracking-wide">Key ID</span>
+                              <div className="flex justify-between items-center border-t border-slate-200/60 dark:border-white/8 pt-2 mt-1">
+                                <span className="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wide">Key ID</span>
                                 <span className="text-sm font-mono text-slate-800 dark:text-slate-100">{keyIdMasked}</span>
                               </div>
                             </div>
@@ -823,11 +823,11 @@ export default function IntegrationsPageV2() {
                           </div>
                         ) : (
                           <>
-                            <div className="bg-slate-50 dark:bg-dashboard-inset border border-slate-200/60 rounded-xl p-4 flex gap-3 text-slate-600 dark:text-slate-400 text-xs leading-relaxed font-semibold">
+                            <div className="bg-slate-50 dark:bg-dashboard-inset border border-slate-200/60 dark:border-white/8 rounded-xl p-4 flex gap-3 text-slate-600 dark:text-slate-400 text-xs leading-relaxed font-semibold">
                               <ShieldCheck className="w-5 h-5 text-brand-blue flex-shrink-0 mt-0.5" />
                               <div>
                                 <span className="text-slate-800 dark:text-slate-100 font-bold">Secure connection:</span>
-                                <ul className="list-disc pl-4 mt-1.5 space-y-1 text-slate-500 dark:text-slate-500 font-medium">
+                                <ul className="list-disc pl-4 mt-1.5 space-y-1 text-slate-500 dark:text-slate-400 font-medium">
                                   <li>Your secret key is encrypted with AES-256 and is never visible after saving.</li>
                                   <li>Keys are used only to generate payment links for your retailers.</li>
                                 </ul>
@@ -871,8 +871,8 @@ export default function IntegrationsPageV2() {
                               </div>
 
                               {validationError && (
-                                <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl text-xs font-semibold text-rose-800 flex items-center gap-2">
-                                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                                <div className="p-4 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 rounded-xl text-xs font-semibold text-rose-800 dark:text-rose-300 flex items-center gap-2">
+                                  <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
                                   <span>{validationError}</span>
                                 </div>
                               )}
@@ -883,7 +883,7 @@ export default function IntegrationsPageV2() {
                                     href="https://razorpay.com/"
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 hover:underline"
+                                    className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline"
                                   >
                                     <span>Don't have Razorpay? Create free account →</span>
                                     <ExternalLink className="w-3 h-3" />
@@ -892,7 +892,7 @@ export default function IntegrationsPageV2() {
                                     href="https://dashboard.razorpay.com/app/keys"
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 hover:underline"
+                                    className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline"
                                   >
                                     <span>Find your API keys →</span>
                                     <ExternalLink className="w-3 h-3" />
@@ -968,7 +968,7 @@ export default function IntegrationsPageV2() {
                           Coming Soon
                         </span>
                       </div>
-                      <p className="text-xs text-slate-500 dark:text-slate-500">{item.desc}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">{item.desc}</p>
                     </div>
                   ))}
                 </div>
@@ -980,7 +980,7 @@ export default function IntegrationsPageV2() {
               <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100 mb-1">
                 Don&apos;t see what you need?
               </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-500 mb-4">
+              <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
                 Tell us which tool you use and we&apos;ll prioritize it.
               </p>
               <div className="flex gap-3">
@@ -1005,7 +1005,7 @@ export default function IntegrationsPageV2() {
               </div>
               <p className="text-xs text-slate-400 mt-3">
                 Or email us directly at{" "}
-                <a href="mailto:contact@distroos.in" className="text-emerald-600 hover:underline">
+                <a href="mailto:contact@distroos.in" className="text-emerald-600 dark:text-emerald-400 hover:underline">
                   contact@distroos.in
                 </a>
               </p>
@@ -1020,12 +1020,12 @@ export default function IntegrationsPageV2() {
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-dashboard-card rounded-2xl shadow-xl max-w-md w-full border border-slate-100 dark:border-white/5 p-6 space-y-6 animate-in fade-in zoom-in duration-200">
             <div className="flex items-start gap-4">
-              <div className="p-3 bg-rose-50 rounded-full text-rose-600">
+              <div className="p-3 bg-rose-50 dark:bg-rose-500/10 rounded-full text-rose-600 dark:text-rose-400">
                 <AlertCircle className="w-6 h-6" />
               </div>
               <div className="space-y-1.5">
                 <h3 className="text-base font-bold text-slate-950">Disconnect WhatsApp</h3>
-                <p className="text-sm text-slate-500 dark:text-slate-500 font-semibold leading-relaxed font-semibold">
+                <p className="text-sm text-slate-500 dark:text-slate-400 font-semibold leading-relaxed font-semibold">
                   This will disconnect your WhatsApp. New orders will stop coming in. Are you sure?
                 </p>
               </div>
@@ -1064,12 +1064,12 @@ export default function IntegrationsPageV2() {
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-dashboard-card rounded-2xl shadow-xl max-w-md w-full border border-slate-100 dark:border-white/5 p-6 space-y-6 animate-in fade-in zoom-in duration-200">
             <div className="flex items-start gap-4">
-              <div className="p-3 bg-rose-50 rounded-full text-rose-600">
+              <div className="p-3 bg-rose-50 dark:bg-rose-500/10 rounded-full text-rose-600 dark:text-rose-400">
                 <AlertCircle className="w-6 h-6" />
               </div>
               <div className="space-y-1.5">
                 <h3 className="text-base font-bold text-slate-950">Disconnect Razorpay</h3>
-                <p className="text-sm text-slate-500 dark:text-slate-500 font-semibold leading-relaxed font-semibold">
+                <p className="text-sm text-slate-500 dark:text-slate-400 font-semibold leading-relaxed font-semibold">
                   This will disconnect your Razorpay integration. Retailers will no longer be able to make online payments. Are you sure?
                 </p>
               </div>
@@ -1108,8 +1108,8 @@ export default function IntegrationsPageV2() {
         <div className="fixed bottom-5 right-5 z-50 animate-slide-in">
           <div className={`flex items-center gap-3 px-5 py-3 rounded-lg border shadow-xl bg-white dark:bg-dashboard-card ${
             toast.type === "success" 
-              ? "border-emerald-200 text-emerald-800" 
-              : "border-rose-200 text-rose-800"
+              ? "border-emerald-200 dark:border-emerald-500/20 text-emerald-800 dark:text-emerald-300" 
+              : "border-rose-200 dark:border-rose-500/20 text-rose-800 dark:text-rose-300"
           }`}>
             <span className="text-lg">
               {toast.type === "success" ? "✓" : "⚠"}

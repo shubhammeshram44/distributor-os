@@ -207,19 +207,19 @@ export default function PaymentsPage() {
                   <div>
                     {connected && !showUpdateForm ? (
                       mode === "live" ? (
-                        <span className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 px-3 py-1 rounded-full text-xs font-bold shadow-sm">
-                          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                        <span className="inline-flex items-center gap-1.5 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20 px-3 py-1 rounded-full text-xs font-bold shadow-sm">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                           <span>Connected — Live Mode</span>
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1.5 bg-amber-50 text-amber-700 border border-amber-200 px-3 py-1 rounded-full text-xs font-bold shadow-sm">
-                          <AlertCircle className="w-4 h-4 text-amber-600" />
+                        <span className="inline-flex items-center gap-1.5 bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/20 px-3 py-1 rounded-full text-xs font-bold shadow-sm">
+                          <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
                           <span>Connected — Test Mode</span>
                         </span>
                       )
                     ) : (
-                      <span className="inline-flex items-center gap-1.5 bg-rose-50 text-rose-700 border border-rose-200 px-3 py-1 rounded-full text-xs font-bold shadow-sm">
-                        <XCircle className="w-4 h-4 text-rose-600" />
+                      <span className="inline-flex items-center gap-1.5 bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-500/20 px-3 py-1 rounded-full text-xs font-bold shadow-sm">
+                        <XCircle className="w-4 h-4 text-rose-600 dark:text-rose-400" />
                         <span>Not Connected</span>
                       </span>
                     )}
@@ -229,13 +229,13 @@ export default function PaymentsPage() {
                 <div className="p-6 space-y-6">
                   {connected && !showUpdateForm ? (
                     <div className="space-y-4">
-                      <div className="bg-slate-50 dark:bg-dashboard-inset border border-slate-200/60 rounded-xl p-4 flex flex-col gap-2 font-semibold">
+                      <div className="bg-slate-50 dark:bg-dashboard-inset border border-slate-200/60 dark:border-white/8 rounded-xl p-4 flex flex-col gap-2 font-semibold">
                         <div className="flex justify-between items-center">
-                          <span className="text-xs text-slate-500 dark:text-slate-500 uppercase tracking-wide">Account Name</span>
+                          <span className="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wide">Account Name</span>
                           <span className="text-sm text-slate-800 dark:text-slate-100">{accountName || "—"}</span>
                         </div>
-                        <div className="flex justify-between items-center border-t border-slate-200/60 pt-2 mt-1">
-                          <span className="text-xs text-slate-500 dark:text-slate-500 uppercase tracking-wide">Key ID</span>
+                        <div className="flex justify-between items-center border-t border-slate-200/60 dark:border-white/8 pt-2 mt-1">
+                          <span className="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wide">Key ID</span>
                           <span className="text-sm font-mono text-slate-800 dark:text-slate-100">{keyIdMasked}</span>
                         </div>
                       </div>
@@ -259,11 +259,11 @@ export default function PaymentsPage() {
                     </div>
                   ) : (
                     <>
-                      <div className="bg-slate-50 dark:bg-dashboard-inset border border-slate-200/60 rounded-xl p-4 flex gap-3 text-slate-600 dark:text-slate-400 text-xs leading-relaxed font-semibold">
+                      <div className="bg-slate-50 dark:bg-dashboard-inset border border-slate-200/60 dark:border-white/8 rounded-xl p-4 flex gap-3 text-slate-600 dark:text-slate-400 text-xs leading-relaxed font-semibold">
                         <ShieldCheck className="w-5 h-5 text-brand-blue flex-shrink-0 mt-0.5" />
                         <div>
                           <span className="text-slate-800 dark:text-slate-100 font-bold">Secure connection:</span>
-                          <ul className="list-disc pl-4 mt-1.5 space-y-1 text-slate-500 dark:text-slate-500 font-medium">
+                          <ul className="list-disc pl-4 mt-1.5 space-y-1 text-slate-500 dark:text-slate-400 font-medium">
                             <li>Your secret key is encrypted with AES-256 and is never visible after saving.</li>
                             <li>Keys are used only to generate payment links for your retailers.</li>
                           </ul>
@@ -307,8 +307,8 @@ export default function PaymentsPage() {
                         </div>
 
                         {validationError && (
-                          <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl text-xs font-semibold text-rose-800 flex items-center gap-2">
-                            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                          <div className="p-4 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 rounded-xl text-xs font-semibold text-rose-800 dark:text-rose-300 flex items-center gap-2">
+                            <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
                             <span>{validationError}</span>
                           </div>
                         )}
@@ -380,12 +380,12 @@ export default function PaymentsPage() {
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-dashboard-card rounded-2xl shadow-xl max-w-md w-full border border-slate-100 dark:border-white/5 p-6 space-y-6 animate-in fade-in zoom-in duration-200">
             <div className="flex items-start gap-4">
-              <div className="p-3 bg-rose-50 rounded-full text-rose-600">
+              <div className="p-3 bg-rose-50 dark:bg-rose-500/10 rounded-full text-rose-600 dark:text-rose-400">
                 <AlertCircle className="w-6 h-6" />
               </div>
               <div className="space-y-1.5">
                 <h3 className="text-base font-bold text-slate-950">Disconnect Razorpay</h3>
-                <p className="text-sm text-slate-500 dark:text-slate-500 font-semibold leading-relaxed font-semibold">
+                <p className="text-sm text-slate-500 dark:text-slate-400 font-semibold leading-relaxed font-semibold">
                   This will disconnect your Razorpay integration. Retailers will no longer be able to make online payments. Are you sure?
                 </p>
               </div>
@@ -424,8 +424,8 @@ export default function PaymentsPage() {
         <div className="fixed bottom-5 right-5 z-50 animate-slide-in">
           <div className={`flex items-center gap-3 px-5 py-3 rounded-lg border shadow-xl bg-white dark:bg-dashboard-card ${
             toast.type === "success" 
-              ? "border-emerald-200 text-emerald-800" 
-              : "border-rose-200 text-rose-800"
+              ? "border-emerald-200 dark:border-emerald-500/20 text-emerald-800 dark:text-emerald-300" 
+              : "border-rose-200 dark:border-rose-500/20 text-rose-800 dark:text-rose-300"
           }`}>
             <span className="text-lg">
               {toast.type === "success" ? "✓" : "⚠"}

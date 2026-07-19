@@ -42,9 +42,9 @@ export default function LiveDeliveries({ viewAllHref }: LiveDeliveriesProps = {}
   }, []);
 
   const statusStyle = (s: string) =>
-    s.toLowerCase().includes("deliver") ? "text-emerald-600 bg-emerald-50"
-      : s.toLowerCase().includes("out") ? "text-blue-600 bg-blue-50"
-        : "text-amber-600 bg-amber-50";
+    s.toLowerCase().includes("deliver") ? "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10"
+      : s.toLowerCase().includes("out") ? "text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-500/10"
+        : "text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10";
 
   const formatCurrency = (v: number) =>
     new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(v);
@@ -61,7 +61,7 @@ export default function LiveDeliveries({ viewAllHref }: LiveDeliveriesProps = {}
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                 <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
               </span>
-              <span className="text-xs font-semibold text-emerald-600">Live</span>
+              <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">Live</span>
             </>
           )}
         </div>
@@ -83,7 +83,7 @@ export default function LiveDeliveries({ viewAllHref }: LiveDeliveriesProps = {}
             <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-white/5 flex items-center justify-center">
               <Truck className="w-5 h-5 text-slate-400" />
             </div>
-            <p className="text-sm font-semibold text-slate-500 dark:text-slate-500">No active deliveries</p>
+            <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">No active deliveries</p>
             <p className="text-xs text-slate-400">Dispatched orders will appear here</p>
           </div>
         ) : (
@@ -101,9 +101,9 @@ export default function LiveDeliveries({ viewAllHref }: LiveDeliveriesProps = {}
                 </div>
                 <div className="flex items-center gap-1 mt-0.5">
                   <Package className="w-3 h-3 text-slate-400" />
-                  <span className="text-[11px] text-slate-500 dark:text-slate-500 truncate">{s.internal_order_id}</span>
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400 truncate">{s.internal_order_id}</span>
                   <span className="text-[11px] text-slate-400">·</span>
-                  <span className="text-[11px] text-slate-500 dark:text-slate-500">{formatCurrency(s.invoice_amount)}</span>
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400">{formatCurrency(s.invoice_amount)}</span>
                 </div>
                 <div className="flex items-center gap-1 mt-0.5">
                   <MapPin className="w-3 h-3 text-slate-300" />

@@ -430,7 +430,7 @@ export default function MessagesPage() {
           <div className="w-80 border-r border-slate-200 dark:border-white/10 bg-white dark:bg-dashboard-card flex flex-col h-full shadow-sm">
             <div className="p-4 border-b border-slate-100 dark:border-white/5 flex items-center justify-between">
               <h2 className="font-bold text-lg text-slate-800 dark:text-slate-100 flex items-center gap-2">
-                <MessageSquare className="w-5 h-5 text-emerald-600" />
+                <MessageSquare className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
                 <span>Retailer Inbox</span>
               </h2>
               {customers.length > 0 && (
@@ -441,7 +441,7 @@ export default function MessagesPage() {
             </div>
 
             {/* Search Input */}
-            <div className="p-3 border-b border-slate-100 dark:border-white/5 bg-slate-50/50">
+            <div className="p-3 border-b border-slate-100 dark:border-white/5 bg-slate-50/50 dark:bg-dashboard-inset">
               <div className="relative">
                 <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
                 <input
@@ -460,7 +460,7 @@ export default function MessagesPage() {
                 onClick={() => setActiveFeedTab("inbox")}
                 className={`flex-1 text-center py-2.5 text-xs font-bold border-b-2 transition-all ${
                   activeFeedTab === "inbox"
-                    ? "border-emerald-500 text-emerald-600"
+                    ? "border-emerald-500 text-emerald-600 dark:text-emerald-400"
                     : "border-transparent text-slate-400 hover:text-slate-600"
                 }`}
               >
@@ -470,7 +470,7 @@ export default function MessagesPage() {
                 onClick={() => setActiveFeedTab("triage")}
                 className={`flex-1 text-center py-2.5 text-xs font-bold border-b-2 transition-all flex items-center justify-center gap-1.5 ${
                   activeFeedTab === "triage"
-                    ? "border-rose-500 text-rose-600"
+                    ? "border-rose-500 text-rose-600 dark:text-rose-400"
                     : "border-transparent text-slate-400 hover:text-slate-600"
                 }`}
               >
@@ -489,7 +489,7 @@ export default function MessagesPage() {
                 loading ? (
                   <div className="flex flex-col items-center justify-center py-12 gap-3">
                     <Loader2 className="w-6 h-6 text-brand-blue animate-spin" />
-                    <span className="text-xs text-slate-500 dark:text-slate-500 font-semibold">Loading Retailers...</span>
+                    <span className="text-xs text-slate-500 dark:text-slate-400 font-semibold">Loading Retailers...</span>
                   </div>
                 ) : filteredCustomers.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-12 text-slate-400">
@@ -534,7 +534,7 @@ export default function MessagesPage() {
                           <p className="text-[10px] text-slate-400 font-semibold mt-0.5 truncate">
                             {c.phone}
                           </p>
-                          <p className="text-[11px] text-slate-500 dark:text-slate-500 font-medium mt-1 truncate">
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-1 truncate">
                             {lastMessage}
                           </p>
                           <div className="flex items-center justify-between mt-1 text-[9px] font-semibold">
@@ -551,7 +551,7 @@ export default function MessagesPage() {
                 orders.filter(o => o.status === "Needs Review").length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-12 text-slate-400">
                     <CheckCircle2 className="w-8 h-8 mb-2 text-emerald-500" />
-                    <span className="text-xs font-semibold text-slate-500 dark:text-slate-500">Triage Queue is Clean!</span>
+                    <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Triage Queue is Clean!</span>
                   </div>
                 ) : (
                   orders.filter(o => o.status === "Needs Review").map((o) => {
@@ -562,25 +562,25 @@ export default function MessagesPage() {
                         onClick={() => handleSelectTriageOrder(o)}
                         className={`w-full text-left p-4 transition-all duration-200 border-l-4 ${
                           isSelected 
-                            ? "bg-rose-50/50 border-rose-500" 
+                            ? "bg-rose-50/50 dark:bg-rose-500/8 border-rose-500" 
                             : "hover:bg-rose-50/20 border-transparent"
                         }`}
                       >
                         <div className="flex items-start gap-3">
-                          <div className="w-10 h-10 rounded-full bg-rose-50 border border-rose-200 flex items-center justify-center font-bold text-rose-600 text-xs shrink-0">
+                          <div className="w-10 h-10 rounded-full bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 flex items-center justify-center font-bold text-rose-600 dark:text-rose-400 text-xs shrink-0">
                             TRG
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex justify-between items-center">
                               <h4 className="font-bold text-xs text-slate-800 dark:text-slate-100 truncate">{o.customer}</h4>
-                              <span className="text-[9px] font-bold bg-rose-100 text-rose-800 px-1.5 py-0.5 rounded border border-rose-200">
+                              <span className="text-[9px] font-bold bg-rose-100 dark:bg-rose-500/15 text-rose-800 dark:text-rose-300 px-1.5 py-0.5 rounded border border-rose-200 dark:border-rose-500/20">
                                 Review
                               </span>
                             </div>
                             <p className="text-[10px] text-brand-blue font-bold mt-1">
                               {o.order_id}
                             </p>
-                            <p className="text-[11px] text-slate-500 dark:text-slate-500 font-semibold mt-1">
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold mt-1">
                               Amount: ₹{o.amount.toLocaleString([], { minimumFractionDigits: 2 })}
                             </p>
                             <p className="text-[9px] text-slate-400 font-semibold mt-1">
@@ -644,13 +644,13 @@ export default function MessagesPage() {
                         key={msg.id || index}
                         className={`flex flex-col max-w-[70%] rounded-2xl p-3 text-xs shadow-sm relative transition-all duration-200 ${
                           isOp 
-                            ? "bg-[#d9fdd3] text-slate-800 dark:text-slate-100 self-end rounded-tr-none border border-emerald-100" 
+                            ? "bg-[#d9fdd3] text-slate-800 dark:text-slate-100 self-end rounded-tr-none border border-emerald-100 dark:border-emerald-500/20" 
                             : "bg-white dark:bg-dashboard-card text-slate-800 dark:text-slate-100 self-start rounded-tl-none border border-slate-200 dark:border-white/10"
                         }`}
                       >
                         {/* Sender Label */}
                         <span className={`text-[9px] font-bold mb-1 block uppercase tracking-wider ${
-                          isOp ? "text-emerald-700" : "text-slate-500 dark:text-slate-500"
+                          isOp ? "text-emerald-700 dark:text-emerald-400" : "text-slate-500 dark:text-slate-400"
                         }`}>
                           {isOp ? "OPERATOR" : "CUSTOMER"}
                         </span>
@@ -703,14 +703,14 @@ export default function MessagesPage() {
             {activeFeedTab === "triage" && selectedTriageOrderId ? (
               // Triage Resolution Pane
               <div className="flex flex-col h-full">
-                <div className="bg-gradient-to-r from-rose-50 to-orange-50 border-b border-rose-100 p-4">
-                  <div className="flex items-center gap-2 text-rose-800">
+                <div className="bg-gradient-to-r from-rose-50 to-orange-50 border-b border-rose-100 dark:border-rose-500/20 p-4">
+                  <div className="flex items-center gap-2 text-rose-800 dark:text-rose-300">
                     <div className="w-8 h-8 rounded-lg bg-rose-500 text-white flex items-center justify-center">
                       <AlertCircle className="w-5 h-5" />
                     </div>
                     <div>
                       <h3 className="font-bold text-sm">Order SKU Resolution</h3>
-                      <p className="text-[10px] text-rose-600 font-semibold mt-0.5">
+                      <p className="text-[10px] text-rose-600 dark:text-rose-400 font-semibold mt-0.5">
                         Assign unmatched SKUs to catalog items in one click.
                       </p>
                     </div>
@@ -721,11 +721,11 @@ export default function MessagesPage() {
                   {loadingTriageDetails ? (
                     <div className="flex flex-col items-center justify-center py-20 space-y-3">
                       <Loader2 className="w-6 h-6 text-rose-500 animate-spin" />
-                      <span className="text-xs text-slate-500 dark:text-slate-500 font-semibold">Loading line items...</span>
+                      <span className="text-xs text-slate-500 dark:text-slate-400 font-semibold">Loading line items...</span>
                     </div>
                   ) : triageOrderDetails ? (
                     <div className="space-y-4">
-                      <div className="bg-slate-50 dark:bg-dashboard-inset border border-slate-200/60 rounded-xl p-3.5 space-y-2">
+                      <div className="bg-slate-50 dark:bg-dashboard-inset border border-slate-200/60 dark:border-white/8 rounded-xl p-3.5 space-y-2">
                         <div className="flex justify-between items-center text-xs">
                           <span className="font-semibold text-slate-400">Retailer</span>
                           <span className="font-bold text-slate-700 dark:text-slate-300">{selectedCustomer?.retailer_name}</span>
@@ -743,16 +743,16 @@ export default function MessagesPage() {
                         {triageOrderDetails.map((item, idx) => {
                           const isUnmatched = item.sku_id === "UNMATCHED_SKU" || item.sku_id === "UNMATCHED_TRIAGE_SKU";
                           return (
-                            <div key={idx} className="p-4 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50/50 flex flex-col gap-2">
+                            <div key={idx} className="p-4 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50/50 dark:bg-dashboard-inset flex flex-col gap-2">
                               <div className="flex items-start justify-between">
                                 <div className="flex-1 pr-4">
                                   {isUnmatched ? (
                                     <div className="space-y-2">
-                                      <p className="font-bold text-xs text-rose-600 flex items-center gap-1">
+                                      <p className="font-bold text-xs text-rose-600 dark:text-rose-400 flex items-center gap-1">
                                         <AlertCircle className="w-4 h-4 shrink-0 animate-pulse" />
                                         <span>Unmatched Line Item</span>
                                       </p>
-                                      <p className="text-[10px] text-slate-500 dark:text-slate-500 font-semibold leading-relaxed">
+                                      <p className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold leading-relaxed">
                                         Original Input: <span className="italic font-bold text-slate-700 dark:text-slate-300">"{item.brand}"</span>
                                       </p>
                                       
@@ -764,7 +764,7 @@ export default function MessagesPage() {
                                             handleResolveTriageItem(item.id, e.target.value, item.quantity);
                                           }
                                         }}
-                                        className="w-full mt-1 p-2 border border-rose-200 rounded-lg text-xs bg-white dark:bg-dashboard-card text-slate-700 dark:text-slate-300 font-semibold focus:outline-none focus:ring-1 focus:ring-rose-500 cursor-pointer"
+                                        className="w-full mt-1 p-2 border border-rose-200 dark:border-rose-500/20 rounded-lg text-xs bg-white dark:bg-dashboard-card text-slate-700 dark:text-slate-300 font-semibold focus:outline-none focus:ring-1 focus:ring-rose-500 cursor-pointer"
                                       >
                                         <option value="">-- Select SKU --</option>
                                         {productsList.map((p) => (
@@ -805,14 +805,14 @@ export default function MessagesPage() {
               // Normal AI Extraction Pane
               <div className="flex flex-col h-full">
                 {/* AI Banner Header */}
-                <div className="bg-gradient-to-r from-emerald-50 to-teal-50 border-b border-emerald-100 p-4">
-                  <div className="flex items-center gap-2 text-emerald-800">
+                <div className="bg-gradient-to-r from-emerald-50 to-teal-50 border-b border-emerald-100 dark:border-emerald-500/20 p-4">
+                  <div className="flex items-center gap-2 text-emerald-800 dark:text-emerald-300">
                     <div className="w-8 h-8 rounded-lg bg-emerald-500 text-white flex items-center justify-center">
                       <Bot className="w-5 h-5" />
                     </div>
                     <div>
                       <h3 className="font-bold text-sm">Gemini AI Ingested Order</h3>
-                      <p className="text-[10px] text-emerald-600 font-semibold flex items-center gap-1 mt-0.5">
+                      <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1 mt-0.5">
                         <Sparkles className="w-3 h-3 animate-pulse" />
                         <span>{activeOrder.order_id} · {activeOrder.created_on}</span>
                       </p>
@@ -831,8 +831,8 @@ export default function MessagesPage() {
                     </div>
                     <div className="flex justify-between items-center text-xs">
                       <span className="font-semibold text-slate-400">Ingestion Channel</span>
-                      <span className="bg-emerald-50 text-emerald-700 font-bold px-2 py-0.5 rounded border border-emerald-100 text-[10px] flex items-center gap-1">
-                        <Zap className="w-3 h-3 text-emerald-600" />
+                      <span className="bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 font-bold px-2 py-0.5 rounded border border-emerald-100 dark:border-emerald-500/20 text-[10px] flex items-center gap-1">
+                        <Zap className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
                         <span>WhatsApp Webhook</span>
                       </span>
                     </div>
@@ -840,10 +840,10 @@ export default function MessagesPage() {
                       <span className="font-semibold text-slate-400">Order Status</span>
                       <span className={`font-bold px-2 py-0.5 rounded border text-[10px] ${
                         activeOrder.status === "Confirmed"
-                          ? "bg-emerald-50 text-emerald-700 border-emerald-100"
+                          ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-100 dark:border-emerald-500/20"
                           : thread?.has_unmatched
-                            ? "bg-rose-50 text-rose-700 border-rose-100"
-                            : "bg-amber-50 text-amber-700 border-amber-100"
+                            ? "bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-100 dark:border-rose-500/20"
+                            : "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-100 dark:border-amber-500/20"
                       }`}>
                         {activeOrder.status}
                       </span>
@@ -858,7 +858,7 @@ export default function MessagesPage() {
                     <div className="border border-slate-200 dark:border-white/10 rounded-xl overflow-hidden shadow-sm">
                       <table className="w-full text-left text-xs border-collapse">
                         <thead>
-                          <tr className="bg-slate-50 dark:bg-dashboard-inset border-b border-slate-200 dark:border-white/10 text-slate-500 dark:text-slate-500 font-bold text-[10px] uppercase">
+                          <tr className="bg-slate-50 dark:bg-dashboard-inset border-b border-slate-200 dark:border-white/10 text-slate-500 dark:text-slate-400 font-bold text-[10px] uppercase">
                             <th className="py-2.5 px-3">Item / SKU</th>
                             <th className="py-2.5 px-2 text-center">Qty</th>
                             <th className="py-2.5 px-3 text-right">Price</th>
@@ -871,7 +871,7 @@ export default function MessagesPage() {
                             return (
                               <tr key={item.id || index} className="hover:bg-slate-50/50 font-medium">
                                 <td className="py-2.5 px-3">
-                                  <p className={`font-bold ${isUnmatched ? "text-rose-600" : "text-slate-700 dark:text-slate-300"}`}>
+                                  <p className={`font-bold ${isUnmatched ? "text-rose-600 dark:text-rose-400" : "text-slate-700 dark:text-slate-300"}`}>
                                     {isUnmatched ? "Unmatched item" : item.product_name}
                                   </p>
                                   <p className="text-[9px] text-slate-400 font-semibold">
@@ -881,7 +881,7 @@ export default function MessagesPage() {
                                 <td className="py-2.5 px-2 text-center text-slate-600 dark:text-slate-400">
                                   {item.quantity}
                                 </td>
-                                <td className="py-2.5 px-3 text-right text-slate-500 dark:text-slate-500">
+                                <td className="py-2.5 px-3 text-right text-slate-500 dark:text-slate-400">
                                   ₹{item.unit_price.toFixed(2)}
                                 </td>
                                 <td className="py-2.5 px-3 text-right font-bold text-slate-700 dark:text-slate-300">
@@ -892,7 +892,7 @@ export default function MessagesPage() {
                           })}
                         </tbody>
                         <tfoot>
-                          <tr className="bg-slate-50/80 font-bold border-t border-slate-200 dark:border-white/10">
+                          <tr className="bg-slate-50/80 dark:bg-white/10 font-bold border-t border-slate-200 dark:border-white/10">
                             <td colSpan={3} className="py-3 px-3 text-slate-600 dark:text-slate-400">Total Extracted Value</td>
                             <td className="py-3 px-3 text-right text-brand-blue font-extrabold text-sm">
                               ₹{orderTotal.toLocaleString([], { minimumFractionDigits: 2 })}
@@ -912,16 +912,16 @@ export default function MessagesPage() {
                       <div className="bg-slate-50 dark:bg-dashboard-inset border border-slate-200 dark:border-white/10 rounded-xl p-3 flex items-center justify-between text-xs font-semibold">
                         <div className="flex items-center gap-2">
                           {thread?.has_unmatched ? (
-                            <AlertCircle className="w-4 h-4 text-rose-600" />
+                            <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400" />
                           ) : (
-                            <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                            <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                           )}
                           <span className="text-slate-600 dark:text-slate-400">SKU Catalog Match</span>
                         </div>
                         <span className={`font-bold px-2 py-0.5 rounded border text-[10px] ${
                           thread?.has_unmatched
-                            ? "text-rose-700 bg-rose-50 border-rose-100"
-                            : "text-emerald-700 bg-emerald-50 border-emerald-100"
+                            ? "text-rose-700 dark:text-rose-400 bg-rose-50 dark:bg-rose-500/10 border-rose-100 dark:border-rose-500/20"
+                            : "text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 border-emerald-100 dark:border-emerald-500/20"
                         }`}>
                           {matchedCount}/{activeItems.length} resolved
                         </span>
@@ -930,7 +930,7 @@ export default function MessagesPage() {
                       {thread?.has_unmatched && (
                         <button
                           onClick={() => { setActiveFeedTab("triage"); handleSelectTriageOrder({ id: activeOrder.id, customer: selectedCustomer?.retailer_name }); }}
-                          className="w-full bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl p-3 flex items-center justify-between text-xs font-bold text-rose-700 transition-all"
+                          className="w-full bg-rose-50 dark:bg-rose-500/10 hover:bg-rose-100 border border-rose-200 dark:border-rose-500/20 rounded-xl p-3 flex items-center justify-between text-xs font-bold text-rose-700 dark:text-rose-400 transition-all"
                         >
                           <span>Resolve unmatched SKUs in Triage</span>
                           <ArrowRight className="w-4 h-4" />
@@ -941,10 +941,10 @@ export default function MessagesPage() {
                 </div>
 
                 {/* Confirm action */}
-                <div className="p-4 border-t border-slate-100 dark:border-white/5 bg-slate-50/50">
+                <div className="p-4 border-t border-slate-100 dark:border-white/5 bg-slate-50/50 dark:bg-dashboard-inset">
                   {isConfirmed ? (
                     <div className="bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl p-4 text-center space-y-3">
-                      <div className="flex items-center justify-center gap-2 text-slate-500 dark:text-slate-500 font-bold text-xs uppercase tracking-wide">
+                      <div className="flex items-center justify-center gap-2 text-slate-500 dark:text-slate-400 font-bold text-xs uppercase tracking-wide">
                         <CheckCircle2 className="w-5 h-5 text-emerald-500" />
                         <span>Order Confirmed</span>
                       </div>
@@ -998,13 +998,13 @@ export default function MessagesPage() {
       {toast.show && (
         <div className={`fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-3 rounded-lg shadow-lg border transition-all duration-300 ${
           toast.type === "success" 
-            ? "bg-emerald-50 text-emerald-800 border-emerald-200" 
-            : "bg-rose-50 text-rose-800 border-rose-200"
+            ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-500/20" 
+            : "bg-rose-50 dark:bg-rose-500/10 text-rose-800 dark:text-rose-300 border-rose-200 dark:border-rose-500/20"
         }`}>
           {toast.type === "success" ? (
-            <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+            <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
           ) : (
-            <AlertCircle className="w-5 h-5 text-rose-600" />
+            <AlertCircle className="w-5 h-5 text-rose-600 dark:text-rose-400" />
           )}
           <span className="text-sm font-semibold">{toast.message}</span>
           <button onClick={() => setToast(prev => ({ ...prev, show: false }))} className="text-slate-400 hover:text-slate-600 ml-2">

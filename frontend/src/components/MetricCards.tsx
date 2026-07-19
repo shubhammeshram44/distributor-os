@@ -40,7 +40,7 @@ export default function MetricCards({ metrics }: MetricCardsProps) {
       isPositive: metrics.total_sales_change >= 0,
       subtext: "vs 14 May – 20 May, 2025",
       icon: IndianRupee,
-      iconBg: "bg-emerald-50 text-emerald-600",
+      iconBg: "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
       strokeColor: "#10b981",
       sparklinePath: "M0,25 Q15,5 30,20 T60,10 T95,15 T130,5 T160,18" // green sparkline
     },
@@ -51,7 +51,7 @@ export default function MetricCards({ metrics }: MetricCardsProps) {
       isPositive: metrics.orders_count_change >= 0,
       subtext: "vs last week",
       icon: ShoppingBag,
-      iconBg: "bg-blue-50 text-blue-600",
+      iconBg: "bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400",
       strokeColor: "#3b82f6",
       sparklinePath: "M0,20 Q15,28 30,10 T60,25 T90,5 T120,15 T160,8" // blue sparkline
     },
@@ -62,7 +62,7 @@ export default function MetricCards({ metrics }: MetricCardsProps) {
       isPositive: metrics.average_order_value_change >= 0,
       subtext: "vs last week",
       icon: BarChart,
-      iconBg: "bg-purple-50 text-purple-600",
+      iconBg: "bg-purple-50 dark:bg-purple-500/10 text-purple-600 dark:text-purple-400",
       strokeColor: "#8b5cf6",
       sparklinePath: "M0,28 Q20,15 40,25 T80,10 T120,20 T160,12" // purple sparkline
     },
@@ -73,7 +73,7 @@ export default function MetricCards({ metrics }: MetricCardsProps) {
       isPositive: metrics.outstanding_collections_change < 0, // Positive is downward for outstanding collections
       subtext: "vs last week",
       icon: CreditCard,
-      iconBg: "bg-orange-50 text-orange-600",
+      iconBg: "bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400",
       strokeColor: "#f97316",
       sparklinePath: "M0,15 Q20,30 40,10 T80,25 T120,5 T160,20" // orange sparkline
     }
@@ -99,7 +99,7 @@ export default function MetricCards({ metrics }: MetricCardsProps) {
             <div className="mt-3 flex items-baseline gap-2">
               <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">{card.value}</h2>
               <div className={`flex items-center gap-0.5 text-xs font-bold ${
-                card.isPositive ? "text-emerald-600" : "text-rose-600"
+                card.isPositive ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"
               }`}>
                 {card.isPositive ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
                 <span>{card.change}</span>

@@ -393,19 +393,19 @@ export default function IntegrationsPage() {
                 <div className="p-6 space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-500 mb-2 uppercase tracking-wider">
+                      <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-wider">
                         Business Name
                       </label>
                       <input
                         type="text"
                         value={businessName}
                         onChange={(e) => setBusinessName(e.target.value)}
-                        className="w-full px-4 py-2.5 border border-slate-200 dark:border-white/10 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-slate-50/20 text-slate-700 dark:text-slate-300"
+                        className="w-full px-4 py-2.5 border border-slate-200 dark:border-white/10 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-slate-50/20 dark:bg-white/5 text-slate-700 dark:text-slate-300"
                         disabled={savingProfile}
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-500 mb-2 uppercase tracking-wider">
+                      <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-wider">
                         GSTIN <span className="normal-case font-medium text-slate-400">(optional)</span>
                       </label>
                       <input
@@ -414,7 +414,7 @@ export default function IntegrationsPage() {
                         value={businessGstin}
                         onChange={(e) => setBusinessGstin(e.target.value.toUpperCase())}
                         maxLength={15}
-                        className="w-full px-4 py-2.5 border border-slate-200 dark:border-white/10 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-slate-50/20 text-slate-700 dark:text-slate-300 uppercase"
+                        className="w-full px-4 py-2.5 border border-slate-200 dark:border-white/10 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-slate-50/20 dark:bg-white/5 text-slate-700 dark:text-slate-300 uppercase"
                         disabled={savingProfile}
                       />
                     </div>
@@ -438,7 +438,7 @@ export default function IntegrationsPage() {
               <div className="bg-white dark:bg-dashboard-card rounded-xl border border-slate-200 dark:border-white/10 shadow-sm overflow-hidden">
                 <div className="p-6 border-b border-slate-100 dark:border-white/5 flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                    <div className="w-10 h-10 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
                       <Link2 className="w-5 h-5" />
                     </div>
                     <div>
@@ -450,12 +450,12 @@ export default function IntegrationsPage() {
                   </div>
                   <div>
                     {isConnected ? (
-                      <span className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 px-3 py-1 rounded-full text-xs font-bold shadow-sm">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                      <span className="inline-flex items-center gap-1.5 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20 px-3 py-1 rounded-full text-xs font-bold shadow-sm">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                         <span>Connected</span>
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1.5 bg-slate-50 dark:bg-dashboard-inset text-slate-500 dark:text-slate-500 border border-slate-200 dark:border-white/10 px-3 py-1 rounded-full text-xs font-bold">
+                      <span className="inline-flex items-center gap-1.5 bg-slate-50 dark:bg-dashboard-inset text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-white/10 px-3 py-1 rounded-full text-xs font-bold">
                         <Lock className="w-4 h-4 text-slate-400" />
                         <span>Not Configured</span>
                       </span>
@@ -464,11 +464,11 @@ export default function IntegrationsPage() {
                 </div>
 
                 <div className="p-6 space-y-6">
-                  <div className="bg-slate-50 dark:bg-dashboard-inset border border-slate-200/60 rounded-xl p-4 flex gap-3 text-slate-600 dark:text-slate-400 text-xs leading-relaxed font-semibold">
+                  <div className="bg-slate-50 dark:bg-dashboard-inset border border-slate-200/60 dark:border-white/8 rounded-xl p-4 flex gap-3 text-slate-600 dark:text-slate-400 text-xs leading-relaxed font-semibold">
                     <AlertCircle className="w-5 h-5 text-brand-blue flex-shrink-0 mt-0.5" />
                     <div>
                       <span className="text-slate-800 dark:text-slate-100 font-bold">Configuration Instructions:</span>
-                      <ul className="list-disc pl-4 mt-1.5 space-y-1 text-slate-500 dark:text-slate-500 font-medium">
+                      <ul className="list-disc pl-4 mt-1.5 space-y-1 text-slate-500 dark:text-slate-400 font-medium">
                         <li>Retrieve your <span className="font-semibold text-slate-700 dark:text-slate-300">Phone Number ID</span> from your Meta Developer Portal under WhatsApp &gt; API Setup.</li>
                         <li>Generate a <span className="font-semibold text-slate-700 dark:text-slate-300">Permanent Access Token</span> from your Meta Business Suite System User Settings.</li>
                         <li>Incoming webhooks will resolve this tenant ID using the configured Phone Number ID.</li>
@@ -479,7 +479,7 @@ export default function IntegrationsPage() {
                   <form onSubmit={handleSubmit} className="space-y-5">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                       <div className="relative">
-                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-500 mb-1.5 uppercase tracking-wide">
+                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5 uppercase tracking-wide">
                           WhatsApp Phone Number ID *
                         </label>
                         <div className="relative rounded-lg shadow-sm">
@@ -505,7 +505,7 @@ export default function IntegrationsPage() {
                       </div>
 
                       <div className="relative">
-                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-500 mb-1.5 uppercase tracking-wide">
+                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5 uppercase tracking-wide">
                           Permanent Access Token *
                         </label>
                         <div className="relative rounded-lg shadow-sm">
@@ -557,7 +557,7 @@ export default function IntegrationsPage() {
               <div className="bg-white dark:bg-dashboard-card rounded-xl border border-slate-200 dark:border-white/10 shadow-sm overflow-hidden mt-6">
                 <div className="p-6 border-b border-slate-100 dark:border-white/5 flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+                    <div className="w-10 h-10 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold">
                       EV
                     </div>
                     <div>
@@ -569,28 +569,28 @@ export default function IntegrationsPage() {
                   </div>
                   <div>
                     {provisioningStatus === "connected" ? (
-                      <span className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 px-3 py-1 rounded-full text-xs font-bold shadow-sm">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                      <span className="inline-flex items-center gap-1.5 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20 px-3 py-1 rounded-full text-xs font-bold shadow-sm">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                         <span>Connected</span>
                       </span>
                     ) : provisioningStatus === "connecting" ? (
-                      <span className="inline-flex items-center gap-1.5 bg-amber-50 text-amber-700 border border-amber-200 px-3 py-1 rounded-full text-xs font-bold shadow-sm animate-pulse">
-                        <Loader2 className="w-4 h-4 animate-spin text-amber-600" />
+                      <span className="inline-flex items-center gap-1.5 bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/20 px-3 py-1 rounded-full text-xs font-bold shadow-sm animate-pulse">
+                        <Loader2 className="w-4 h-4 animate-spin text-amber-600 dark:text-amber-400" />
                         <span>Connecting (Scan QR)</span>
                       </span>
                     ) : provisioningStatus === "provisioning" ? (
-                      <span className="inline-flex items-center gap-1.5 bg-blue-50 text-blue-700 border border-blue-200 px-3 py-1 rounded-full text-xs font-bold shadow-sm animate-pulse">
-                        <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+                      <span className="inline-flex items-center gap-1.5 bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20 px-3 py-1 rounded-full text-xs font-bold shadow-sm animate-pulse">
+                        <Loader2 className="w-4 h-4 animate-spin text-blue-600 dark:text-blue-400" />
                         <span>Provisioning...</span>
                       </span>
                     ) : provisioningStatus === "disconnected" ? (
-                      <span className="inline-flex items-center gap-1.5 bg-red-50 text-red-700 border border-red-200 px-3 py-1 rounded-full text-xs font-bold shadow-sm">
-                        <XCircle className="w-4 h-4 text-red-600" />
+                      <span className="inline-flex items-center gap-1.5 bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-500/20 px-3 py-1 rounded-full text-xs font-bold shadow-sm">
+                        <XCircle className="w-4 h-4 text-red-600 dark:text-red-400" />
                         <span>Disconnected</span>
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1.5 bg-rose-50 text-rose-700 border border-rose-200 px-3 py-1 rounded-full text-xs font-bold shadow-sm">
-                        <XCircle className="w-4 h-4 text-rose-600" />
+                      <span className="inline-flex items-center gap-1.5 bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-500/20 px-3 py-1 rounded-full text-xs font-bold shadow-sm">
+                        <XCircle className="w-4 h-4 text-rose-600 dark:text-rose-400" />
                         <span>Not Connected</span>
                       </span>
                     )}
@@ -600,16 +600,16 @@ export default function IntegrationsPage() {
                 <div className="p-6 space-y-6">
                   {provisioningStatus === "connected" ? (
                     <div className="space-y-4">
-                      <div className="bg-slate-50 dark:bg-dashboard-inset border border-slate-200/60 rounded-xl p-4 flex flex-col gap-2">
+                      <div className="bg-slate-50 dark:bg-dashboard-inset border border-slate-200/60 dark:border-white/8 rounded-xl p-4 flex flex-col gap-2">
                         <div className="flex justify-between items-center">
-                          <span className="text-xs font-bold text-slate-500 dark:text-slate-500 uppercase tracking-wide">Connected Phone Number</span>
+                          <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Connected Phone Number</span>
                           <span className="text-sm font-bold text-slate-800 dark:text-slate-100">
                             +{displayPhone.replace("+", "")}
                           </span>
                         </div>
-                        <div className="flex justify-between items-center border-t border-slate-200/60 pt-2 mt-1">
-                          <span className="text-xs font-bold text-slate-500 dark:text-slate-500 uppercase tracking-wide">Instance ID</span>
-                          <span className="text-xs font-semibold text-slate-500 dark:text-slate-500 font-mono">
+                        <div className="flex justify-between items-center border-t border-slate-200/60 dark:border-white/8 pt-2 mt-1">
+                          <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Instance ID</span>
+                          <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 font-mono">
                             {instanceName}
                           </span>
                         </div>
@@ -627,11 +627,11 @@ export default function IntegrationsPage() {
                     </div>
                   ) : provisioningStatus === "disconnected" ? (
                     <div className="space-y-4">
-                      <div className="bg-red-50 border border-red-200 rounded-xl p-5">
+                      <div className="bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 rounded-xl p-5">
                         <div className="flex items-start gap-3">
                           <XCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
                           <div>
-                            <p className="text-sm font-bold text-red-700">
+                            <p className="text-sm font-bold text-red-700 dark:text-red-400">
                               WhatsApp Disconnected
                             </p>
                             <p className="text-xs text-red-500 mt-1 leading-relaxed">
@@ -647,9 +647,9 @@ export default function IntegrationsPage() {
                         </div>
                       </div>
 
-                      <div className="bg-slate-50 dark:bg-dashboard-inset border border-slate-200/60 rounded-xl p-4 text-xs text-slate-500 dark:text-slate-500 leading-relaxed font-semibold">
+                      <div className="bg-slate-50 dark:bg-dashboard-inset border border-slate-200/60 dark:border-white/8 rounded-xl p-4 text-xs text-slate-500 dark:text-slate-400 leading-relaxed font-semibold">
                         <p className="font-semibold text-slate-700 dark:text-slate-300 mb-1">To reconnect:</p>
-                        <ol className="list-decimal pl-4 space-y-1 text-slate-500 dark:text-slate-500 font-medium">
+                        <ol className="list-decimal pl-4 space-y-1 text-slate-500 dark:text-slate-400 font-medium">
                           <li>Click "Reconnect WhatsApp" below</li>
                           <li>Scan the QR code with your WhatsApp</li>
                           <li>Orders will resume automatically</li>
@@ -657,8 +657,8 @@ export default function IntegrationsPage() {
                       </div>
 
                       {evolutionError && (
-                        <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl text-xs font-semibold text-rose-800 flex items-center gap-2">
-                          <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                        <div className="p-4 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 rounded-xl text-xs font-semibold text-rose-800 dark:text-rose-300 flex items-center gap-2">
+                          <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
                           <span>{evolutionError}</span>
                         </div>
                       )}
@@ -676,11 +676,11 @@ export default function IntegrationsPage() {
                     </div>
                   ) : (
                     <>
-                      <div className="bg-slate-50 dark:bg-dashboard-inset border border-slate-200/60 rounded-xl p-4 flex gap-3 text-slate-600 dark:text-slate-400 text-xs leading-relaxed font-semibold">
+                      <div className="bg-slate-50 dark:bg-dashboard-inset border border-slate-200/60 dark:border-white/8 rounded-xl p-4 flex gap-3 text-slate-600 dark:text-slate-400 text-xs leading-relaxed font-semibold">
                         <AlertCircle className="w-5 h-5 text-brand-blue flex-shrink-0 mt-0.5" />
                         <div>
                           <span className="text-slate-800 dark:text-slate-100 font-bold">Evolution API Connection Instructions:</span>
-                          <ul className="list-disc pl-4 mt-1.5 space-y-1 text-slate-500 dark:text-slate-500 font-medium">
+                          <ul className="list-disc pl-4 mt-1.5 space-y-1 text-slate-500 dark:text-slate-400 font-medium">
                             <li>Click "Connect WhatsApp" to initialize the connection.</li>
                             <li>The system will auto-generate a unique instance ID for your workspace.</li>
                             <li>Scan the generated QR code using the "Link a Device" option in your WhatsApp app.</li>
@@ -692,7 +692,7 @@ export default function IntegrationsPage() {
                       <form onSubmit={handleProvisionEvolution} className="space-y-5">
                         {qrCodeBase64 && (provisioningStatus === "connecting" || provisioningStatus === "provisioning") && (
                           <div className="flex flex-col items-center justify-center p-6 bg-slate-50 dark:bg-dashboard-inset border border-dashed border-slate-200 dark:border-white/10 rounded-xl space-y-4">
-                            <p className="text-xs font-bold text-slate-500 dark:text-slate-500 uppercase tracking-wide">Scan this QR code with WhatsApp</p>
+                            <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Scan this QR code with WhatsApp</p>
                             <div className="bg-white dark:bg-dashboard-card p-4 rounded-xl shadow-md border border-slate-100 dark:border-white/5">
                               <img src={qrCodeBase64} alt="WhatsApp QR Code" className="w-48 h-48" />
                             </div>
@@ -704,8 +704,8 @@ export default function IntegrationsPage() {
                         )}
 
                         {evolutionError && (
-                          <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl text-xs font-semibold text-rose-800 flex items-center gap-2">
-                            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                          <div className="p-4 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 rounded-xl text-xs font-semibold text-rose-800 dark:text-rose-300 flex items-center gap-2">
+                            <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
                             <span>{evolutionError}</span>
                           </div>
                         )}
@@ -740,12 +740,12 @@ export default function IntegrationsPage() {
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-dashboard-card rounded-2xl shadow-xl max-w-md w-full border border-slate-100 dark:border-white/5 p-6 space-y-6 animate-in fade-in zoom-in duration-200">
             <div className="flex items-start gap-4">
-              <div className="p-3 bg-rose-50 rounded-full text-rose-600">
+              <div className="p-3 bg-rose-50 dark:bg-rose-500/10 rounded-full text-rose-600 dark:text-rose-400">
                 <AlertCircle className="w-6 h-6" />
               </div>
               <div className="space-y-1.5">
                 <h3 className="text-base font-bold text-slate-950">Disconnect WhatsApp</h3>
-                <p className="text-sm text-slate-500 dark:text-slate-500 font-medium leading-relaxed font-semibold">
+                <p className="text-sm text-slate-500 dark:text-slate-400 font-medium leading-relaxed font-semibold">
                   This will disconnect your WhatsApp. New orders will stop coming in. Are you sure?
                 </p>
               </div>
@@ -784,8 +784,8 @@ export default function IntegrationsPage() {
         <div className="fixed bottom-5 right-5 z-50 animate-slide-in">
           <div className={`flex items-center gap-3 px-5 py-3 rounded-lg border shadow-xl bg-white dark:bg-dashboard-card ${
             toast.type === "success" 
-              ? "border-emerald-200 text-emerald-800" 
-              : "border-rose-200 text-rose-800"
+              ? "border-emerald-200 dark:border-emerald-500/20 text-emerald-800 dark:text-emerald-300" 
+              : "border-rose-200 dark:border-rose-500/20 text-rose-800 dark:text-rose-300"
           }`}>
             <span className="text-lg">
               {toast.type === "success" ? "✓" : "⚠"}

@@ -283,7 +283,7 @@ export default function CollectionsPage() {
 
           {/* Grid Layout of Debtors */}
           <div className="bg-white dark:bg-dashboard-card rounded-xl border border-dashboard-border shadow-sm flex flex-col min-h-[400px]">
-            <div className="p-5 border-b border-dashboard-border flex items-center justify-between bg-slate-50/50 rounded-t-xl gap-4">
+            <div className="p-5 border-b border-dashboard-border flex items-center justify-between bg-slate-50/50 dark:bg-dashboard-inset rounded-t-xl gap-4">
               <div className="relative max-w-sm w-full">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input
@@ -304,15 +304,15 @@ export default function CollectionsPage() {
               {loading ? (
                 <div className="flex flex-col items-center justify-center py-24 gap-3">
                   <Loader2 className="w-8 h-8 text-brand-blue animate-spin" />
-                  <span className="text-sm font-semibold text-slate-500 dark:text-slate-500">Loading collection records...</span>
+                  <span className="text-sm font-semibold text-slate-500 dark:text-slate-400">Loading collection records...</span>
                 </div>
               ) : error ? (
-                <div className="flex flex-col items-center justify-center py-24 gap-3 text-rose-600">
+                <div className="flex flex-col items-center justify-center py-24 gap-3 text-rose-600 dark:text-rose-400">
                   <AlertCircle className="w-8 h-8" />
                   <span className="text-sm font-semibold">{error}</span>
                   <button
                     onClick={() => fetchCustomers(activeTenantId)}
-                    className="mt-2 px-4 py-2 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg text-xs font-bold hover:bg-rose-100 transition-all cursor-pointer"
+                    className="mt-2 px-4 py-2 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 text-rose-700 dark:text-rose-400 rounded-lg text-xs font-bold hover:bg-rose-100 transition-all cursor-pointer"
                   >
                     Try Again
                   </button>
@@ -325,7 +325,7 @@ export default function CollectionsPage() {
               ) : (
                 <table className="w-full text-left text-sm border-collapse">
                   <thead>
-                    <tr className="text-slate-400 font-semibold text-xs border-b border-dashboard-border bg-slate-50/50">
+                    <tr className="text-slate-400 font-semibold text-xs border-b border-dashboard-border bg-slate-50/50 dark:bg-dashboard-inset">
                       <th className="py-3 px-6">Customer Code</th>
                       <th className="py-3 px-6">Store Name</th>
                       <th className="py-3 px-6 text-right">Credit Limit</th>
@@ -352,21 +352,21 @@ export default function CollectionsPage() {
                             {formatCurrency(c.credit_limit)}
                           </td>
                           <td className="py-4 px-6 text-right font-extrabold text-slate-800 dark:text-slate-100">
-                            <span className={c.outstanding_balance > 0 ? "text-rose-600" : "text-emerald-600"}>
+                            <span className={c.outstanding_balance > 0 ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400"}>
                               {formatCurrency(c.outstanding_balance)}
                             </span>
                           </td>
                           <td className="py-4 px-6 text-center">
                             {c.outstanding_balance <= 0 ? (
-                              <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-full text-[10px] font-bold">
+                              <span className="inline-flex items-center gap-1 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20 px-2.5 py-1 rounded-full text-[10px] font-bold">
                                 No Liability
                               </span>
                             ) : percentage >= 90 ? (
-                              <span className="inline-flex items-center gap-1 bg-rose-50 text-rose-700 border border-rose-200 px-2.5 py-1 rounded-full text-[10px] font-bold animate-pulse">
+                              <span className="inline-flex items-center gap-1 bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-500/20 px-2.5 py-1 rounded-full text-[10px] font-bold animate-pulse">
                                 Critical Debt
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1 rounded-full text-[10px] font-bold">
+                              <span className="inline-flex items-center gap-1 bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/20 px-2.5 py-1 rounded-full text-[10px] font-bold">
                                 Active Liability
                               </span>
                             )}
@@ -374,7 +374,7 @@ export default function CollectionsPage() {
                           <td className="py-4 px-6 text-center">
                             <button
                               onClick={() => handleOpenPaymentHistory(c)}
-                              className="inline-flex items-center gap-1 bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 px-2.5 py-1 rounded-lg text-[10px] font-bold cursor-pointer transition-all shadow-sm"
+                              className="inline-flex items-center gap-1 bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 text-blue-700 dark:text-blue-400 hover:bg-blue-100 px-2.5 py-1 rounded-lg text-[10px] font-bold cursor-pointer transition-all shadow-sm"
                               title="Payment History"
                             >
                               <CreditCard className="w-3 h-3" />
@@ -423,21 +423,21 @@ export default function CollectionsPage() {
               ) : paymentHistory.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-40 text-center gap-2">
                   <CreditCard className="w-8 h-8 text-slate-300" />
-                  <p className="text-sm font-semibold text-slate-500 dark:text-slate-500">No payments recorded</p>
+                  <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">No payments recorded</p>
                   <p className="text-xs text-slate-400">Vouchers will appear here once recorded</p>
                 </div>
               ) : (
                 paymentHistory.map((p: any, i: number) => (
-                  <div key={i} className="p-3 rounded-xl border border-dashboard-border bg-slate-50/50 flex flex-col gap-1.5">
+                  <div key={i} className="p-3 rounded-xl border border-dashboard-border bg-slate-50/50 dark:bg-dashboard-inset flex flex-col gap-1.5">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold font-mono text-slate-700 dark:text-slate-300">
                         {p.payment_code || p.id?.slice(0, 8)}
                       </span>
-                      <span className="text-xs font-extrabold text-emerald-700">
+                      <span className="text-xs font-extrabold text-emerald-700 dark:text-emerald-400">
                         ₹{Number(p.total_amount ?? p.amount ?? 0).toLocaleString("en-IN")}
                       </span>
                     </div>
-                    <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-500">
+                    <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
                       <span>{p.method || p.payment_method || "—"}</span>
                       <span>
                         {p.created_at
@@ -480,7 +480,7 @@ export default function CollectionsPage() {
 
             <form onSubmit={handleVoucherSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-500 mb-1.5 uppercase">Select Customer *</label>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5 uppercase">Select Customer *</label>
                 <select
                   value={selectedCustomerId}
                   onChange={(e) => setSelectedCustomerId(e.target.value)}
@@ -497,7 +497,7 @@ export default function CollectionsPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-500 mb-1.5 uppercase">Payment Method *</label>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5 uppercase">Payment Method *</label>
                 <select
                   value={paymentMethod}
                   onChange={(e) => setPaymentMethod(e.target.value)}
@@ -512,7 +512,7 @@ export default function CollectionsPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-500 mb-1.5 uppercase">Amount Received (₹) *</label>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5 uppercase">Amount Received (₹) *</label>
                 <input
                   type="number"
                   step="0.01"
@@ -525,7 +525,7 @@ export default function CollectionsPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-500 dark:text-slate-500 mb-1.5 uppercase">Reference Number (Optional)</label>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5 uppercase">Reference Number (Optional)</label>
                 <input
                   type="text"
                   value={referenceNumber}
@@ -567,17 +567,17 @@ export default function CollectionsPage() {
       {toast.show && (
         <div className="fixed top-5 right-5 z-50 flex items-center gap-3 bg-white/95 dark:bg-dashboard-card/95 backdrop-blur-md border border-slate-100 dark:border-white/5 shadow-2xl px-4 py-3.5 rounded-xl animate-slide-in pointer-events-auto max-w-sm">
           {toast.type === "success" ? (
-            <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0 shadow-sm">
+            <div className="w-8 h-8 rounded-full bg-emerald-50 dark:bg-emerald-500/10 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0 shadow-sm">
               <CheckCircle2 className="w-4.5 h-4.5" />
             </div>
           ) : (
-            <div className="w-8 h-8 rounded-full bg-rose-50 flex items-center justify-center text-rose-600 shrink-0 shadow-sm">
+            <div className="w-8 h-8 rounded-full bg-rose-50 dark:bg-rose-500/10 flex items-center justify-center text-rose-600 dark:text-rose-400 shrink-0 shadow-sm">
               <AlertCircle className="w-4.5 h-4.5" />
             </div>
           )}
           <div className="flex-1 min-w-0">
             <p className="text-xs font-bold text-slate-800 dark:text-slate-100">{toast.type === "success" ? "Success" : "Error"}</p>
-            <p className="text-[11px] text-slate-500 dark:text-slate-500 font-semibold mt-0.5 break-words">{toast.message}</p>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold mt-0.5 break-words">{toast.message}</p>
           </div>
           <button
             onClick={() => setToast(prev => ({ ...prev, show: false }))}

@@ -43,7 +43,7 @@ export default function StatusBadge({ status, size = "sm" }: StatusBadgeProps) {
   const styles = VARIANT_STYLES[status] || "bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-400";
   const sizeClass = size === "md" ? "px-3 py-1 text-xs" : "px-2.5 py-0.5 text-[11px]";
   return (
-    <span className={`inline-flex items-center font-semibold rounded-full ${sizeClass} ${styles}`}>
+    <span className={`inline-flex items-center whitespace-nowrap font-semibold rounded-full ${sizeClass} ${styles}`}>
       {status}
     </span>
   );

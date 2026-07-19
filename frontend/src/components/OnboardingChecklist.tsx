@@ -91,7 +91,7 @@ export default function OnboardingChecklist({ activeTenantId }: OnboardingCheckl
     <div className="bg-white dark:bg-dashboard-card rounded-xl border border-dashboard-border shadow-sm overflow-hidden">
       <div className="p-5 flex items-start justify-between gap-4 border-b border-slate-100 dark:border-white/5">
         <div className="flex items-start gap-3">
-          <div className="w-10 h-10 rounded-lg bg-blue-50 text-brand-blue flex items-center justify-center shrink-0">
+          <div className="w-10 h-10 rounded-lg bg-blue-50 dark:bg-blue-500/10 text-brand-blue flex items-center justify-center shrink-0">
             <Rocket className="w-5 h-5" />
           </div>
           <div>

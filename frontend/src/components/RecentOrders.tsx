@@ -153,7 +153,7 @@ export default function RecentOrders({
           <div className="overflow-y-auto max-h-[260px] w-full text-left">
             <table className="w-full text-left text-sm border-collapse">
               <thead>
-                <tr className="text-slate-400 font-semibold text-xs border-b border-dashboard-border bg-slate-50/50">
+                <tr className="text-slate-400 font-semibold text-xs border-b border-dashboard-border bg-slate-50/50 dark:bg-transparent">
                   <th className="py-3 px-4">Order ID</th>
                   <th className="py-3 px-4">Customer</th>
                   <th className="py-3 px-4 text-center">Channel</th>
@@ -180,11 +180,11 @@ export default function RecentOrders({
                     <td className="py-3.5 px-4 text-center">
                       <div className="flex items-center justify-center">
                         {order.channel.toLowerCase() === "whatsapp" ? (
-                          <div className="w-7 h-7 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 shadow-sm" title="WhatsApp Channel">
+                          <div className="w-7 h-7 rounded-full bg-emerald-50 dark:bg-emerald-500/10 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shadow-sm" title="WhatsApp Channel">
                             <MessageSquare className="w-4 h-4" />
                           </div>
                         ) : (
-                          <div className="w-7 h-7 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 shadow-sm" title="Portal Channel">
+                          <div className="w-7 h-7 rounded-full bg-blue-50 dark:bg-blue-500/10 flex items-center justify-center text-blue-600 dark:text-blue-400 shadow-sm" title="Portal Channel">
                             <Globe className="w-4 h-4" />
                           </div>
                         )}
@@ -200,7 +200,7 @@ export default function RecentOrders({
                         const hasShortfall = totalAllocated < totalRequested;
                         if (order.status === "Confirmed" && hasShortfall) {
                           return (
-                            <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-full text-xs font-bold leading-none bg-amber-50 text-amber-700 border border-amber-200">
+                            <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-full text-xs font-bold leading-none bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/20">
                               Confirmed ({totalAllocated} of {totalRequested} allocated)
                             </span>
                           );
@@ -208,18 +208,18 @@ export default function RecentOrders({
                         return (
                           <span className={`inline-flex items-center justify-center px-2.5 py-1 rounded-full text-xs font-bold leading-none ${
                             order.status === "Confirmed"
-                              ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                              : "bg-amber-50 text-amber-700 border border-amber-200"
+                              ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20"
+                              : "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/20"
                           }`}>
                             {order.status}
                           </span>
                         );
                       })()}
                     </td>
-                    <td className="py-3.5 px-4 text-xs font-semibold text-slate-500 dark:text-slate-500">
+                    <td className="py-3.5 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400">
                       {formatDateTime(order.created_on, "datetime")}
                     </td>
-                    <td className="py-3.5 px-4 text-xs font-semibold text-slate-500 dark:text-slate-500">
+                    <td className="py-3.5 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400">
                       {formatDateTime(order.eta, "datetime")}
                     </td>
                   </tr>
@@ -267,7 +267,7 @@ export default function RecentOrders({
               {loadingDetails ? (
                 <div className="flex flex-col items-center justify-center h-48 gap-3">
                   <Loader2 className="w-8 h-8 text-brand-blue animate-spin" />
-                  <span className="text-sm font-semibold text-slate-500 dark:text-slate-500">Loading line items...</span>
+                  <span className="text-sm font-semibold text-slate-500 dark:text-slate-400">Loading line items...</span>
                 </div>
               ) : selectedOrderDetails ? (
                 <>
@@ -275,12 +275,12 @@ export default function RecentOrders({
                   {selectedOrderDetails.map((item, idx) => {
                     const isUnmatched = item.sku_id === "UNMATCHED_SKU" || item.sku_id === "UNMATCHED_TRIAGE_SKU";
                     return (
-                      <div key={idx} className="p-4 rounded-xl border border-dashboard-border bg-slate-50/50 flex flex-col justify-between gap-2">
+                      <div key={idx} className="p-4 rounded-xl border border-dashboard-border bg-slate-50/50 dark:bg-dashboard-inset flex flex-col justify-between gap-2">
                         <div className="flex items-start justify-between">
                           <div className="flex-1 pr-4">
                             {isUnmatched ? (
                               <div className="space-y-2">
-                                <p className="font-bold text-sm text-rose-600 flex items-center gap-1.5 animate-pulse">
+                                <p className="font-bold text-sm text-rose-600 dark:text-rose-400 flex items-center gap-1.5 animate-pulse">
                                   <AlertCircle className="w-4 h-4 shrink-0" />
                                   <span>Unmatched Line Item</span>
                                 </p>
@@ -295,7 +295,7 @@ export default function RecentOrders({
                                       handleResolveItem(item.id, e.target.value, item.quantity);
                                     }
                                   }}
-                                  className="w-full mt-1 p-2 border border-rose-200 rounded-lg text-xs bg-white dark:bg-dashboard-card text-slate-700 dark:text-slate-300 font-semibold focus:outline-none focus:ring-1 focus:ring-rose-500 cursor-pointer animate-pulse"
+                                  className="w-full mt-1 p-2 border border-rose-200 dark:border-rose-500/20 rounded-lg text-xs bg-white dark:bg-dashboard-card text-slate-700 dark:text-slate-300 font-semibold focus:outline-none focus:ring-1 focus:ring-rose-500 cursor-pointer animate-pulse"
                                 >
                                   <option value="">-- Select SKU --</option>
                                   {productsList.map((p) => (
@@ -316,10 +316,10 @@ export default function RecentOrders({
                             {item.allocated_quantity !== null && item.allocated_quantity !== undefined && item.allocated_quantity < item.quantity ? (
                               <>
                                 <span className="text-xs font-bold text-slate-400 line-through">Requested: {item.quantity}</span>
-                                <span className="text-xs font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-100 mt-0.5">{item.allocated_quantity} units allocated</span>
+                                <span className="text-xs font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-100 dark:border-amber-500/20 mt-0.5">{item.allocated_quantity} units allocated</span>
                               </>
                             ) : (
-                              <span className="text-xs font-bold text-slate-500 dark:text-slate-500">Qty: {item.quantity}</span>
+                              <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Qty: {item.quantity}</span>
                             )}
                           </div>
                         </div>
@@ -334,11 +334,11 @@ export default function RecentOrders({
 
                   {/* Financial Summary */}
                   <div className="border-t border-slate-200 dark:border-white/10 pt-4 mt-6 space-y-2 text-sm">
-                    <div className="flex justify-between text-slate-500 dark:text-slate-500 font-medium">
+                    <div className="flex justify-between text-slate-500 dark:text-slate-400 font-medium">
                       <span>Subtotal</span>
                       <span>{formatCurrency(selectedOrderDetails.reduce((a, b) => a + b.total_price, 0) / 1.18)}</span>
                     </div>
-                    <div className="flex justify-between text-slate-500 dark:text-slate-500 font-medium">
+                    <div className="flex justify-between text-slate-500 dark:text-slate-400 font-medium">
                       <span>GST (18%)</span>
                       <span>{formatCurrency(selectedOrderDetails.reduce((a, b) => a + b.total_price, 0) * 0.18 / 1.18)}</span>
                     </div>

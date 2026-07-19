@@ -315,7 +315,7 @@ export default function DashboardPage() {
           {isHydrating ? (
             <div className="flex flex-col items-center justify-center py-32 gap-3 bg-white dark:bg-dashboard-card rounded-xl border border-dashboard-border shadow-sm h-[400px]">
               <div className="w-8 h-8 rounded-full border-4 border-slate-200 dark:border-white/10 border-t-brand-blue animate-spin" />
-              <span className="text-sm font-semibold text-slate-500 dark:text-slate-500">Setting up your workspace...</span>
+              <span className="text-sm font-semibold text-slate-500 dark:text-slate-400">Setting up your workspace...</span>
             </div>
           ) : (
             <>
@@ -342,14 +342,14 @@ export default function DashboardPage() {
                 waStatus.has_whatsapp &&
                 !waStatus.whatsapp_connected &&
                 !waBannerDismissed && (
-                  <div className="mx-6 mt-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center justify-between">
+                  <div className="mx-6 mt-4 p-3 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 rounded-lg flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <span className="text-lg">🔴</span>
                       <div>
-                        <span className="text-red-700 font-semibold text-sm">
+                        <span className="text-red-700 dark:text-red-400 font-semibold text-sm">
                           WhatsApp Disconnected
                         </span>
-                        <span className="text-red-600 text-xs ml-2">
+                        <span className="text-red-600 dark:text-red-400 text-xs ml-2">
                           Orders are not being received
                         </span>
                       </div>
@@ -413,16 +413,16 @@ export default function DashboardPage() {
                             Business Health
                           </span>
                           <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                            healthScore.band === "excellent" ? "bg-emerald-50 text-emerald-700" :
-                            healthScore.band === "good" ? "bg-amber-50 text-amber-700" :
-                            healthScore.band === "attention" ? "bg-orange-50 text-orange-700" :
-                            "bg-red-50 text-red-700"
+                            healthScore.band === "excellent" ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" :
+                            healthScore.band === "good" ? "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400" :
+                            healthScore.band === "attention" ? "bg-orange-50 dark:bg-orange-500/10 text-orange-700 dark:text-orange-400" :
+                            "bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400"
                           }`}>
                             {healthScore.band_label}
                           </span>
                           {/* Trend */}
                           <span className={`text-xs font-medium ${
-                            healthScore.trend === "up" ? "text-emerald-600" :
+                            healthScore.trend === "up" ? "text-emerald-600 dark:text-emerald-400" :
                             healthScore.trend === "down" ? "text-red-500" :
                             "text-slate-400"
                           }`}>
@@ -430,7 +430,7 @@ export default function DashboardPage() {
                              healthScore.trend === "down" ? "↓" : "→"}
                           </span>
                         </div>
-                        <p className="text-xs text-slate-500 dark:text-slate-500 mt-1">
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                           {healthScore.primary_insight}
                         </p>
                       </div>
@@ -498,7 +498,7 @@ export default function DashboardPage() {
                     {decisionFocus.decisions.map((decision, idx) => (
                       <div
                         key={decision.type}
-                        className={`flex items-start gap-4 px-6 py-4 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors ${idx === 0 ? "bg-red-50/30" : ""
+                        className={`flex items-start gap-4 px-6 py-4 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors ${idx === 0 ? "bg-red-50/30 dark:bg-red-500/5" : ""
                           }`}
                       >
                         {/* Icon */}
@@ -509,7 +509,7 @@ export default function DashboardPage() {
                           <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">
                             {decision.headline}
                           </p>
-                          <p className="text-xs text-slate-500 dark:text-slate-500 mt-0.5 leading-relaxed">
+                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
                             {decision.detail}
                           </p>
                         </div>
@@ -543,13 +543,13 @@ export default function DashboardPage() {
                             <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
                               ⚠️ Credit Risk Alerts
                             </h3>
-                            <p className="text-xs text-slate-500 dark:text-slate-500 mt-0.5">
+                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                               {creditRisk.total_at_risk_count} customers · 
                               ₹{creditRisk.total_at_risk_amount.toLocaleString("en-IN")} at risk
                             </p>
                           </div>
                           <a href="/dashboard/customers" 
-                             className="text-xs text-emerald-600 font-medium hover:underline">
+                             className="text-xs text-emerald-600 dark:text-emerald-400 font-medium hover:underline">
                             View All →
                           </a>
                         </div>
@@ -557,24 +557,24 @@ export default function DashboardPage() {
                         {/* Risk summary bar */}
                         <div className="flex gap-3 mb-4 p-3 bg-slate-50 dark:bg-dashboard-inset rounded-lg">
                           <div className="flex-1 text-center">
-                            <div className="text-lg font-bold text-red-600">
+                            <div className="text-lg font-bold text-red-600 dark:text-red-400">
                               {creditRisk.alerts.filter(a => a.risk_level === "high_risk").length}
                             </div>
-                            <div className="text-xs text-slate-500 dark:text-slate-500">🔴 High Risk</div>
+                            <div className="text-xs text-slate-500 dark:text-slate-400">🔴 High Risk</div>
                           </div>
                           <div className="w-px bg-slate-200" />
                           <div className="flex-1 text-center">
                             <div className="text-lg font-bold text-amber-500">
                               {creditRisk.alerts.filter(a => a.risk_level === "caution").length}
                             </div>
-                            <div className="text-xs text-slate-500 dark:text-slate-500">🟡 Caution</div>
+                            <div className="text-xs text-slate-500 dark:text-slate-400">🟡 Caution</div>
                           </div>
                           <div className="w-px bg-slate-200" />
                           <div className="flex-1 text-center">
                             <div className="text-lg font-bold text-slate-700 dark:text-slate-300">
                               ₹{(creditRisk.total_at_risk_amount / 1000).toFixed(1)}K
                             </div>
-                            <div className="text-xs text-slate-500 dark:text-slate-500">Total Due</div>
+                            <div className="text-xs text-slate-500 dark:text-slate-400">Total Due</div>
                           </div>
                         </div>
 
@@ -585,8 +585,8 @@ export default function DashboardPage() {
                               key={alert.customer_id}
                               className={`flex items-center gap-3 p-3 rounded-lg border-l-4 ${
                                 alert.risk_level === "high_risk"
-                                  ? "bg-red-50 border-red-400"
-                                  : "bg-amber-50 border-amber-400"
+                                  ? "bg-red-50 dark:bg-red-500/10 border-red-400"
+                                  : "bg-amber-50 dark:bg-amber-500/10 border-amber-400"
                               }`}
                             >
                               <span className="text-base flex-shrink-0">
@@ -611,7 +611,7 @@ export default function DashboardPage() {
                                       }}
                                     />
                                   </div>
-                                  <span className="text-xs text-slate-500 dark:text-slate-500 flex-shrink-0">
+                                  <span className="text-xs text-slate-500 dark:text-slate-400 flex-shrink-0">
                                     {alert.overdue_days}d overdue
                                   </span>
                                 </div>
@@ -620,8 +620,8 @@ export default function DashboardPage() {
                               <div className="text-right flex-shrink-0">
                                 <p className={`text-xs font-bold ${
                                   alert.risk_level === "high_risk" 
-                                    ? "text-red-600" 
-                                    : "text-amber-600"
+                                    ? "text-red-600 dark:text-red-400" 
+                                    : "text-amber-600 dark:text-amber-400"
                                 }`}>
                                   ₹{alert.outstanding.toLocaleString("en-IN")}
                                 </p>
@@ -657,7 +657,7 @@ export default function DashboardPage() {
                     <div className="flex-1 flex flex-col justify-between">
                       <div className="flex items-center justify-between mb-5">
                         <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">📦 Orders Status</h3>
-                        <a href="/dashboard/orders" className="text-xs text-emerald-600 font-medium hover:underline">
+                        <a href="/dashboard/orders" className="text-xs text-emerald-600 dark:text-emerald-400 font-medium hover:underline">
                           View all →
                         </a>
                       </div>
@@ -666,23 +666,23 @@ export default function DashboardPage() {
                           {
                             label: "Pending confirmation",
                             count: orders?.filter((o: any) => o.status === "Pending").length || 0,
-                            color: "text-amber-600",
-                            bg: "bg-amber-50",
+                            color: "text-amber-600 dark:text-amber-400",
+                            bg: "bg-amber-50 dark:bg-amber-500/10",
                             url: "/dashboard/orders?status=Pending",
                             suffix: orders?.filter((o: any) => o.status === "Pending").length > 0 ? "→ Confirm now" : "→ All clear"
                           },
                           {
                             label: "Needs review",
                             count: orders?.filter((o: any) => o.status === "Needs Review").length || 0,
-                            color: "text-red-600",
-                            bg: "bg-red-50",
+                            color: "text-red-600 dark:text-red-400",
+                            bg: "bg-red-50 dark:bg-red-500/10",
                             url: "/dashboard/orders?status=Needs+Review",
                             suffix: "→ Action needed"
                           },
                           {
                             label: "Awaiting stock",
                             count: orders?.filter((o: any) => o.status === "Awaiting Stock").length || 0,
-                            color: "text-slate-500 dark:text-slate-500",
+                            color: "text-slate-500 dark:text-slate-400",
                             bg: "bg-slate-50 dark:bg-dashboard-inset",
                             url: "/dashboard/orders?status=Awaiting+Stock",
                             suffix: "→ Restock needed"
@@ -690,8 +690,8 @@ export default function DashboardPage() {
                           {
                             label: "Dispatched today",
                             count: orders?.filter((o: any) => o.status === "Dispatched").length || 0,
-                            color: "text-blue-600",
-                            bg: "bg-blue-50",
+                            color: "text-blue-600 dark:text-blue-400",
+                            bg: "bg-blue-50 dark:bg-blue-500/10",
                             url: "/dashboard/shipments",
                             suffix: "→ In transit"
                           }
@@ -699,7 +699,7 @@ export default function DashboardPage() {
                           <a 
                             key={item.label}
                             href={item.url}
-                            className={`flex items-center justify-between py-3.5 px-4 rounded-lg ${item.bg} hover:opacity-80 transition-opacity border border-slate-100/50`}
+                            className={`flex items-center justify-between py-3.5 px-4 rounded-lg ${item.bg} hover:opacity-80 transition-opacity border border-slate-100/50 dark:border-white/8`}
                           >
                             <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">{item.label}</span>
                             <div className="flex items-center gap-2">
@@ -824,7 +824,7 @@ export default function DashboardPage() {
                     </h3>
                     <a
                       href="/dashboard/reports"
-                      className="text-xs text-indigo-600 hover:text-indigo-800 transition-colors font-semibold"
+                      className="text-xs text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 transition-colors font-semibold"
                     >
                       View all activity →
                     </a>

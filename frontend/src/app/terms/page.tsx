@@ -5,7 +5,7 @@ import Link from "next/link";
 export default function TermsPage() {
   return (
     <div className="max-w-3xl mx-auto px-6 py-16">
-      <Link href="/" className="text-sm text-indigo-600 hover:text-indigo-800 mb-8 inline-block">
+      <Link href="/" className="text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 mb-8 inline-block">
         ← Back to Home
       </Link>
       <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-50 mb-2">Terms of Service</h1>
@@ -86,10 +86,10 @@ export default function TermsPage() {
 
         <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mt-8 mb-4">Data and Privacy</h2>
         <p className="text-slate-600 dark:text-slate-400 text-sm leading-relaxed mb-4">
-          Your data belongs to you. We store it securely to operate the platform. See our <Link href="/privacy" className="text-indigo-600 hover:underline">Privacy Policy</Link> for full details.
+          Your data belongs to you. We store it securely to operate the platform. See our <Link href="/privacy" className="text-indigo-600 dark:text-indigo-400 hover:underline">Privacy Policy</Link> for full details.
         </p>
         <p className="text-slate-600 dark:text-slate-400 text-sm leading-relaxed mb-4">
-          You can export or delete your data at any time by contacting us at <a href="mailto:contact@distroos.in" className="text-indigo-600 hover:underline">contact@distroos.in</a>.
+          You can export or delete your data at any time by contacting us at <a href="mailto:contact@distroos.in" className="text-indigo-600 dark:text-indigo-400 hover:underline">contact@distroos.in</a>.
         </p>
 
         <hr className="my-8 border-slate-200 dark:border-white/10" />
@@ -128,7 +128,7 @@ export default function TermsPage() {
 
         <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mt-8 mb-4">Termination</h2>
         <p className="text-slate-600 dark:text-slate-400 text-sm leading-relaxed mb-4">
-          <strong>You can cancel anytime</strong> by emailing <a href="mailto:contact@distroos.in" className="text-indigo-600 hover:underline">contact@distroos.in</a>. Your account will remain active until the end of your billing period.
+          <strong>You can cancel anytime</strong> by emailing <a href="mailto:contact@distroos.in" className="text-indigo-600 dark:text-indigo-400 hover:underline">contact@distroos.in</a>. Your account will remain active until the end of your billing period.
         </p>
         <p className="font-semibold text-slate-700 dark:text-slate-300 text-sm mb-2">We may suspend or terminate your account if:</p>
         <ul className="list-disc pl-5 text-slate-600 dark:text-slate-400 text-sm mb-4 space-y-1">
@@ -158,7 +158,7 @@ export default function TermsPage() {
           For any questions about these terms:
         </p>
         <p className="text-slate-600 dark:text-slate-400 text-sm leading-relaxed mb-1">
-          <strong>Email:</strong> <a href="mailto:contact@distroos.in" className="text-indigo-600 hover:underline">contact@distroos.in</a>
+          <strong>Email:</strong> <a href="mailto:contact@distroos.in" className="text-indigo-600 dark:text-indigo-400 hover:underline">contact@distroos.in</a>
         </p>
         <p className="text-slate-600 dark:text-slate-400 text-sm leading-relaxed mb-4">
           <strong>Response time:</strong> Within 2 business days
