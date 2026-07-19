@@ -166,7 +166,8 @@ def process_payment(
     amount: float,
     method: str,
     reference_number: str | None = None,
-    preferred_invoice_id: uuid.UUID | None = None  # NEW
+    preferred_invoice_id: uuid.UUID | None = None,  # NEW
+    commit: bool = True
 ) -> Payment:
     """
     Core handler to process a customer payment, update their outstanding balance,
@@ -239,11 +240,15 @@ def process_payment(
                 tenant_id=tenant_id
             )
 
-        db.commit()
-        db.refresh(payment)
+        if commit:
+            db.commit()
+            db.refresh(payment)
+        else:
+            db.flush()
         return payment
     except Exception as e:
-        db.rollback()
+        if commit:
+            db.rollback()
         raise e
     finally:
         tenant_context.reset(token)

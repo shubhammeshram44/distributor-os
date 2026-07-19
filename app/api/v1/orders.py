@@ -1329,98 +1329,261 @@ class OrderCreatePayload(BaseModel):
     status: str
     items: list[OrderItemCreate]
     invoice_type: str = "UNSPECIFIED"
+    already_delivered: bool = False
+    payment_method: str = "CREDIT"
+    cash_amount_received: float | None = None
+    reference_number: str | None = None
+    idempotency_key: uuid.UUID
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 def create_order(
     payload: OrderCreatePayload,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
     """
     Creates a new order from a structured payload.
     """
     tenant_context.set(payload.tenant_id)
+    from sqlalchemy.exc import IntegrityError
+    from datetime import datetime
+    from app.models.customer import Customer
+    from app.models.tenant import DistributorTenant
+    from app.models.order import OrderStateLedger
+    from app.models.invoice import Invoice
+    from app.models.inventory import Inventory
     
     # Generate unique order ID
-    from datetime import datetime
     generated_order_id = f"ORD-2506-{uuid.uuid4().hex[:4].upper()}"
-    
-    new_order = Order(
-        id=uuid.uuid4(),
-        tenant_id=payload.tenant_id,
-        internal_order_id=generated_order_id,
-        source=payload.source,
-        customer_id=payload.customer_id,
-        invoice_type=payload.invoice_type,
-        created_at=datetime.utcnow()
-    )
-    db.add(new_order)
-    db.flush()
 
-    for item in payload.items:
-        # Fetch or resolve the product by sku_id
-        product = db.query(Product).filter_by(sku_id=item.sku_id).first()
-        if not product:
-            # Create a fallback product
-            product = Product(
-                id=uuid.uuid4(),
-                tenant_id=payload.tenant_id,
-                sku_id=item.sku_id,
-                brand="Generic",
-                category="Grocery",
-                pack_size="1 unit",
-                base_price=item.unit_price
-            )
-            db.add(product)
-            db.flush()
-
-            # Without a matching Inventory row, order_confirmation_service
-            # treats this SKU as having 0 stock and zeroes the line item
-            # out entirely. Seed it with the ordered quantity so this
-            # ad-hoc/fallback product is immediately billable.
-            db.add(Inventory(
-                id=uuid.uuid4(),
-                tenant_id=payload.tenant_id,
-                sku_id=product.id,
-                location="Aisle-A1",
-                quantity_on_hand=item.quantity,
-                quantity_committed=0,
-                low_stock_threshold=10
-            ))
-            db.flush()
-
-        db.add(OrderLineItem(
+    try:
+        new_order = Order(
             id=uuid.uuid4(),
             tenant_id=payload.tenant_id,
-            order_id=new_order.id,
-            product_id=product.id,
-            quantity=item.quantity,
-            unit_price=item.unit_price
-        ))
+            internal_order_id=generated_order_id,
+            source=payload.source,
+            customer_id=payload.customer_id,
+            invoice_type=payload.invoice_type,
+            created_at=datetime.utcnow(),
+            idempotency_key=payload.idempotency_key
+        )
+        db.add(new_order)
+        db.flush()
 
-    db.flush()
+        for item in payload.items:
+            # Fetch or resolve the product by sku_id
+            product = db.query(Product).filter_by(sku_id=item.sku_id).first()
+            if not product:
+                # Create a fallback product
+                product = Product(
+                    id=uuid.uuid4(),
+                    tenant_id=payload.tenant_id,
+                    sku_id=item.sku_id,
+                    brand="Generic",
+                    category="Grocery",
+                    pack_size="1 unit",
+                    base_price=item.unit_price
+                )
+                db.add(product)
+                db.flush()
+
+                # Seed inventory
+                db.add(Inventory(
+                    id=uuid.uuid4(),
+                    tenant_id=payload.tenant_id,
+                    sku_id=product.id,
+                    location="Aisle-A1",
+                    quantity_on_hand=item.quantity,
+                    quantity_committed=0,
+                    low_stock_threshold=10
+                ))
+                db.flush()
+
+            db.add(OrderLineItem(
+                id=uuid.uuid4(),
+                tenant_id=payload.tenant_id,
+                order_id=new_order.id,
+                product_id=product.id,
+                quantity=item.quantity,
+                unit_price=item.unit_price
+            ))
+
+        db.flush()
+        db.refresh(new_order)
+
+        invoice = None
+        if payload.status in ("Confirmed", "Delivered") or payload.already_delivered:
+            from app.services.order_confirmation_service import confirm_order
+            invoice = confirm_order(db, new_order, updated_by="operator")
+        else:
+            # Add ledger transition entry
+            db.add(OrderStateLedger(
+                tenant_id=payload.tenant_id,
+                order_id=new_order.id,
+                from_status=None,
+                to_status=payload.status,
+                updated_by="operator"
+            ))
+            new_order.status = payload.status
+
+        if payload.already_delivered:
+            # Transition status directly to Delivered, skipping pending/confirmed/dispatched progression
+            new_order.status = "Delivered"
+            new_order.delivered_at = datetime.utcnow()
+            new_order.delivery_source = "manual"
+            db.add(OrderStateLedger(
+                tenant_id=payload.tenant_id,
+                order_id=new_order.id,
+                from_status="Confirmed" if invoice else None,
+                to_status="Delivered",
+                updated_by="operator"
+            ))
+            
+            # Release committed inventory since goods are already delivered
+            if invoice:
+                for item in new_order.line_items:
+                    released_qty = item.allocated_quantity if item.allocated_quantity is not None else item.quantity
+                    if released_qty > 0:
+                        inv_record = db.query(Inventory).filter(
+                            Inventory.tenant_id == payload.tenant_id,
+                            Inventory.sku_id == item.product_id
+                        ).first()
+                        if inv_record:
+                            inv_record.quantity_committed = max(0, (inv_record.quantity_committed or 0) - released_qty)
+
+                # Record cash payment using Collections voucher handler with commit=False (deferred commit)
+                if payload.payment_method == "CASH" and payload.cash_amount_received:
+                    from app.services.payment_service import process_payment
+                    process_payment(
+                        db=db,
+                        tenant_id=payload.tenant_id,
+                        customer_id=payload.customer_id,
+                        amount=payload.cash_amount_received,
+                        method="CASH",
+                        reference_number=payload.reference_number,
+                        preferred_invoice_id=invoice.id,
+                        commit=False
+                    )
+
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        # Verify if the integrity error is specifically for the idempotency_key constraint.
+        # SQLite: UNIQUE constraint failed: orders.idempotency_key
+        # Postgres: diag.constraint_name is used, but e.orig is always driver-specific.
+        # String matching is the most robust cross-dialect approach, but we catch
+        # only target "idempotency_key" specifically. Re-raise other IntegrityErrors.
+        if isinstance(e, IntegrityError):
+            err_msg = str(e).lower()
+            if "idempotency_key" in err_msg:
+                # Safe conflict resolution: find and return the existing order
+                existing_order = db.query(Order).filter(
+                    Order.idempotency_key == payload.idempotency_key,
+                    Order.tenant_id == payload.tenant_id
+                ).first()
+                if existing_order:
+                    # Retrieve invoice if it exists
+                    invoice = db.query(Invoice).filter(Invoice.order_id == existing_order.id).first()
+                    payment_link_url = None
+                    if payload.payment_method == "DIGITAL" and invoice:
+                        from app.models.payment_session import PaymentSession
+                        session = db.query(PaymentSession).filter(
+                            PaymentSession.invoice_id == invoice.id,
+                            PaymentSession.status == "ACTIVE"
+                        ).first()
+                        if session:
+                            payment_link_url = session.payment_link_url
+                    
+                    return {
+                        "status": "success",
+                        "order_id": str(existing_order.id),
+                        "internal_order_id": existing_order.internal_order_id,
+                        "new_status": existing_order.status,
+                        "invoice_id": str(invoice.id) if invoice else None,
+                        "payment_link_url": payment_link_url,
+                        "is_duplicate": True
+                    }
+        raise e
+
     db.refresh(new_order)
 
-    if payload.status == "Confirmed":
-        from app.services.order_confirmation_service import confirm_order
-        confirm_order(db, new_order, updated_by="operator")
-    else:
-        # Add ledger transition entry
-        db.add(OrderStateLedger(
-            tenant_id=payload.tenant_id,
-            order_id=new_order.id,
-            from_status=None,
-            to_status=payload.status,
-            updated_by="operator"
-        ))
-        new_order.status = payload.status
+    # ───── POST-COMMIT OPERATIONS (Safe from transaction locks) ─────
+    payment_link_url = None
+    if payload.already_delivered and invoice:
+        # 1. Razorpay Payment link generation for DIGITAL payment method
+        if payload.payment_method == "DIGITAL":
+            try:
+                from app.services.payment_session_service import get_or_create_payment_session
+                customer = db.get(Customer, payload.customer_id)
+                session = get_or_create_payment_session(
+                    db=db,
+                    invoice=invoice,
+                    customer=customer,
+                    order_id=new_order.id,
+                    tenant_id=payload.tenant_id
+                )
+                if session:
+                    payment_link_url = session.payment_link_url
+                    db.commit()
+            except Exception as rp_exc:
+                logger.error("Razorpay session creation failed post-commit: %s", str(rp_exc))
 
-    db.commit()
+        # 2. WhatsApp Delivery Notification (only order_delivered alert)
+        try:
+            customer = db.get(Customer, new_order.customer_id)
+            tenant = db.get(DistributorTenant, new_order.tenant_id)
+            if customer and tenant:
+                engine_bind = db.get_bind()
+
+                def _fire_delivered_notification_task(tenant_id: str, customer_id: str, order_id_str: str, engine):
+                    import asyncio
+                    from sqlalchemy.orm import sessionmaker
+                    from app.services.notification_service import NotificationService
+                    import os
+
+                    SessionLocalTask = sessionmaker(bind=engine)
+                    db_task = SessionLocalTask()
+                    try:
+                        tenant_val = db_task.get(DistributorTenant, tenant_id)
+                        customer_val = db_task.get(Customer, customer_id)
+                        order_val = db_task.get(Order, order_id_str)
+                        if not (tenant_val and customer_val and order_val):
+                            return
+
+                        notification_service = NotificationService(
+                            evolution_base_url=os.getenv("EVOLUTION_API_URL", "http://34.158.60.42:8080"),
+                            api_key=os.getenv("EVOLUTION_API_KEY", "distributorbotkey2026")
+                        )
+                        asyncio.run(notification_service.notify(
+                            event="order_delivered",
+                            tenant=tenant_val,
+                            customer=customer_val,
+                            order=order_val,
+                            db=db_task
+                        ))
+                    except Exception as inner_ex:
+                        logger.warning("Notification fire failed silently: %s", str(inner_ex))
+                    finally:
+                        db_task.close()
+
+                background_tasks.add_task(
+                    _fire_delivered_notification_task,
+                    str(new_order.tenant_id),
+                    str(customer.id),
+                    str(new_order.id),
+                    engine_bind
+                )
+        except Exception as notify_err:
+            logger.warning("Notification background task dispatch failed: %s", str(notify_err))
+
     return {
         "status": "success",
         "order_id": str(new_order.id),
-        "internal_order_id": generated_order_id,
-        "new_status": new_order.current_status
+        "internal_order_id": new_order.internal_order_id,
+        "new_status": new_order.current_status,
+        "invoice_id": str(invoice.id) if invoice else None,
+        "payment_link_url": payment_link_url
     }
 
 

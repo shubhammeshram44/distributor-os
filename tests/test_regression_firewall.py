@@ -529,7 +529,8 @@ def test_partial_allocation_on_create_order_confirm_on_create(db_session, setup_
                 "quantity": 900,
                 "unit_price": 10.0
             }
-        ]
+        ],
+        "idempotency_key": str(uuid.uuid4())
     }
     response = client.post("/api/v1/orders", json=payload)
     assert response.status_code == 201

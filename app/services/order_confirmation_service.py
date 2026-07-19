@@ -137,24 +137,7 @@ def confirm_order(db: Session, order: Order, updated_by: str) -> Invoice | None:
 
     # Matches the original Python `li.allocated_quantity or li.quantity` semantics:
     # falls back to `quantity` when allocated_quantity is NULL *or* 0.
-    _effective_qty = case(
-        (or_(OrderLineItem.allocated_quantity.is_(None), OrderLineItem.allocated_quantity == 0), OrderLineItem.quantity),
-        else_=OrderLineItem.allocated_quantity
-    )
-    confirmed_outstanding = float(db.execute(
-        sa_select(func.sum(_effective_qty * OrderLineItem.unit_price))
-        .join(Order, OrderLineItem.order_id == Order.id)
-        .where(
-            and_(
-                Order.customer_id == order.customer_id,
-                Order.tenant_id == order.tenant_id,
-                Order.id != order.id,
-                Order.status.in_(["Confirmed", "Partially Confirmed", "Awaiting Stock"])
-            )
-        )
-    ).scalar() or 0.0)
-
-    combined = confirmed_outstanding + billing_total
+    combined = float(customer.outstanding_balance) + billing_total
     if combined > float(customer.credit_limit):
         db.add(DemandGap(
             id=uuid.uuid4(),
