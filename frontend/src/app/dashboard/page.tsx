@@ -9,6 +9,7 @@ import CollectionsDonut from "@/components/CollectionsDonut";
 // The component file (LiveDeliveries.tsx) is preserved on disk for future use.
 import InventorySummary from "@/components/InventorySummary";
 import DemandGapCard from "@/components/DemandGapCard";
+import CashFlowForecastCard from "@/components/CashFlowForecastCard";
 // ActivityFeed replaced with simple link (see bottom of dashboard layout)
 import OnboardingChecklist from "@/components/OnboardingChecklist";
 import { useDashboardData, DashboardMetrics } from "@/hooks/useDashboardData";
@@ -947,6 +948,11 @@ export default function DashboardPage() {
                 <div className="flex flex-col h-full">
                   <InventorySummary data={metrics || undefined} />
                 </div>
+              </div>
+
+              {/* Row 5.5: Cash Flow Forecast */}
+              <div className="grid grid-cols-1 gap-6">
+                <CashFlowForecastCard activeTenantId={tenantId} />
               </div>
 
               {/* Row 6: Recent Activity Footer (Hidden for now) */}
