@@ -100,11 +100,15 @@ export default function Sidebar({ activeTab, setActiveTab, tenantName }: Sidebar
       { name: "Reports", icon: FileText, href: "/dashboard/reports" },
       { type: "category", name: "Settings" },
       { name: "Team Settings", icon: Settings, href: "/dashboard/settings/team" },
-      { name: "Integrations", icon: Link2, href: "/dashboard/settings/integrations" },
-      // Restored to always-visible: a stray uncommitted edit that hid this behind
-      // NODE_ENV !== "production" was accidentally shipped in #21 and made this
-      // page (and the WhatsApp connect flow on it) unreachable for real customers.
-      { name: "Integrations V2 (Test)", icon: Link2, href: "/dashboard/settings/integrations-v2" },
+      // Legacy Integrations page is deprecated (superseded by Integrations V2 below).
+      // Kept in the codebase and reachable by direct URL, just hidden from the
+      // nav by default — flip FEATURE_FLAGS.integrationsV1 to bring it back.
+      ...(FEATURE_FLAGS.integrationsV1
+        ? [{ name: "Integrations (Legacy)", icon: Link2, href: "/dashboard/settings/integrations" }]
+        : []),
+      // This was "Integrations V2 (Test)" — now the sole/primary Integrations
+      // page, so it's labeled plainly. Route is unchanged.
+      { name: "Integrations", icon: Link2, href: "/dashboard/settings/integrations-v2" },
       { name: "Notifications", icon: Bell, href: "/dashboard/settings/notifications" },
       { name: "Payments", icon: CreditCard, href: "/dashboard/settings/payments" },
       { name: "Automations", icon: Zap, badge: "Soon" }

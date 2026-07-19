@@ -339,7 +339,7 @@ export default function NotificationsSettingsPage() {
               <div className="space-y-1">
                 <h5 className="text-xs font-bold uppercase text-slate-500 dark:text-slate-400 tracking-wider">Templated Messaging</h5>
                 <p className="text-xs text-slate-400 leading-relaxed">
-                  All alerts use pre-formatted country-code validated templates to optimize delivery success. Ensure your WhatsApp instance is correctly connected via the <a href="/dashboard/settings/integrations" className="text-brand-blue hover:underline">Integrations</a> page.
+                  All alerts use pre-formatted country-code validated templates to optimize delivery success. Ensure your WhatsApp instance is correctly connected via the <a href="/dashboard/settings/integrations-v2" className="text-brand-blue hover:underline">Integrations</a> page.
                 </p>
               </div>
             </div>
