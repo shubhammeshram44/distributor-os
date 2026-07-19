@@ -643,14 +643,14 @@ export default function DashboardPage() {
                             </div>
                             <div className="text-xs text-slate-500 dark:text-slate-400">🔴 High Risk</div>
                           </div>
-                          <div className="w-px bg-slate-200" />
+                          <div className="w-px bg-slate-200 dark:bg-white/10" />
                           <div className="flex-1 text-center">
                             <div className="text-lg font-bold text-amber-500">
                               {creditRisk.alerts.filter(a => a.risk_level === "caution").length}
                             </div>
                             <div className="text-xs text-slate-500 dark:text-slate-400">🟡 Caution</div>
                           </div>
-                          <div className="w-px bg-slate-200" />
+                          <div className="w-px bg-slate-200 dark:bg-white/10" />
                           <div className="flex-1 text-center">
                             <div className="text-lg font-bold text-slate-700 dark:text-slate-300">
                               ₹{(creditRisk.total_at_risk_amount / 1000).toFixed(1)}K
@@ -679,7 +679,7 @@ export default function DashboardPage() {
                                 </p>
 
                                 <div className="flex items-center gap-2 mt-1">
-                                  <div className="flex-1 bg-slate-200 rounded-full h-1.5">
+                                  <div className="flex-1 bg-slate-200 dark:bg-white/10 rounded-full h-1.5">
                                     <div
                                       className={`h-1.5 rounded-full ${alert.risk_level === "high_risk"
                                         ? "bg-red-400"

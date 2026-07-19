@@ -716,7 +716,7 @@ export default function OrdersPage() {
           {/* Status Navigation & Search Bar Card */}
           <div className="bg-white dark:bg-dashboard-card rounded-xl border border-dashboard-border shadow-sm p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
             {/* Tab Filters */}
-            <div className="flex flex-wrap items-center gap-1 bg-slate-100/80 p-1 rounded-xl">
+            <div className="flex flex-wrap items-center gap-1 bg-slate-100/80 dark:bg-white/5 p-1 rounded-xl">
               <button
                 onClick={() => setSelectedStatus("All")}
                 className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${selectedStatus === "All"
@@ -725,7 +725,7 @@ export default function OrdersPage() {
                   }`}
               >
                 <span>All</span>
-                <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${selectedStatus === "All" ? "bg-blue-50 dark:bg-blue-500/10 text-brand-blue" : "bg-slate-200 text-slate-600 dark:text-slate-400"}`}>
+                <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${selectedStatus === "All" ? "bg-blue-50 dark:bg-blue-500/10 text-brand-blue" : "bg-slate-200 dark:bg-white/10 text-slate-600 dark:text-slate-400"}`}>
                   {countAll}
                 </span>
               </button>
@@ -738,7 +738,7 @@ export default function OrdersPage() {
                   }`}
               >
                 <span>Pending</span>
-                <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${selectedStatus === "Pending" ? "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400" : "bg-slate-200 text-slate-600 dark:text-slate-400"}`}>
+                <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${selectedStatus === "Pending" ? "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400" : "bg-slate-200 dark:bg-white/10 text-slate-600 dark:text-slate-400"}`}>
                   {countPending}
                 </span>
               </button>
@@ -751,7 +751,7 @@ export default function OrdersPage() {
                   }`}
               >
                 <span>Confirmed</span>
-                <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${selectedStatus === "Confirmed" ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "bg-slate-200 text-slate-600 dark:text-slate-400"}`}>
+                <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${selectedStatus === "Confirmed" ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "bg-slate-200 dark:bg-white/10 text-slate-600 dark:text-slate-400"}`}>
                   {countConfirmed}
                 </span>
               </button>
@@ -764,7 +764,7 @@ export default function OrdersPage() {
                   }`}
               >
                 <span>Needs Review</span>
-                <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${selectedStatus === "Needs Review" ? "bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400" : "bg-slate-200 text-slate-600 dark:text-slate-400"}`}>
+                <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${selectedStatus === "Needs Review" ? "bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400" : "bg-slate-200 dark:bg-white/10 text-slate-600 dark:text-slate-400"}`}>
                   {countNeedsReview}
                 </span>
               </button>
@@ -1194,10 +1194,10 @@ export default function OrdersPage() {
             <div className="p-6 border-t border-dashboard-border bg-slate-50 dark:bg-dashboard-inset flex flex-col gap-3">
               {riskAssessment && selectedOrder?.status !== "Confirmed" && (
                 <div className={`rounded-lg p-4 mb-4 border ${riskAssessment.level === "high_risk"
-                    ? "bg-red-50 dark:bg-red-500/10 border-red-200 dark:border-red-500/20"
-                    : riskAssessment.level === "caution"
-                      ? "bg-yellow-50 dark:bg-yellow-500/10 border-yellow-200 dark:border-yellow-500/20"
-                      : "bg-green-50 dark:bg-green-500/10 border-green-200 dark:border-green-500/20"
+                  ? "bg-red-50 dark:bg-red-500/10 border-red-200 dark:border-red-500/20"
+                  : riskAssessment.level === "caution"
+                    ? "bg-yellow-50 dark:bg-yellow-500/10 border-yellow-200 dark:border-yellow-500/20"
+                    : "bg-green-50 dark:bg-green-500/10 border-green-200 dark:border-green-500/20"
                   }`}>
                   <div className="flex items-center gap-2 mb-2">
                     <span className="text-lg">

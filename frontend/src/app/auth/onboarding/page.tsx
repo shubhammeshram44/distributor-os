@@ -126,20 +126,18 @@ export default function OnboardingPage() {
 
         <div className="flex items-center justify-between mb-8 pb-6 border-b border-slate-100 dark:border-white/5">
           <div className="flex items-center gap-3">
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
-              step === 1 ? "bg-blue-600 text-white ring-4 ring-blue-100" : "bg-emerald-100 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
-            }`}>
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${step === 1 ? "bg-blue-600 text-white ring-4 ring-blue-100" : "bg-emerald-100 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
+              }`}>
               {step === 1 ? "1" : <CheckCircle2 className="w-5 h-5" />}
             </div>
             <span className={`text-xs font-bold ${step === 1 ? "text-slate-800 dark:text-slate-100" : "text-slate-400"}`}>
               Business Profile
             </span>
           </div>
-          <div className="w-8 h-[2px] bg-slate-200 flex-1 mx-4" />
+          <div className="w-8 h-[2px] bg-slate-200 dark:bg-white/10 flex-1 mx-4" />
           <div className="flex items-center gap-3">
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
-              step === 2 ? "bg-blue-600 text-white ring-4 ring-blue-100" : "bg-slate-100 dark:bg-white/5 text-slate-400"
-            }`}>
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${step === 2 ? "bg-blue-600 text-white ring-4 ring-blue-100" : "bg-slate-100 dark:bg-white/5 text-slate-400"
+              }`}>
               2
             </div>
             <span className={`text-xs font-bold ${step === 2 ? "text-slate-800 dark:text-slate-100" : "text-slate-400"}`}>
