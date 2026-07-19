@@ -669,11 +669,11 @@ def test_whatsapp_webhook_connection_open_auto_sync_only_tenant_fallback(db_sess
     response = client.post("/api/v1/whatsapp/webhook", json=payload)
     assert response.status_code == 200
     
-    # Verify DB update
+    # Verify no DB update (webhook ignored due to strict instance lookup)
     db_session.expire_all()
     updated_tenant = db_session.query(DistributorTenant).one()
-    assert updated_tenant.whatsapp_order_phone == "+919078158448"
-    assert updated_tenant.whatsapp_phone_id == "some-arbitrary-bot"
+    assert updated_tenant.whatsapp_order_phone is None
+    assert updated_tenant.whatsapp_phone_id is None
 
 
 

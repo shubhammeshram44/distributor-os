@@ -271,20 +271,16 @@ async def handle_whatsapp_webhook(
                             from app.utils.phone import normalize_phone_number
                             normalized_phone = normalize_phone_number(owner_phone)
                             
-                            tenant = new_db.query(DistributorTenant).filter(DistributorTenant.whatsapp_phone_id == instance_name).first()
+                            # STRICT LOOKUP: instance name is the definitive tenant identifier
+                            # Never use owner_phone to find a tenant — only use it to UPDATE the found tenant
+                            tenant = new_db.query(DistributorTenant).filter(
+                                DistributorTenant.whatsapp_phone_id == instance_name
+                            ).first()
                             if not tenant and hasattr(DistributorTenant, "whatsapp_instance_name"):
                                 tenant = new_db.query(DistributorTenant).filter(getattr(DistributorTenant, "whatsapp_instance_name") == instance_name).first()
+
+                            # Fallback: derive tenant from instance name prefix (dist-{tenant_id[:8]})
                             if not tenant and instance_name:
-                                # instance_name is deterministically generated with the
-                                # tenant's 8-char id prefix as a suffix after some "-"
-                                # delimited label (e.g. f"dist-{tenant.id[:8]}" from the
-                                # provisioning endpoints; older/other naming variants such
-                                # as "inst-XXXXXXXX" are also matched). Extract that hex id
-                                # prefix and look it up directly with a single query instead
-                                # of loading every tenant row into memory to compare — this
-                                # loop grows linearly with tenant count and runs on the
-                                # connection-open webhook path, which directly delays how
-                                # quickly a user sees "WhatsApp connected".
                                 import re
                                 from sqlalchemy import cast, String
                                 id_match = re.search(r"([0-9a-f]{8})$", instance_name)
@@ -294,58 +290,56 @@ async def handle_whatsapp_webhook(
                                         cast(DistributorTenant.id, String).like(f"{short_id}%")
                                     ).first()
 
-                            # Only use owner_phone fallback if the phone matches AND instance matches
-                            if not tenant and owner_phone:
-                                from app.utils.phone import normalize_phone_number
-                                normalized = normalize_phone_number(owner_phone)
-                                tenant = new_db.query(DistributorTenant).filter(
-                                    DistributorTenant.whatsapp_order_phone == normalized,
-                                    DistributorTenant.whatsapp_phone_id == instance_name  # must match instance too
-                                ).first()
+                            # If tenant not found by instance name — STOP. Never use owner_phone to find tenant.
+                            # owner_phone is only used to UPDATE the tenant's stored phone number below.
                             if not tenant:
-                                if new_db.query(DistributorTenant).count() == 1:
-                                    tenant = new_db.query(DistributorTenant).first()
-                            if tenant:
-                                normalized_owner = normalize_phone_number(owner_phone) if owner_phone else None
-                                if normalized_owner:
-                                    # Only refuse if the new phone belongs to a DIFFERENT tenant
-                                    # Allow update in all other cases — including when distributor
-                                    # intentionally reconnects with a new number
-                                    other_tenant = new_db.query(DistributorTenant).filter(
-                                        DistributorTenant.whatsapp_order_phone == normalized_owner,
-                                        DistributorTenant.id != tenant.id
-                                    ).first()
+                                logger.warning(
+                                    "connection.update: no tenant found for instance %s — ignoring webhook",
+                                    instance_name
+                                )
+                                return
 
-                                    if other_tenant:
-                                        logger.warning(
-                                            "Phone %s belongs to tenant %s — NOT updating tenant %s",
-                                            normalized_owner, other_tenant.id, tenant.id
-                                        )
-                                    else:
-                                        if tenant.whatsapp_order_phone != normalized_owner:
-                                            logger.info(
-                                                "Phone updated for tenant %s: %s → %s",
-                                                tenant.id, tenant.whatsapp_order_phone, normalized_owner
-                                            )
-                                        tenant.whatsapp_order_phone = normalized_owner
-
-                                tenant.whatsapp_phone_id = instance_name
-                                tenant.whatsapp_connection_status = "connected"
-                                tenant.whatsapp_disconnected_at = None
-                                tenant.whatsapp_disconnect_reason = None
-                                tenant.whatsapp_disconnect_notified = False
-                                new_db.commit()
-                                from app.services.ingestion_service import IngestionService
-                                IngestionService.invalidate_tenant_cache(tenant.id)
-                                logger.info("Auto-synced distributor phone %s and phone ID %s for tenant %s using new DB session", normalized_phone, instance_name, tenant.id)
+                            normalized_owner = normalize_phone_number(owner_phone) if owner_phone else None
+                            
+                            if normalized_owner:
+                                # Check if this phone belongs to a different tenant
+                                other = new_db.query(DistributorTenant).filter(
+                                    DistributorTenant.whatsapp_order_phone == normalized_owner,
+                                    DistributorTenant.id != tenant.id
+                                ).first()
                                 
-                                try:
-                                    from app.services.gateway_service import EvolutionGatewayService
-                                    service = EvolutionGatewayService()
-                                    await service.configure_webhook(instance_name)
-                                    logger.info("Successfully re-configured webhook for instance %s on connection open", instance_name)
-                                except Exception as webhook_exc:
-                                    logger.error("Failed to re-configure webhook for instance %s on connection open: %s", instance_name, str(webhook_exc))
+                                if other:
+                                    logger.warning(
+                                        "Phone %s belongs to tenant %s — NOT updating tenant %s",
+                                        normalized_owner, other.id, tenant.id
+                                    )
+                                else:
+                                    # Safe to update — phone belongs to this tenant or is new
+                                    tenant.whatsapp_order_phone = normalized_owner
+                                    logger.info(
+                                        "Updated phone for tenant %s: %s",
+                                        tenant.id, normalized_owner
+                                    )
+                            
+                            tenant.whatsapp_phone_id = instance_name
+                            tenant.whatsapp_connection_status = "connected"
+                            tenant.whatsapp_disconnected_at = None
+                            tenant.whatsapp_disconnect_reason = None
+                            tenant.whatsapp_disconnect_notified = False
+                            new_db.commit()
+                            logger.info(
+                                "Auto-synced: instance=%s phone=%s tenant=%s",
+                                instance_name, normalized_owner, tenant.id
+                            )
+                            from app.services.ingestion_service import IngestionService
+                            IngestionService.invalidate_tenant_cache(tenant.id)
+                            try:
+                                from app.services.gateway_service import EvolutionGatewayService
+                                service = EvolutionGatewayService()
+                                await service.configure_webhook(instance_name)
+                                logger.info("Successfully re-configured webhook for instance %s on connection open", instance_name)
+                            except Exception as webhook_exc:
+                                logger.error("Failed to re-configure webhook for instance %s on connection open: %s", instance_name, str(webhook_exc))
                         except Exception as db_exc:
                             new_db.rollback()
                             logger.error("DB error auto-syncing distributor phone: %s", str(db_exc))
