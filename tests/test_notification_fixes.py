@@ -108,15 +108,40 @@ def test_delivery_event_notification_deferred_to_background_task(db_session):
 
 
 def test_dispatch_skips_background_task_when_no_customer(db_session):
-    """No customer on the order (edge case) must not queue a notification task."""
+    """
+    No customer resolvable for the order (edge case) must not queue a
+    notification task.
+
+    The endpoint's customer lookup is tenant-scoped:
+        db.query(Customer).filter(Customer.id == order.customer_id,
+                                   Customer.tenant_id == order.tenant_id).first()
+    so it comes back empty (without violating any FK) whenever a customer
+    row exists but under a different tenant than the order. This is the
+    real-world condition the "if customer:" guard protects against.
+
+    NOTE: this test previously simulated "no customer" by deleting the
+    Customer row outright. That is invalid here: customers.id is referenced
+    by orders.customer_id with `ondelete="CASCADE"`, so on a real Postgres
+    database (as used in CI/production) deleting the customer cascades and
+    deletes the order row too, leaving a stale, already-deleted `order`
+    Python object -- `db.get(Order, order_id)` then raises
+    ObjectDeletedError instead of the intended "customer missing" path.
+    SQLite (used for local/default test runs) does not enforce foreign keys
+    the same way, so the old version of this test passed locally but always
+    failed in CI against real Postgres.
+    """
     from app.api.v1.orders import dispatch_order_post, DispatchPayload
 
     tenant = DistributorTenant(name="NoCustomerTenant")
-    db_session.add(tenant)
+    other_tenant = DistributorTenant(name="OtherTenantOwningCustomer")
+    db_session.add_all([tenant, other_tenant])
     db_session.commit()
     tenant_context.set(tenant.id)
 
+    # Customer exists, but belongs to a different tenant than the order --
+    # the tenant-scoped lookup in dispatch_order_post will find nothing.
     cust = Customer(
+        tenant_id=other_tenant.id,
         retailer_name="Orphan Retailer", customer_id="C-ORPHAN", address_text="Addr",
         gstin="07AAAAA1111A1Z1", tax_group="GST", payment_terms="COD"
     )
@@ -128,10 +153,6 @@ def test_dispatch_skips_background_task_when_no_customer(db_session):
     db_session.flush()
     db_session.add(OrderStateLedger(order_id=order.id, from_status=None, to_status="Confirmed", updated_by="admin"))
     order.status = "Confirmed"
-    db_session.commit()
-    # Delete the customer row so order.customer_id points nowhere, matching
-    # the pre-existing "if customer:" guard in the endpoint.
-    db_session.delete(cust)
     db_session.commit()
 
     background_tasks = BackgroundTasks()
