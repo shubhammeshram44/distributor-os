@@ -336,16 +336,17 @@ export default function OrdersPage() {
     setLoadingDetails(true);
     try {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-      const resp = await fetch(`${apiBase}/api/v1/dashboard/order-details/${orderId}`, {
-        credentials: "include"
-      });
-      if (!resp.ok) throw new Error("Failed to load order line item details");
-      const data = await resp.json();
+      // Line items and order/payment data are independent — fetch them concurrently
+      // instead of one-after-another to cut the drawer's load time roughly in half.
+      const [detailsResp, orderResp] = await Promise.all([
+        fetch(`${apiBase}/api/v1/dashboard/order-details/${orderId}`, { credentials: "include" }),
+        fetch(`${apiBase}/api/v1/orders/${orderId}`, { credentials: "include" }),
+      ]);
+
+      if (!detailsResp.ok) throw new Error("Failed to load order line item details");
+      const data = await detailsResp.json();
       setSelectedOrderDetails(data);
 
-      const orderResp = await fetch(`${apiBase}/api/v1/orders/${orderId}`, {
-        credentials: "include"
-      });
       if (orderResp.ok) {
         const orderData = await orderResp.json();
         setSelectedOrderPayments(orderData);
@@ -401,8 +402,13 @@ export default function OrdersPage() {
       const data = await response.json();
       if (response.ok) {
         showToast("Order confirmed successfully!", "success");
-        await fetchOrders(activeTenantId);
-        await fetchOrderDetails(selectedOrderId);
+        // Refreshing the orders list and the currently-open order's details are
+        // independent requests — run them concurrently instead of sequentially so
+        // the UI unblocks as soon as both finish, rather than waiting twice over.
+        await Promise.all([
+          fetchOrders(activeTenantId),
+          fetchOrderDetails(selectedOrderId),
+        ]);
       } else {
         const errorDetail = data.detail || "Failed to confirm order.";
         showToast(errorDetail, "error");

@@ -51,8 +51,14 @@ export default function IntegrationsPage() {
     if (provisioningStatus !== "connecting" || !instanceName) return;
 
     const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+    // Cap how long we poll for — without this, an abandoned/failed QR scan left the
+    // page polling the backend every 3s indefinitely with a spinner that never
+    // resolved, giving no feedback that something went wrong.
+    const MAX_ATTEMPTS = 60; // 60 x 3s = 3 minutes
+    let attempts = 0;
 
     const checkStatus = async () => {
+      attempts += 1;
       try {
         const resp = await fetch(`${apiBase}/api/v1/evolution/status?instance_name=${instanceName}&tenant_id=${activeTenantId}`);
         if (resp.ok) {
@@ -63,16 +69,24 @@ export default function IntegrationsPage() {
               setOwnerJid(data.ownerJid);
             }
             showToast("WhatsApp Instance successfully connected!", "success");
+            clearInterval(interval);
+            return;
           }
         }
       } catch (err) {
         console.error("Error polling connection status:", err);
       }
+
+      if (attempts >= MAX_ATTEMPTS) {
+        clearInterval(interval);
+        setProvisioningStatus("error");
+        setEvolutionError("QR code scan timed out. Please try connecting again.");
+      }
     };
 
     const interval = setInterval(checkStatus, 3000);
     return () => clearInterval(interval);
-  }, [provisioningStatus, instanceName]);
+  }, [provisioningStatus, instanceName, activeTenantId]);
 
   const handleProvisionEvolution = async (e: React.FormEvent) => {
     e.preventDefault();

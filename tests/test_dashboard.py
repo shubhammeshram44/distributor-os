@@ -169,6 +169,75 @@ def test_dashboard_overview_endpoint(db_session, client, seed_demo_data):
     assert next(item for item in donut if item["name"] == "0-15 Days")["percentage"] == 39
 
 
+def test_dashboard_collections_donut_non_demo_tenant_buckets_by_invoice_age(db_session, client):
+    """
+    Regression test for the collections-donut / dashboard-overview N+1 fix: the
+    non-demo-tenant path previously looked up each invoice's parent Order via a
+    per-row db.get(Order, ...) call just to read its created_at for aging — an N+1
+    query pattern that scaled linearly with invoice count. It now buckets directly
+    off Invoice.created_at (each invoice already has its own timestamp). This test
+    proves the aging buckets are still computed correctly after that change.
+    """
+    tenant = DistributorTenant(name="Donut Aging Test Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+    tenant_context.set(tenant.id)
+
+    customer = Customer(
+        retailer_name="Aging Test Retailer", customer_id="C-AGING-1", address_text="Addr",
+        gstin="07AAAAA1111A1Z1", tax_group="GST", payment_terms="COD"
+    )
+    db_session.add(customer)
+    db_session.flush()
+
+    def _make_invoice(order_days_old: int, invoice_days_old: int, amount: float):
+        order = Order(
+            tenant_id=tenant.id,
+            internal_order_id=f"ORD-AGE-{invoice_days_old}",
+            source="Portal",
+            customer_id=customer.id,
+            # Deliberately backdated to a *different* age bucket than the invoice
+            # below (e.g. an order placed long ago, invoiced only recently) — this
+            # is what actually distinguishes the old buggy behavior (bucketed by
+            # order.created_at) from the fix (bucketed by invoice.created_at).
+            created_at=datetime.utcnow() - timedelta(days=order_days_old),
+        )
+        db_session.add(order)
+        db_session.flush()
+        invoice = Invoice(
+            order_id=order.id,
+            tenant_id=tenant.id,
+            gstin="07AAAAA1111A1Z1",
+            total_amount=amount,
+            customer_id=customer.id,
+            created_at=datetime.utcnow() - timedelta(days=invoice_days_old),
+        )
+        db_session.add(invoice)
+
+    # Order placed 90 days ago (would fall in "60+ Days" under the old, buggy
+    # order.created_at-based bucketing) but invoiced only 5 days ago — must land
+    # in "0-15 Days" now that bucketing uses the invoice's own timestamp.
+    _make_invoice(order_days_old=90, invoice_days_old=5, amount=1000.0)
+    # Order placed 10 days ago (would fall in "0-15 Days" under the old bucketing)
+    # but invoiced 45 days ago — must land in "31-60 Days".
+    _make_invoice(order_days_old=10, invoice_days_old=45, amount=3000.0)
+    db_session.commit()
+
+    resp = client.get(f"/api/v1/dashboard/collections-donut?tenant_id={tenant.id}")
+    assert resp.status_code == 200
+    donut = resp.json()
+
+    bucket_0_15 = next(item for item in donut if item["name"] == "0-15 Days")
+    bucket_31_60 = next(item for item in donut if item["name"] == "31-60 Days")
+    bucket_16_30 = next(item for item in donut if item["name"] == "16-30 Days")
+    bucket_60_plus = next(item for item in donut if item["name"] == "60+ Days")
+
+    assert bucket_0_15["value"] == 1000.0
+    assert bucket_31_60["value"] == 3000.0
+    assert bucket_16_30["value"] == 0
+    assert bucket_60_plus["value"] == 0
+
+
 def test_dashboard_credit_risk_alerts(db_session, client, seed_demo_data):
     demo_tenant_id = uuid.UUID("d3b07384-d113-4956-a5d2-64be7357c11d")
 

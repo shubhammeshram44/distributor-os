@@ -274,14 +274,25 @@ async def handle_whatsapp_webhook(
                             tenant = new_db.query(DistributorTenant).filter(DistributorTenant.whatsapp_phone_id == instance_name).first()
                             if not tenant and hasattr(DistributorTenant, "whatsapp_instance_name"):
                                 tenant = new_db.query(DistributorTenant).filter(getattr(DistributorTenant, "whatsapp_instance_name") == instance_name).first()
-                            if not tenant:
-                                # Query all tenants and find the match by ID prefix in the instance_name
-                                all_tenants = new_db.query(DistributorTenant).all()
-                                for t in all_tenants:
-                                    short_id = str(t.id)[:8]
-                                    if f"dist-{short_id}" in instance_name or short_id in instance_name:
-                                        tenant = t
-                                        break
+                            if not tenant and instance_name:
+                                # instance_name is deterministically generated with the
+                                # tenant's 8-char id prefix as a suffix after some "-"
+                                # delimited label (e.g. f"dist-{tenant.id[:8]}" from the
+                                # provisioning endpoints; older/other naming variants such
+                                # as "inst-XXXXXXXX" are also matched). Extract that hex id
+                                # prefix and look it up directly with a single query instead
+                                # of loading every tenant row into memory to compare — this
+                                # loop grows linearly with tenant count and runs on the
+                                # connection-open webhook path, which directly delays how
+                                # quickly a user sees "WhatsApp connected".
+                                import re
+                                from sqlalchemy import cast, String
+                                id_match = re.search(r"([0-9a-f]{8})$", instance_name)
+                                if id_match:
+                                    short_id = id_match.group(1)
+                                    tenant = new_db.query(DistributorTenant).filter(
+                                        cast(DistributorTenant.id, String).like(f"{short_id}%")
+                                    ).first()
 
                             # Only use owner_phone fallback if the phone matches AND instance matches
                             if not tenant and owner_phone:
