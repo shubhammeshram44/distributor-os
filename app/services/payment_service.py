@@ -79,7 +79,21 @@ def reconcile_payments_and_invoices(db: Session, tenant_id: uuid.UUID, customer_
             if not invoice:
                 customer = db.get(Customer, order.customer_id)
                 amount_sum = sum(float(item.quantity * item.unit_price) for item in order.line_items)
-                
+
+                # Zero-value orders (fully out-of-stock at confirm time) should
+                # not get a backfilled invoice either — matches the same guard
+                # applied at original confirm-time in order_confirmation_service.
+                if amount_sum <= 0:
+                    continue
+
+                from app.services.invoice_gst_utils import compute_cgst_sgst, generate_invoice_number
+                from app.models.product import Product
+                _product_ids = {item.product_id for item in order.line_items}
+                _products_by_id = {
+                    p.id: p for p in db.query(Product).filter(Product.id.in_(_product_ids)).all()
+                } if _product_ids else {}
+                cgst_amount, sgst_amount = compute_cgst_sgst(order.line_items, _products_by_id)
+
                 invoice = Invoice(
                     tenant_id=tenant_id,
                     order_id=order.id,
@@ -92,7 +106,10 @@ def reconcile_payments_and_invoices(db: Session, tenant_id: uuid.UUID, customer_
                     customer_id=order.customer_id,
                     payment_status="UNPAID",
                     amount_paid=0.0,
-                    created_at=order.created_at
+                    created_at=order.created_at,
+                    cgst_amount=cgst_amount,
+                    sgst_amount=sgst_amount,
+                    invoice_number=generate_invoice_number(db, tenant_id, order.created_at),
                 )
                 db.add(invoice)
                 invoices_created = True

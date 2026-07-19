@@ -14,6 +14,14 @@ class Product(Base, TenantMixin):
     base_price: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
     stock_quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False, server_default="1")
+    # GST rate as a percentage (e.g. 18.0 for 18%). Real-world rates vary by
+    # product (5/12/18/28%) — default matches the previous hardcoded value so
+    # existing rows keep the same invoice behavior until a distributor edits them.
+    gst_rate: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False, default=18.0, server_default="18.0")
+    # HSN (Harmonized System of Nomenclature) code, required per line item on a
+    # compliant GST tax invoice. Nullable since not every distributor has it on
+    # file yet; the PDF simply omits it when unset.
+    hsn_code: Mapped[str | None] = mapped_column(String(20), nullable=True, default=None)
 
     aliases: Mapped[list["ProductAlias"]] = relationship(back_populates="product", cascade="all, delete-orphan")
     prices: Mapped[list["ProductPrice"]] = relationship(back_populates="product", cascade="all, delete-orphan")

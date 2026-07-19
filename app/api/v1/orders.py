@@ -688,8 +688,13 @@ def generate_invoice_pdf_bytes(order: Order, db: Session) -> bytes:
     # Check if this should be formatted as a GST tax invoice
     is_gst = order.invoice_type != "RETAIL_INVOICE"
 
+    # Fetch the persisted invoice row (created at confirm time) so the PDF's
+    # invoice number and CGST/SGST split always match what's stored in the DB,
+    # rather than being recomputed independently at render time.
+    invoice_row = db.query(Invoice).filter(Invoice.order_id == order.id).first()
+
     # Header section (Tenant & Invoice ID/Date)
-    invoice_id = f"INV-{order.internal_order_id}"
+    invoice_id = invoice_row.invoice_number if invoice_row and invoice_row.invoice_number else f"INV-{order.internal_order_id}"
     order_date = order.created_at.strftime("%Y-%m-%d")
     
     header_left = f"<b>{tenant_name}</b><br/>B2B Distributor Services<br/>Email: billing@{tenant_name.lower().replace(' ', '').replace('.', '')}.com"
@@ -750,13 +755,19 @@ def generate_invoice_pdf_bytes(order: Order, db: Session) -> bytes:
     grid_header = [
         Paragraph("<b>SKU ID</b>", body_bold),
         Paragraph("<b>Item Name</b>", body_bold),
+    ]
+    if is_gst:
+        grid_header.append(Paragraph("<b>HSN</b>", body_bold))
+    grid_header += [
         Paragraph("<b>Quantity</b>", body_bold),
         Paragraph("<b>Wholesale Price</b>", body_bold),
         Paragraph("<b>Line Total</b>", body_bold)
     ]
     grid_data = [grid_header]
-    
+
     subtotal = 0.0
+    total_cgst = 0.0
+    total_sgst = 0.0
     for item in items:
         product = db.get(Product, item.product_id)
         sku = product.sku_id if product else item.sku_code or "UNKNOWN"
@@ -765,16 +776,31 @@ def generate_invoice_pdf_bytes(order: Order, db: Session) -> bytes:
         price = float(item.unit_price)
         total = qty * price
         subtotal += total
-        
-        grid_data.append([
+
+        if is_gst:
+            # Per-product GST rate (was previously hardcoded at 18% for every
+            # line item regardless of the product's actual rate).
+            line_gst_rate = float(product.gst_rate) if product and product.gst_rate is not None else 18.0
+            line_gst = total * (line_gst_rate / 100.0)
+            total_cgst += line_gst / 2.0
+            total_sgst += line_gst / 2.0
+
+        row = [
             Paragraph(sku, body_style),
             Paragraph(item_name, body_style),
+        ]
+        if is_gst:
+            hsn_display = product.hsn_code if product and product.hsn_code else "\u2014"
+            row.append(Paragraph(hsn_display, body_style))
+        row += [
             Paragraph(str(qty), body_style),
             Paragraph(f"₹ {price:,.2f}", body_style),
             Paragraph(f"₹ {total:,.2f}", body_style)
-        ])
+        ]
+        grid_data.append(row)
 
-    grid_table = Table(grid_data, colWidths=[80, 220, 50, 95, 95])
+    col_widths = [70, 160, 55, 45, 90, 90] if is_gst else [80, 220, 50, 95, 95]
+    grid_table = Table(grid_data, colWidths=col_widths)
     grid_table.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,0), light_bg),
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
@@ -788,11 +814,20 @@ def generate_invoice_pdf_bytes(order: Order, db: Session) -> bytes:
 
     # Tax Summary Block (Conditionally exclude GST)
     if is_gst:
-        gst_rate = 0.18
-        gst = subtotal * gst_rate
-        grand_total = subtotal + gst
+        # Prefer the persisted invoice's CGST/SGST split (authoritative, set
+        # at confirm time) so the PDF always matches what's stored in the DB.
+        # Fall back to the live per-line recompute above for legacy invoices
+        # created before these columns existed (cgst_amount/sgst_amount NULL).
+        if invoice_row is not None and invoice_row.cgst_amount is not None and invoice_row.sgst_amount is not None:
+            cgst = float(invoice_row.cgst_amount)
+            sgst = float(invoice_row.sgst_amount)
+        else:
+            cgst = round(total_cgst, 2)
+            sgst = round(total_sgst, 2)
+        grand_total = subtotal + cgst + sgst
     else:
-        gst = 0.0
+        cgst = 0.0
+        sgst = 0.0
         grand_total = subtotal
 
     summary_left = "<b>Declaration:</b><br/>We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct."
@@ -801,7 +836,10 @@ def generate_invoice_pdf_bytes(order: Order, db: Session) -> bytes:
     ]
     if is_gst:
         summary_right_data.append(
-            [Paragraph("GST (18%):", body_style), Paragraph(f"₹ {gst:,.2f}", ParagraphStyle('RightAlign', parent=body_style, alignment=2))]
+            [Paragraph("CGST:", body_style), Paragraph(f"₹ {cgst:,.2f}", ParagraphStyle('RightAlign', parent=body_style, alignment=2))]
+        )
+        summary_right_data.append(
+            [Paragraph("SGST:", body_style), Paragraph(f"₹ {sgst:,.2f}", ParagraphStyle('RightAlign', parent=body_style, alignment=2))]
         )
     summary_right_data.append(
         [Paragraph("<b>Total Payable:</b>", body_bold), Paragraph(f"<b>₹ {grand_total:,.2f}</b>", ParagraphStyle('RightAlignBold', parent=body_bold, alignment=2))]
