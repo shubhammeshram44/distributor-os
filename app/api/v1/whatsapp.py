@@ -302,27 +302,32 @@ async def handle_whatsapp_webhook(
                                     DistributorTenant.whatsapp_order_phone == normalized,
                                     DistributorTenant.whatsapp_phone_id == instance_name  # must match instance too
                                 ).first()
-
                             if not tenant:
                                 if new_db.query(DistributorTenant).count() == 1:
                                     tenant = new_db.query(DistributorTenant).first()
                             if tenant:
                                 normalized_owner = normalize_phone_number(owner_phone) if owner_phone else None
+                                if normalized_owner:
+                                    # Only refuse if the new phone belongs to a DIFFERENT tenant
+                                    # Allow update in all other cases — including when distributor
+                                    # intentionally reconnects with a new number
+                                    other_tenant = new_db.query(DistributorTenant).filter(
+                                        DistributorTenant.whatsapp_order_phone == normalized_owner,
+                                        DistributorTenant.id != tenant.id
+                                    ).first()
 
-                                if tenant.whatsapp_order_phone is None:
-                                    # First time — set the phone
-                                    tenant.whatsapp_order_phone = normalized_owner
-                                    logger.info("Set whatsapp_order_phone to %s for tenant %s", normalized_owner, tenant.id)
-                                elif normalized_owner and normalized_owner != tenant.whatsapp_order_phone:
-                                    # Different phone trying to connect — log warning, don't overwrite
-                                    logger.warning(
-                                        "Phone mismatch for tenant %s: stored=%s new=%s — NOT overwriting",
-                                        tenant.id, tenant.whatsapp_order_phone, normalized_owner
-                                    )
-                                    # Still update connection status and phone_id — just not the phone number
-                                else:
-                                    # Same phone reconnecting — update normally
-                                    tenant.whatsapp_order_phone = normalized_owner
+                                    if other_tenant:
+                                        logger.warning(
+                                            "Phone %s belongs to tenant %s — NOT updating tenant %s",
+                                            normalized_owner, other_tenant.id, tenant.id
+                                        )
+                                    else:
+                                        if tenant.whatsapp_order_phone != normalized_owner:
+                                            logger.info(
+                                                "Phone updated for tenant %s: %s → %s",
+                                                tenant.id, tenant.whatsapp_order_phone, normalized_owner
+                                            )
+                                        tenant.whatsapp_order_phone = normalized_owner
 
                                 tenant.whatsapp_phone_id = instance_name
                                 tenant.whatsapp_connection_status = "connected"
