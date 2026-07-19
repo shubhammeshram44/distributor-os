@@ -7,6 +7,7 @@ import { useSearchParams } from "next/navigation";
 import Pagination from "@/components/ui/Pagination";
 import { formatDateTime } from "@/utils/datetime";
 import { useDebounce, fetchWithTimeout } from "@/lib/debounce";
+import { SkeletonTable } from "@/components/ui/Skeleton";
 import {
   Search,
   Loader2,
@@ -506,10 +507,21 @@ function CustomersContent() {
             {/* Customers Grid */}
             <div className="flex-1 overflow-x-auto">
               {loading ? (
-                <div className="flex flex-col items-center justify-center py-24 gap-3">
-                  <Loader2 className="w-8 h-8 text-brand-blue animate-spin" />
-                  <span className="text-sm font-semibold text-slate-500 dark:text-slate-400">Loading customers ledger...</span>
-                </div>
+                <table className="w-full text-left text-sm border-collapse">
+                  <thead>
+                    <tr className="text-slate-400 font-semibold text-xs border-b border-dashboard-border bg-slate-50/50 dark:bg-transparent">
+                      <th className="py-3 px-6">Customer ID</th>
+                      <th className="py-3 px-6">Store Name</th>
+                      <th className="py-3 px-6">Contact Number</th>
+                      <th className="py-3 px-6">Billing Terms</th>
+                      <th className="py-3 px-6 text-right">Credit Ceiling Limit</th>
+                      <th className="py-3 px-6 text-right">Current Outstanding</th>
+                      <th className="py-3 px-6 text-center">Status Alerts</th>
+                      <th className="py-3 px-6 text-center">Statement</th>
+                    </tr>
+                  </thead>
+                  <SkeletonTable rows={8} cols={8} />
+                </table>
               ) : error ? (
                 <div className="flex flex-col items-center justify-center py-24 gap-3 text-rose-600 dark:text-rose-400">
                   <AlertCircle className="w-8 h-8" />

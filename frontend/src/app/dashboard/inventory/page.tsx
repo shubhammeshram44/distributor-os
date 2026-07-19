@@ -5,6 +5,7 @@ import Sidebar from "@/components/Sidebar";
 import DashboardHeader from "@/components/DashboardHeader";
 import { Search, Loader2, RefreshCw, AlertCircle, Box, AlertTriangle, CheckCircle2, X, Sparkles, MessageCircle } from "lucide-react";
 import { useDebounce, fetchWithTimeout } from "@/lib/debounce";
+import { SkeletonTable } from "@/components/ui/Skeleton";
 
 interface InventoryItem {
   id: string;
@@ -467,10 +468,17 @@ export default function InventoryPage() {
             {/* Warehouse Table Grid */}
             <div className="flex-1 overflow-x-auto">
               {loading ? (
-                <div className="flex flex-col items-center justify-center py-24 gap-3">
-                  <Loader2 className="w-8 h-8 text-brand-blue animate-spin" />
-                  <span className="text-sm font-semibold text-slate-500 dark:text-slate-400">Loading inventory data...</span>
-                </div>
+                <table className="w-full text-left text-sm border-collapse">
+                  <thead>
+                    <tr className="text-slate-400 font-semibold text-xs border-b border-dashboard-border bg-slate-50/50 dark:bg-dashboard-inset">
+                      <th className="py-3 px-6">SKU ID</th>
+                      <th className="py-3 px-6">Product Name</th>
+                      <th className="py-3 px-6 text-center">Stock Status</th>
+                      <th className="py-3 px-6 text-right">Available Stock Quantity</th>
+                    </tr>
+                  </thead>
+                  <SkeletonTable rows={8} cols={4} />
+                </table>
               ) : error ? (
                 <div className="flex flex-col items-center justify-center py-24 gap-3 text-rose-600 dark:text-rose-400">
                   <AlertCircle className="w-8 h-8" />

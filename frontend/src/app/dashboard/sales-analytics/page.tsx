@@ -16,6 +16,7 @@ import {
   Legend
 } from "recharts";
 import { Loader2, AlertCircle, BarChart3, TrendingUp, ShoppingBag, Layers } from "lucide-react";
+import { SkeletonCard, SkeletonChartCard } from "@/components/ui/Skeleton";
 
 interface SKUData {
   sku_code: string;
@@ -106,7 +107,7 @@ export default function SalesAnalyticsPage() {
     const startDate = new Date(now.getTime() - days * 24 * 60 * 60 * 1000)
       .toISOString().split("T")[0];
     const endDate = now.toISOString().split("T")[0];
-    
+
     try {
       const res = await fetch(
         `${apiBase}/api/v1/dashboard/metrics?tenant_id=${activeTenantId}&start_date=${startDate}&end_date=${endDate}`,
@@ -128,9 +129,9 @@ export default function SalesAnalyticsPage() {
   // Transform pie data
   const pieData = data
     ? Object.entries(data.status_distribution).map(([name, value]) => ({
-        name,
-        value
-      }))
+      name,
+      value
+    }))
     : [];
 
   const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"];
@@ -147,7 +148,7 @@ export default function SalesAnalyticsPage() {
     <div className="flex bg-dashboard-bg min-h-screen text-slate-800 dark:text-slate-100">
       <Sidebar
         activeTab="Sales Analytics"
-        setActiveTab={() => {}}
+        setActiveTab={() => { }}
         tenantName={getTenantName()}
       />
 
@@ -169,7 +170,7 @@ export default function SalesAnalyticsPage() {
                 Analyze product performance rankings, sales velocities, and dynamic pipeline fulfillment statuses
               </p>
             </div>
-            
+
             {/* Timeframe Selector */}
             <select
               value={timeframe}
@@ -213,9 +214,8 @@ export default function SalesAnalyticsPage() {
                     <span className="text-lg">{card.icon}</span>
                   </div>
                   <div className="text-2xl font-bold text-slate-800 dark:text-slate-100">{card.value}</div>
-                  <div className={`text-xs font-semibold mt-1 ${
-                    card.change >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-500"
-                  }`}>
+                  <div className={`text-xs font-semibold mt-1 ${card.change >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-500"
+                    }`}>
                     {card.change >= 0 ? "↑" : "↓"}{Math.abs(card.change).toFixed(1)}% vs previous period
                   </div>
                 </div>
@@ -224,9 +224,15 @@ export default function SalesAnalyticsPage() {
           )}
 
           {loading ? (
-            <div className="flex flex-col items-center justify-center py-32 gap-3">
-              <Loader2 className="w-8 h-8 text-brand-blue animate-spin" />
-              <span className="text-sm font-semibold text-slate-500 dark:text-slate-400">Aggregating database sales metrics...</span>
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <SkeletonCard />
+                <SkeletonCard />
+              </div>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <SkeletonChartCard />
+                <SkeletonChartCard />
+              </div>
             </div>
           ) : error ? (
             <div className="flex flex-col items-center justify-center py-32 gap-3 text-rose-600 dark:text-rose-400">
