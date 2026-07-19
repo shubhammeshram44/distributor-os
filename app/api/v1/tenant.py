@@ -194,10 +194,19 @@ from fastapi import Query
 
 @router.get("/notification-prefs", status_code=status.HTTP_200_OK)
 def get_notification_prefs(
-    tenant_id: uuid.UUID = Query(...),
+    tenant_id: uuid.UUID | None = None,
+    access_token: str | None = Cookie(None),
+    authorization: str | None = Header(None),
     db: Session = Depends(get_db)
 ):
-    tenant = db.get(DistributorTenant, tenant_id)
+    # Resolve tenant from the authenticated session (JWT cookie/header) first, same
+    # as every other endpoint in this router — previously this trusted the raw
+    # `tenant_id` query param with no auth check at all, letting any caller read
+    # another tenant's notification preferences just by passing their tenant_id.
+    from app.services.tenant_service import resolve_tenant_id
+    resolved_tenant_id = resolve_tenant_id(tenant_id, access_token, authorization)
+
+    tenant = db.get(DistributorTenant, resolved_tenant_id)
     if not tenant:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -209,10 +218,18 @@ def get_notification_prefs(
 @router.patch("/notification-prefs", status_code=status.HTTP_200_OK)
 def update_notification_prefs(
     payload: dict,
-    tenant_id: uuid.UUID = Query(...),
+    tenant_id: uuid.UUID | None = None,
+    access_token: str | None = Cookie(None),
+    authorization: str | None = Header(None),
     db: Session = Depends(get_db)
 ):
-    tenant = db.get(DistributorTenant, tenant_id)
+    # See get_notification_prefs above: resolve tenant from the authenticated
+    # session rather than trusting the raw query param, to prevent a caller from
+    # silently disabling/enabling another tenant's notification preferences.
+    from app.services.tenant_service import resolve_tenant_id
+    resolved_tenant_id = resolve_tenant_id(tenant_id, access_token, authorization)
+
+    tenant = db.get(DistributorTenant, resolved_tenant_id)
     if not tenant:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -227,7 +244,7 @@ def update_notification_prefs(
     db.commit()
     
     from app.services.ingestion_service import IngestionService
-    IngestionService.invalidate_tenant_cache(tenant_id)
+    IngestionService.invalidate_tenant_cache(resolved_tenant_id)
     
     return tenant.notification_prefs
 
