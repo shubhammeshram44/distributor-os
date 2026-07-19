@@ -262,6 +262,60 @@ def get_customer_payments(
     }
 
 
+@router.get("/{customer_id}/payment-promises", status_code=status.HTTP_200_OK)
+def get_customer_payment_promises(
+    customer_id: uuid.UUID,
+    tenant_id: uuid.UUID,
+    db: Session = Depends(get_db)
+):
+    """
+    Returns a customer's payment-promise history (from inbound WhatsApp
+    replies like "I'll pay by Friday") plus a simple fulfilment-rate summary,
+    refreshing any pending promises whose promised_date has already passed.
+    """
+    tenant_context.set(tenant_id)
+
+    customer = db.get(Customer, customer_id)
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+
+    from app.services.payment_promise_service import refresh_promise_fulfillment
+    from app.models.payment_promise import PaymentPromise
+
+    refresh_promise_fulfillment(db, tenant_id)
+
+    promises = (
+        db.query(PaymentPromise)
+        .filter(PaymentPromise.customer_id == customer_id, PaymentPromise.tenant_id == tenant_id)
+        .order_by(PaymentPromise.created_at.desc())
+        .all()
+    )
+
+    items = [
+        {
+            "id": str(p.id),
+            "promised_date": p.promised_date.isoformat(),
+            "promised_amount": float(p.promised_amount) if p.promised_amount is not None else None,
+            "raw_message": p.raw_message,
+            "status": p.status,
+            "created_at": p.created_at.isoformat(),
+        }
+        for p in promises
+    ]
+
+    resolved = [p for p in promises if p.status in ("fulfilled", "broken")]
+    fulfilled_count = sum(1 for p in promises if p.status == "fulfilled")
+
+    return {
+        "customer_id": str(customer_id),
+        "retailer_name": customer.retailer_name,
+        "items": items,
+        "total": len(items),
+        "fulfilled_count": fulfilled_count,
+        "resolved_count": len(resolved),
+    }
+
+
 class CustomerNotificationPrefPayload(BaseModel):
     whatsapp_notifications_enabled: bool
 

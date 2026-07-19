@@ -259,6 +259,44 @@ def process_order_self_learning(db: Session, order_id: uuid.UUID, tenant_id: uui
         logger.error("Self-learning sub-transaction failed: %s", str(e))
 
 
+@router.get("/last-for-customer", status_code=status.HTTP_200_OK)
+def get_last_order_for_customer(
+    tenant_id: uuid.UUID,
+    customer_id: uuid.UUID,
+    db: Session = Depends(get_db)
+):
+    """
+    Returns the most recent order for a customer, formatted as a free-text
+    order summary in the same style the Gemini/regex order parser expects
+    (e.g. "50 Lux soap, 30 Rin") — powers the "Repeat last order" quick-picker
+    in the manual order entry modal.
+    """
+    tenant_context.set(tenant_id)
+
+    last_order = (
+        db.query(Order)
+        .filter(Order.tenant_id == tenant_id, Order.customer_id == customer_id)
+        .order_by(Order.created_at.desc())
+        .first()
+    )
+    if not last_order:
+        return {"has_previous_order": False, "order_text": None}
+
+    items = db.query(OrderLineItem).filter(OrderLineItem.order_id == last_order.id).all()
+    parts = []
+    for item in items:
+        product = db.get(Product, item.product_id) if item.product_id else None
+        label = product.brand if product else (item.product_name or item.sku_code or "item")
+        qty = item.allocated_quantity if item.allocated_quantity is not None else item.quantity
+        parts.append(f"{qty} {label}")
+
+    return {
+        "has_previous_order": bool(parts),
+        "order_text": ", ".join(parts) if parts else None,
+        "internal_order_id": last_order.internal_order_id,
+    }
+
+
 class StatusUpdatePayload(BaseModel):
     to_status: str
 

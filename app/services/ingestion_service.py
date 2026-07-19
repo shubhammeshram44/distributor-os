@@ -459,6 +459,23 @@ class IngestionService:
                     "Skipping DB write. text='%s'",
                     clean_text,
                 )
+                # Best-effort: a non-order reply from a KNOWN customer might be a
+                # payment promise ("I'll pay by Friday") — worth capturing even
+                # though we're not creating an order for this message. Never
+                # affects the "ignored" response either way.
+                try:
+                    if sender_phone:
+                        phone_variants = get_phone_number_variants(sender_phone)
+                        promise_customer = (
+                            db.query(Customer).join(CustomerAlias)
+                            .filter(CustomerAlias.alias_value.in_(phone_variants)).first()
+                            or db.query(Customer).filter(Customer.phone_number.in_(phone_variants)).first()
+                        )
+                        if promise_customer:
+                            from app.services.payment_promise_service import detect_and_record_promise
+                            detect_and_record_promise(db, tenant_id, promise_customer, clean_text)
+                except Exception as promise_exc:
+                    logger.warning("IngestionService: Layer 4 – Payment promise detection failed silently: %s", str(promise_exc))
                 return {"status": "ignored", "reason": "non_order_intent"}
         else:
             logger.debug(
