@@ -25,6 +25,7 @@ export default function PlaceOrderModal({
     const [isSending, setIsSending] = useState(false);
     const [isListening, setIsListening] = useState(false);
     const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
+    const [lastOrderText, setLastOrderText] = useState<string | null>(null);
     const recognitionRef = useRef<any>(null);
 
     // Fetch customers
@@ -40,6 +41,22 @@ export default function PlaceOrderModal({
             })
             .catch(console.error);
     }, [isOpen, activeTenantId]);
+
+    // Fetch the selected customer's last order, so "Repeat last order" can
+    // pre-fill the free-text box in the same format the parser expects.
+    useEffect(() => {
+        setLastOrderText(null);
+        if (!isOpen || !activeTenantId || !selectedCustomer) return;
+        const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+        fetch(`${apiBase}/api/v1/orders/last-for-customer?tenant_id=${activeTenantId}&customer_id=${selectedCustomer.id}`)
+            .then(r => r.ok ? r.json() : null)
+            .then(data => {
+                if (data?.has_previous_order && data.order_text) {
+                    setLastOrderText(data.order_text);
+                }
+            })
+            .catch(() => setLastOrderText(null));
+    }, [isOpen, activeTenantId, selectedCustomer]);
 
     // Voice input using Web Speech API
     const startListening = () => {
@@ -145,9 +162,21 @@ export default function PlaceOrderModal({
 
                     {/* Order text input */}
                     <div>
-                        <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1.5 block">
-                            Order message
-                        </label>
+                        <div className="flex items-center justify-between mb-1.5">
+                            <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide block">
+                                Order message
+                            </label>
+                            {lastOrderText && (
+                                <button
+                                    type="button"
+                                    onClick={() => setOrderText(lastOrderText)}
+                                    className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:underline"
+                                    title={lastOrderText}
+                                >
+                                    Repeat last order
+                                </button>
+                            )}
+                        </div>
                         <div className="relative">
                             <textarea
                                 rows={4}
