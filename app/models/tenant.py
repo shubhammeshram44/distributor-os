@@ -47,6 +47,7 @@ class DistributorTenant(Base):
             "order_dispatched": True,
             "order_delivered": True,
             "new_order_alert_to_distributor": True,
+            "order_needs_review_alert": True,
             # Financial
             "payment_reminder": True,
             "payment_reminder_upcoming": True,

@@ -53,7 +53,15 @@ Thank you for your order. We look forward to serving you again!
 From: {customer_name}
 Order ID: {order_id}
 Items: {item_summary}
-Total: ₹{total}"""
+Total: ₹{total}""",
+
+    "order_needs_review_alert": """⚠️ Order Needs Review!
+
+Order {order_id} from {customer_name} has items that couldn't be auto-matched to your catalog.
+Items: {item_summary}
+
+Please open the Orders page and resolve the unmatched items so this order isn't missed.
+— DistributorOS"""
 }
 
 PAYMENT_REMINDER_TEMPLATES = {
@@ -191,14 +199,18 @@ class NotificationService:
         Never raises — all errors are logged and swallowed.
         """
         try:
-            # 1. Check tenant notification preferences
+            # 1. Check tenant notification preferences.
+            # Distributor-facing safety alerts default to enabled even for tenants
+            # whose stored notification_prefs JSON predates this event key —
+            # a silently-missed order is worse than an unwanted extra message.
             prefs = tenant.notification_prefs or {}
-            if not prefs.get(event, False):
+            default_enabled_events = {"new_order_alert_to_distributor", "order_needs_review_alert"}
+            if not prefs.get(event, event in default_enabled_events):
                 logger.info("Notification skipped: %s disabled for tenant %s", event, str(tenant.id))
                 return False
 
-            # 2. Check customer notifications enablement (skipped for distributor alert)
-            if event != "new_order_alert_to_distributor":
+            # 2. Check customer notifications enablement (skipped for distributor-facing alerts)
+            if event not in ("new_order_alert_to_distributor", "order_needs_review_alert"):
                 if not customer.whatsapp_notifications_enabled:
                     logger.info("Notification skipped: customer %s opted out", str(customer.id))
                     return False
