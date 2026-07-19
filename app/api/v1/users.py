@@ -158,9 +158,14 @@ def get_me(
     authorization: str | None = Header(None),
     db: Session = Depends(get_db)
 ):
-    token = access_token
-    if not token and authorization and authorization.startswith("Bearer "):
+    # Prefer the Authorization header over the cookie — see resolve_tenant_id
+    # in tenant_service.py for the full rationale (stale cookies must never
+    # shadow a freshly issued, valid session token).
+    token = None
+    if authorization and authorization.startswith("Bearer "):
         token = authorization.split(" ")[1]
+    if not token:
+        token = access_token
         
     if not token:
         raise HTTPException(

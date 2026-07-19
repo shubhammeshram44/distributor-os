@@ -1325,10 +1325,10 @@ def patch_order(
     from app.models.user import User
 
     token = None
-    if access_token:
-        token = access_token
-    elif authorization and authorization.startswith("Bearer "):
+    if authorization and authorization.startswith("Bearer "):
         token = authorization.split(" ")[1]
+    elif access_token:
+        token = access_token
 
     current_user = None
     if token:

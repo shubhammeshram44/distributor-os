@@ -56,3 +56,32 @@ def test_update_tenant_profile_unauthorized(client):
     }
     response = client.put("/api/v1/tenant/profile", json=payload)
     assert response.status_code == 401
+
+
+def test_get_tenant_profile_prefers_header_over_stale_cookie(db_session, client):
+    """
+    Regression test for resolve_tenant_id (app/services/tenant_service.py),
+    the shared tenant-resolution function used by nearly every authenticated
+    endpoint (dashboard, orders, tenant, evolution, shipments, admin, etc.):
+    a stale/garbage `access_token` cookie must never take precedence over a
+    valid, freshly-issued Authorization Bearer token. This is the root cause
+    behind "I'm already logged in, but a fresh tab asks me to log in again".
+    """
+    tenant_id = uuid.uuid4()
+    tenant = DistributorTenant(id=tenant_id, name="Cookie Precedence Tenant", category="FMCG")
+    db_session.add(tenant)
+    db_session.commit()
+
+    token = sign_jwt({
+        "user_id": str(uuid.uuid4()),
+        "tenant_id": str(tenant_id),
+        "role": "SUPER_ADMIN"
+    })
+
+    client.cookies.set("access_token", "garbage-stale-cookie-value")
+    response = client.get(
+        "/api/v1/tenant/profile",
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    assert response.status_code == 200
+    assert response.json()["tenant"]["id"] == str(tenant_id)
