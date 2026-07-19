@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { TrendingUp, TrendingDown, IndianRupee, ShoppingBag, BarChart, CreditCard } from "lucide-react";
+import { TrendingUp, TrendingDown, IndianRupee, ShoppingBag, BarChart, CreditCard, PackageSearch } from "lucide-react";
 import { DashboardMetrics } from "@/hooks/useDashboardData";
 
 interface MetricCardsProps {
@@ -24,9 +24,9 @@ export default function MetricCards({ metrics }: MetricCardsProps) {
 
   if (!metrics) {
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="bg-white p-6 rounded-xl border border-dashboard-border shadow-sm animate-pulse h-32" />
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        {[1, 2, 3, 4, 5].map((i) => (
+          <div key={i} className="bg-dashDark-card p-6 rounded-xl border border-dashDark-border animate-pulse h-32" />
         ))}
       </div>
     );
@@ -40,8 +40,8 @@ export default function MetricCards({ metrics }: MetricCardsProps) {
       isPositive: metrics.total_sales_change >= 0,
       subtext: "vs 14 May – 20 May, 2025",
       icon: IndianRupee,
-      iconBg: "bg-emerald-50 text-emerald-600",
-      strokeColor: "#10b981",
+      iconBg: "bg-emerald-500/10 text-emerald-400",
+      strokeColor: "#34d399",
       sparklinePath: "M0,25 Q15,5 30,20 T60,10 T95,15 T130,5 T160,18" // green sparkline
     },
     {
@@ -51,8 +51,8 @@ export default function MetricCards({ metrics }: MetricCardsProps) {
       isPositive: metrics.orders_count_change >= 0,
       subtext: "vs last week",
       icon: ShoppingBag,
-      iconBg: "bg-blue-50 text-blue-600",
-      strokeColor: "#3b82f6",
+      iconBg: "bg-blue-500/10 text-blue-400",
+      strokeColor: "#60a5fa",
       sparklinePath: "M0,20 Q15,28 30,10 T60,25 T90,5 T120,15 T160,8" // blue sparkline
     },
     {
@@ -62,8 +62,8 @@ export default function MetricCards({ metrics }: MetricCardsProps) {
       isPositive: metrics.average_order_value_change >= 0,
       subtext: "vs last week",
       icon: BarChart,
-      iconBg: "bg-purple-50 text-purple-600",
-      strokeColor: "#8b5cf6",
+      iconBg: "bg-violet-500/10 text-violet-400",
+      strokeColor: "#a78bfa",
       sparklinePath: "M0,28 Q20,15 40,25 T80,10 T120,20 T160,12" // purple sparkline
     },
     {
@@ -73,21 +73,31 @@ export default function MetricCards({ metrics }: MetricCardsProps) {
       isPositive: metrics.outstanding_collections_change < 0, // Positive is downward for outstanding collections
       subtext: "vs last week",
       icon: CreditCard,
-      iconBg: "bg-orange-50 text-orange-600",
-      strokeColor: "#f97316",
+      iconBg: "bg-orange-500/10 text-orange-400",
+      strokeColor: "#fb923c",
       sparklinePath: "M0,15 Q20,30 40,10 T80,25 T120,5 T160,20" // orange sparkline
     }
   ];
 
+  // 5th real KPI card — low stock count is already computed server-side;
+  // no fabricated week-over-week change is shown since that trend isn't tracked.
+  const lowStockCard = typeof metrics.low_stock_count === "number" ? {
+    title: "Low Stock Items",
+    value: formatNumber(metrics.low_stock_count),
+    subtext: typeof metrics.out_of_stock_count === "number" ? `${metrics.out_of_stock_count} out of stock` : "Needs restocking",
+    icon: PackageSearch,
+    iconBg: "bg-rose-500/10 text-rose-400",
+  } : null;
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+    <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 ${lowStockCard ? "lg:grid-cols-5" : "lg:grid-cols-4"}`}>
       {cards.map((card, i) => {
         const Icon = card.icon;
         return (
-          <div key={i} className="bg-white p-5 rounded-xl border border-dashboard-border shadow-sm flex flex-col justify-between hover:shadow-md transition-all">
+          <div key={i} className="bg-dashDark-card p-5 rounded-xl border border-dashDark-border flex flex-col justify-between hover:border-dashDark-borderStrong transition-all">
             {/* Top Row */}
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center">
+              <span className="text-xs font-semibold text-dashDark-textMuted uppercase tracking-wider flex items-center">
                 {card.title}
               </span>
               <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${card.iconBg}`}>
@@ -97,9 +107,9 @@ export default function MetricCards({ metrics }: MetricCardsProps) {
 
             {/* Value and Trend Indicator */}
             <div className="mt-3 flex items-baseline gap-2">
-              <h2 className="text-xl font-bold text-slate-800 tracking-tight">{card.value}</h2>
+              <h2 className="text-xl font-bold text-dashDark-text tracking-tight">{card.value}</h2>
               <div className={`flex items-center gap-0.5 text-xs font-bold ${
-                card.isPositive ? "text-emerald-600" : "text-rose-600"
+                card.isPositive ? "text-emerald-400" : "text-rose-400"
               }`}>
                 {card.isPositive ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
                 <span>{card.change}</span>
@@ -108,8 +118,8 @@ export default function MetricCards({ metrics }: MetricCardsProps) {
 
             {/* Bottom Sparkline and Subtext */}
             <div className="mt-4 flex items-center justify-between">
-              <span className="text-[10px] text-slate-400 font-medium">{card.subtext}</span>
-              
+              <span className="text-[10px] text-dashDark-textFaint font-medium">{card.subtext}</span>
+
               {/* Micro-sparkline SVG */}
               <div className="w-24 h-8 overflow-hidden">
                 <svg className="w-full h-full" viewBox="0 0 160 30">
@@ -126,6 +136,25 @@ export default function MetricCards({ metrics }: MetricCardsProps) {
           </div>
         );
       })}
+
+      {lowStockCard && (
+        <div className="bg-dashDark-card p-5 rounded-xl border border-dashDark-border flex flex-col justify-between hover:border-dashDark-borderStrong transition-all">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-dashDark-textMuted uppercase tracking-wider flex items-center">
+              {lowStockCard.title}
+            </span>
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${lowStockCard.iconBg}`}>
+              <lowStockCard.icon className="w-4.5 h-4.5" />
+            </div>
+          </div>
+          <div className="mt-3 flex items-baseline gap-2">
+            <h2 className="text-xl font-bold text-dashDark-text tracking-tight">{lowStockCard.value}</h2>
+          </div>
+          <div className="mt-4">
+            <span className="text-[10px] text-dashDark-textFaint font-medium">{lowStockCard.subtext}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

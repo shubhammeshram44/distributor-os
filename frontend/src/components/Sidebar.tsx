@@ -74,7 +74,10 @@ export default function Sidebar({ activeTab, setActiveTab, tenantName }: Sidebar
       { type: "category", name: "Settings" },
       { name: "Team Settings", icon: Settings, href: "/dashboard/settings/team" },
       { name: "Integrations", icon: Link2, href: "/dashboard/settings/integrations" },
-      { name: "Automations", icon: Zap, href: "/dashboard/settings/integrations", badge: "Soon" }
+      // No href yet — "Soon" badge signals this isn't built. (Previously this
+      // pointed at the Integrations page by copy-paste mistake, which made a
+      // "coming soon" nav item silently behave like a working link.)
+      { name: "Automations", icon: Zap, badge: "Soon" }
     ];
 
 

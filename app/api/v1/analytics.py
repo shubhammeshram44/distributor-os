@@ -68,18 +68,20 @@ def get_sales_analytics(
     if not status_counts_query and resolved_tenant_id == uuid.UUID("d3b07384-d113-4956-a5d2-64be7357c11d"):
         status_counts = {"Pending": 2, "Confirmed": 3, "Dispatched": 0}
 
-    # 3. Top 5 moving SKUs sorted by total quantity
+    # 3. Top 5 moving SKUs sorted by total quantity (revenue included for dashboard "Top Products" widget)
     top_moving = (
         db.query(
             Product.sku_id.label("sku_code"),
             Product.brand,
             Product.category,
-            func.sum(OrderLineItem.quantity).label("total_quantity")
+            Product.pack_size,
+            func.sum(OrderLineItem.quantity).label("total_quantity"),
+            func.sum(OrderLineItem.quantity * OrderLineItem.unit_price).label("total_revenue")
         )
         .join(Product, OrderLineItem.product_id == Product.id)
         .join(Order, OrderLineItem.order_id == Order.id)
         .filter(Order.tenant_id == resolved_tenant_id)
-        .group_by(Product.sku_id, Product.brand, Product.category)
+        .group_by(Product.sku_id, Product.brand, Product.category, Product.pack_size)
         .order_by(desc("total_quantity"))
         .limit(5)
         .all()
@@ -90,7 +92,9 @@ def get_sales_analytics(
             "sku_code": row.sku_code,
             "brand": row.brand,
             "category": row.category,
-            "total_quantity": int(row.total_quantity or 0)
+            "pack_size": row.pack_size,
+            "total_quantity": int(row.total_quantity or 0),
+            "total_revenue": float(row.total_revenue or 0.0)
         }
         for row in top_moving
     ]

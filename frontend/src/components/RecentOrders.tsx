@@ -129,17 +129,17 @@ export default function RecentOrders({
   };
 
   return (
-    <div className="bg-white p-5 rounded-xl border border-dashboard-border shadow-sm h-full w-full flex flex-col justify-between">
+    <div className="bg-dashDark-card p-5 rounded-xl border border-dashDark-border h-full w-full flex flex-col justify-between">
       {/* Table Header */}
-      <div className="flex items-center justify-between pb-4 border-b border-dashboard-border mb-4">
-        <h3 className="font-bold text-slate-800 text-base">Recent Orders</h3>
+      <div className="flex items-center justify-between pb-4 border-b border-dashDark-border mb-4">
+        <h3 className="font-bold text-dashDark-text text-base">Recent Orders</h3>
         {viewAllHref ? (
-          <Link href={viewAllHref} className="text-xs font-semibold text-brand-blue hover:text-brand-blueHover hover:underline flex items-center gap-1">
+          <Link href={viewAllHref} className="text-xs font-semibold text-blue-400 hover:text-blue-300 hover:underline flex items-center gap-1">
             <span>View all</span>
             <ArrowRight className="w-3.5 h-3.5" />
           </Link>
         ) : (
-          <button className="text-xs font-semibold text-brand-blue hover:text-brand-blueHover hover:underline flex items-center gap-1">
+          <button className="text-xs font-semibold text-blue-400 hover:text-blue-300 hover:underline flex items-center gap-1">
             <span>View all</span>
             <ArrowRight className="w-3.5 h-3.5" />
           </button>
@@ -152,7 +152,7 @@ export default function RecentOrders({
           <div className="overflow-y-auto max-h-[260px] w-full text-left">
             <table className="w-full text-left text-sm border-collapse">
               <thead>
-                <tr className="text-slate-400 font-semibold text-xs border-b border-dashboard-border bg-slate-50/50">
+                <tr className="text-dashDark-textFaint font-semibold text-xs border-b border-dashDark-border">
                   <th className="py-3 px-4">Order ID</th>
                   <th className="py-3 px-4">Customer</th>
                   <th className="py-3 px-4 text-center">Channel</th>
@@ -162,10 +162,10 @@ export default function RecentOrders({
                   <th className="py-3 px-4">ETA</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-dashDark-border">
                 {orders.map((order) => (
-                  <tr key={order.id} className="hover:bg-slate-50/70 transition-colors group">
-                    <td className="py-3.5 px-4 font-semibold text-brand-blue hover:text-brand-blueHover">
+                  <tr key={order.id} className="hover:bg-dashDark-cardAlt transition-colors group">
+                    <td className="py-3.5 px-4 font-semibold text-blue-400 hover:text-blue-300">
                       <button
                         onClick={() => handleOrderIdClick(order)}
                         className="hover:underline text-left text-sm cursor-pointer focus:outline-none"
@@ -173,38 +173,38 @@ export default function RecentOrders({
                         {order.order_id}
                       </button>
                     </td>
-                    <td className="py-3.5 px-4 font-medium text-slate-700 max-w-[180px] truncate">
+                    <td className="py-3.5 px-4 font-medium text-dashDark-text max-w-[180px] truncate">
                       {order.customer}
                     </td>
                     <td className="py-3.5 px-4 text-center">
                       <div className="flex items-center justify-center">
                         {order.channel.toLowerCase() === "whatsapp" ? (
-                          <div className="w-7 h-7 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 shadow-sm" title="WhatsApp Channel">
+                          <div className="w-7 h-7 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-400" title="WhatsApp Channel">
                             <MessageSquare className="w-4 h-4" />
                           </div>
                         ) : (
-                          <div className="w-7 h-7 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 shadow-sm" title="Portal Channel">
+                          <div className="w-7 h-7 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-400" title="Portal Channel">
                             <Globe className="w-4 h-4" />
                           </div>
                         )}
                       </div>
                     </td>
-                    <td className="py-3.5 px-4 text-right font-bold text-slate-800">
+                    <td className="py-3.5 px-4 text-right font-bold text-dashDark-text">
                       {formatCurrency(order.amount)}
                     </td>
                     <td className="py-3.5 px-4 text-center">
                       <span className={`inline-flex items-center justify-center px-2.5 py-1 rounded-full text-xs font-bold leading-none ${
                         order.status === "Confirmed"
-                          ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                          : "bg-amber-50 text-amber-700 border border-amber-200"
+                          ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                          : "bg-amber-500/10 text-amber-400 border border-amber-500/20"
                       }`}>
                         {order.status}
                       </span>
                     </td>
-                    <td className="py-3.5 px-4 text-xs font-semibold text-slate-500">
+                    <td className="py-3.5 px-4 text-xs font-semibold text-dashDark-textMuted">
                       {order.created_on || order.eta}
                     </td>
-                    <td className="py-3.5 px-4 text-xs font-semibold text-slate-500">
+                    <td className="py-3.5 px-4 text-xs font-semibold text-dashDark-textMuted">
                       {order.eta}
                     </td>
                   </tr>
@@ -214,11 +214,11 @@ export default function RecentOrders({
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
-            <div className="w-12 h-12 rounded-full bg-slate-50 flex items-center justify-center mb-3 text-slate-400">
+            <div className="w-12 h-12 rounded-full bg-dashDark-cardAlt flex items-center justify-center mb-3 text-dashDark-textFaint">
               <ShoppingBag className="w-6 h-6" />
             </div>
-            <p className="text-sm font-semibold text-slate-600">No recent orders found</p>
-            <p className="text-xs text-slate-400 mt-1 max-w-[250px]">
+            <p className="text-sm font-semibold text-dashDark-textMuted">No recent orders found</p>
+            <p className="text-xs text-dashDark-textFaint mt-1 max-w-[250px]">
               Orders received via WhatsApp or the portal will populate here.
             </p>
           </div>

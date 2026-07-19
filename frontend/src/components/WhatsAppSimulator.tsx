@@ -14,9 +14,13 @@ interface Customer {
 interface WhatsAppSimulatorProps {
   activeTenantId: string;
   onSuccess?: () => void;
+  /** Bump this number to force the panel open from a parent action
+   *  (e.g. the dashboard's "New Order" button), without taking over
+   *  the widget's own open/close state entirely. */
+  externalOpenTrigger?: number;
 }
 
-export default function WhatsAppSimulator({ activeTenantId, onSuccess }: WhatsAppSimulatorProps) {
+export default function WhatsAppSimulator({ activeTenantId, onSuccess, externalOpenTrigger }: WhatsAppSimulatorProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [isLoadingCustomers, setIsLoadingCustomers] = useState(false);
@@ -26,6 +30,15 @@ export default function WhatsAppSimulator({ activeTenantId, onSuccess }: WhatsAp
   const [customPhone, setCustomPhone] = useState("+919999888877");
   const [messageText, setMessageText] = useState("Bhaiya, send 10 cases of Britannia Marie Gold and 5 cases of HUL Surf Excel immediately.");
   const [isSending, setIsSending] = useState(false);
+
+  // Opens the panel whenever the parent bumps externalOpenTrigger (e.g. "New Order" CTA click).
+  useEffect(() => {
+    if (externalOpenTrigger !== undefined && externalOpenTrigger > 0) {
+      setIsOpen(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [externalOpenTrigger]);
+
 
   // Synchronize Live Registered Customers from Workspace Tenant
   useEffect(() => {

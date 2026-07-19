@@ -28,22 +28,22 @@ export default function CollectionsDonut({ data, viewReportHref, overdue60Count 
   const chartData = hasData ? data : [{ name: "No Outstanding", value: 1 }];
 
   return (
-    <div className="bg-white p-4 rounded-xl border border-dashboard-border shadow-sm flex flex-col justify-between h-full">
+    <div className="bg-dashDark-card p-4 rounded-xl border border-dashDark-border flex flex-col justify-between h-full">
       {/* Header */}
-      <div className="flex items-center justify-between pb-3 border-b border-dashboard-border mb-3">
+      <div className="flex items-center justify-between pb-3 border-b border-dashDark-border mb-3">
         <div>
           <div className="flex items-center gap-2">
-            <h3 className="font-bold text-slate-800 text-base">Collections Overview</h3>
+            <h3 className="font-bold text-dashDark-text text-base">Collections Overview</h3>
           </div>
-          <p className="text-[10px] text-slate-400 font-semibold mt-0.5">Current Portfolio Snapshot</p>
+          <p className="text-[10px] text-dashDark-textFaint font-semibold mt-0.5">Current Portfolio Snapshot</p>
         </div>
         {viewReportHref ? (
-          <Link href={viewReportHref} className="text-xs font-semibold text-brand-blue hover:text-brand-blueHover hover:underline flex items-center gap-1">
+          <Link href={viewReportHref} className="text-xs font-semibold text-blue-400 hover:text-blue-300 hover:underline flex items-center gap-1">
             <span>View report</span>
             <ArrowRight className="w-3.5 h-3.5" />
           </Link>
         ) : (
-          <button className="text-xs font-semibold text-brand-blue hover:text-brand-blueHover hover:underline flex items-center gap-1">
+          <button className="text-xs font-semibold text-blue-400 hover:text-blue-300 hover:underline flex items-center gap-1">
             <span>View report</span>
             <ArrowRight className="w-3.5 h-3.5" />
           </button>
@@ -65,7 +65,7 @@ export default function CollectionsDonut({ data, viewReportHref, overdue60Count 
                 dataKey="value"
               >
                 {chartData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={hasData ? COLORS[index % COLORS.length] : "#e2e8f0"} />
+                  <Cell key={`cell-${index}`} fill={hasData ? COLORS[index % COLORS.length] : "#334155"} />
                 ))}
               </Pie>
             </PieChart>
@@ -73,8 +73,8 @@ export default function CollectionsDonut({ data, viewReportHref, overdue60Count 
 
           {/* Centered label */}
           <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Outstanding</span>
-            <span className="text-xl font-extrabold text-slate-800 mt-0.5">₹ {totalOutstanding === 0 ? "0.00L" : (totalOutstanding / 100000).toFixed(2) + "L"}</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-dashDark-textFaint">Total Outstanding</span>
+            <span className="text-xl font-extrabold text-dashDark-text mt-0.5">₹ {totalOutstanding === 0 ? "0.00L" : (totalOutstanding / 100000).toFixed(2) + "L"}</span>
           </div>
         </div>
 
@@ -87,26 +87,34 @@ export default function CollectionsDonut({ data, viewReportHref, overdue60Count 
                   className="w-2.5 h-2.5 rounded-full"
                   style={{ backgroundColor: COLORS[index % COLORS.length] }}
                 />
-                <span className="text-slate-600 font-semibold">{item.name}</span>
+                <span className="text-dashDark-textMuted font-semibold">{item.name}</span>
               </div>
-              <span className="font-bold text-slate-800">
-                {formatLakhs(item.value)} <span className="text-[10px] text-slate-400 font-normal">({item.percentage}%)</span>
+              <span className="font-bold text-dashDark-text">
+                {formatLakhs(item.value)} <span className="text-[10px] text-dashDark-textFaint font-normal">({item.percentage}%)</span>
               </span>
             </div>
           ))}
         </div>
       </div>
 
-      {/* Warnings Card */}
-      <div className="mt-3 p-2.5 bg-amber-50/70 border border-amber-200 rounded-xl flex items-center justify-between text-[11px] gap-2">
-        <div className="flex items-center gap-2 text-amber-800">
-          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-          <span className="font-semibold">{overdue60Count ?? 0} customers have outstanding balances &gt; 60 days</span>
+      {/* Warnings Card — only shown as a warning when there actually are overdue
+          customers; otherwise shows a neutral/positive "all clear" state so we
+          don't display an alarming amber banner for a count of 0. */}
+      {(overdue60Count ?? 0) > 0 ? (
+        <div className="mt-3 p-2.5 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center justify-between text-[11px] gap-2">
+          <div className="flex items-center gap-2 text-amber-400">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            <span className="font-semibold">{overdue60Count} customers have outstanding balances &gt; 60 days</span>
+          </div>
+          <Link href="/dashboard/customers?filter=overdue_60" className="text-blue-400 hover:text-blue-300 font-bold shrink-0 hover:underline">
+            View customers
+          </Link>
         </div>
-        <Link href="/dashboard/customers?filter=overdue_60" className="text-brand-blue hover:text-brand-blueHover font-bold shrink-0 hover:underline">
-          View customers
-        </Link>
-      </div>
+      ) : (
+        <div className="mt-3 p-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center gap-2 text-[11px]">
+          <span className="text-emerald-400 font-semibold">✓ No customers overdue by 60+ days</span>
+        </div>
+      )}
     </div>
   );
 }
