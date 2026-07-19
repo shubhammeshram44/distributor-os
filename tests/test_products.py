@@ -4,7 +4,9 @@ import pytest
 from fastapi.testclient import TestClient
 from app.main import app
 from app.models.tenant import DistributorTenant
-from app.models.product import Product, ProductAlias
+from app.models.product import Product, ProductAlias, ProductSupplierMapping
+from app.models.customer import Customer
+from app.models.inventory import Inventory
 from app.database import tenant_context
 
 @pytest.fixture(name="client")
@@ -266,3 +268,44 @@ def test_stock_adjustment(db_session, client):
     assert bad_qty_resp.status_code == 422
 
 
+
+
+def test_reorder_suggestions_endpoint(db_session, client):
+    """
+    Regression test for GET /api/v1/products/reorder-suggestions: should
+    return only products that actually need reordering, with supplier info
+    attached, and validate lead_time_days.
+    """
+    tenant = DistributorTenant(name="Reorder Endpoint Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+    tenant_context.set(tenant.id)
+
+    supplier = Customer(
+        retailer_name="ITC Supplier Hub", customer_id="SUP-ITC-2", address_text="Kolkata Warehouse",
+        gstin="19AAAAA2222A2Z2", tax_group="GST", payment_terms="Net 30", phone_number="+919999900003"
+    )
+    db_session.add(supplier)
+    db_session.flush()
+
+    low_stock_product = Product(sku_id="SKU-CHIPS-2", brand="ITC", category="Chips", pack_size="50g", base_price=10.0)
+    db_session.add(low_stock_product)
+    db_session.flush()
+
+    db_session.add(ProductSupplierMapping(product_id=low_stock_product.id, supplier_id=supplier.id, is_primary=True))
+    db_session.add(Inventory(
+        sku_id=low_stock_product.id, location="Aisle-B1", quantity_on_hand=5, quantity_committed=0, low_stock_threshold=10
+    ))
+    db_session.commit()
+
+    response = client.get(f"/api/v1/products/reorder-suggestions?tenant_id={tenant.id}")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["count"] == 1
+    assert data["suggestions"][0]["sku_id"] == "SKU-CHIPS-2"
+    assert data["suggestions"][0]["supplier_name"] == "ITC Supplier Hub"
+    assert data["suggestions"][0]["supplier_phone"] == "+919999900003"
+
+    # Invalid lead_time_days should be rejected with 400
+    bad_response = client.get(f"/api/v1/products/reorder-suggestions?tenant_id={tenant.id}&lead_time_days=0")
+    assert bad_response.status_code == 400

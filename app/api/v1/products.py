@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db, tenant_context
 from app.models.product import Product, ProductAlias
 from app.models.inventory import Inventory
+from app.services.inventory_service import InventoryService
 
 router = APIRouter(prefix="/products", tags=["Products"])
 
@@ -291,6 +292,29 @@ def get_inventory_items(
         }
         for p, inv in items
     ]
+
+
+@router.get("/reorder-suggestions", status_code=status.HTTP_200_OK)
+def get_reorder_suggestions(
+    tenant_id: uuid.UUID,
+    lead_time_days: int = 7,
+    db: Session = Depends(get_db)
+):
+    """
+    AI-assisted reorder suggestions: for every product mapped to a supplier,
+    compares current stock against a sales-velocity-derived reorder point and
+    recommends a purchase quantity. Only returns products that actually need
+    reordering right now, most urgent first. Attaches the mapped supplier's
+    name/phone so the distributor can act on the suggestion immediately.
+    """
+    if lead_time_days <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="lead_time_days must be a positive integer."
+        )
+    tenant_context.set(tenant_id)
+    suggestions = InventoryService().get_tenant_reorder_suggestions(db, tenant_id, lead_time_days)
+    return {"suggestions": suggestions, "count": len(suggestions)}
 
 
 @router.post("/import", status_code=status.HTTP_200_OK)
