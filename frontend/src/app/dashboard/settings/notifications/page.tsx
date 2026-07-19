@@ -280,7 +280,7 @@ export default function NotificationsSettingsPage() {
                           <button
                             onClick={() => handleToggle(key)}
                             className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                              isChecked ? "bg-emerald-500" : "bg-slate-200"
+                              isChecked ? "bg-emerald-500" : "bg-slate-200 dark:bg-white/10"
                             }`}
                           >
                             <span
@@ -316,7 +316,7 @@ export default function NotificationsSettingsPage() {
                           <button
                             onClick={() => handleToggle(key)}
                             className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                              isChecked ? "bg-emerald-500" : "bg-slate-200"
+                              isChecked ? "bg-emerald-500" : "bg-slate-200 dark:bg-white/10"
                             }`}
                           >
                             <span
