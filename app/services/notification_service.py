@@ -97,6 +97,16 @@ Please clear immediately.
 — {distributor_name}"""
 }
 
+CONSOLIDATED_PAYMENT_REMINDER_TEMPLATE = """Hi {customer_name},
+
+You have {invoice_count} unpaid invoices totaling ₹{total:,.0f}.
+
+Pay all outstanding invoices in one go: {outstanding_link}
+
+Thank you for your business!
+— {distributor_name}"""
+
+
 
 class NotificationService:
     def __init__(self, evolution_base_url: str, api_key: str):
@@ -305,4 +315,55 @@ class NotificationService:
 
         except Exception as e:
             logger.warning("Payment reminder fire failed silently: %s", str(e))
+            return False
+
+    async def notify_consolidated_payment_reminder(
+        self,
+        tenant: DistributorTenant,
+        customer: Customer,
+        total_outstanding: float,
+        invoice_count: int,
+        db: Session,
+        outstanding_link: str | None = None,
+    ) -> bool:
+        """
+        Renders and sends a single consolidated reminder covering all of a customer's
+        outstanding invoices (used instead of the tiered single-invoice reminder for
+        customers with many open invoices). Logged as event="consolidated_payment_reminder"
+        so it has its own frequency-cap dedup lane in WhatsappMessageLog.
+        Never raises.
+        """
+        try:
+            # 1. Check tenant notification preferences
+            prefs = tenant.notification_prefs or {}
+            if not prefs.get("payment_reminder", True):
+                logger.info("Notification skipped: payment_reminder disabled for tenant %s", str(tenant.id))
+                return False
+
+            # 2. Check customer notifications enablement
+            if not customer.whatsapp_notifications_enabled:
+                logger.info("Notification skipped: customer %s opted out", str(customer.id))
+                return False
+
+            # 3. Render template
+            link_to_show = outstanding_link if outstanding_link else "Contact your distributor to pay"
+            rendered_message = CONSOLIDATED_PAYMENT_REMINDER_TEMPLATE.format(
+                customer_name=customer.name,
+                invoice_count=invoice_count,
+                total=total_outstanding,
+                outstanding_link=link_to_show,
+                distributor_name=tenant.name
+            )
+
+            # 4. Delegate sending and logging to private helper
+            return await self._send_and_log(
+                tenant=tenant,
+                customer=customer,
+                order_id=None,
+                event="consolidated_payment_reminder",
+                rendered_message=rendered_message
+            )
+
+        except Exception as e:
+            logger.warning("Consolidated payment reminder fire failed silently: %s", str(e))
             return False
