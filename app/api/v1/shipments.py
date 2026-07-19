@@ -233,7 +233,9 @@ def get_pending_shipments(
         .where(
             and_(
                 OrderStateLedger.tenant_id == extracted_tenant_id,
-                OrderStateLedger.to_status == "Confirmed",
+                # "Awaiting Stock" orders have 0 units allocated — nothing to
+                # physically ship yet, so they're intentionally excluded here.
+                OrderStateLedger.to_status.in_(["Confirmed", "Partially Confirmed"]),
                 OrderStateLedger.timestamp == (
                     select(func.max(ledger_alias.timestamp))
                     .where(

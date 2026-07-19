@@ -810,6 +810,19 @@ class IngestionService:
                             db=db,
                             override_to_phone=tenant_val.whatsapp_order_phone  # send to distributor's own number
                         )
+                        # Order needs review: at least one line item couldn't be auto-matched.
+                        # Fire a distinct, more urgent alert so this order isn't silently missed —
+                        # per PRODUCT_STATUS.md this is the biggest week-1 churn risk.
+                        has_unmatched_items = any(item.product_id is None for item in order_val.line_items)
+                        if has_unmatched_items:
+                            await notification_service.notify(
+                                event="order_needs_review_alert",
+                                tenant=tenant_val,
+                                customer=customer_val,
+                                order=order_val,
+                                db=db,
+                                override_to_phone=tenant_val.whatsapp_order_phone
+                            )
                     else:
                         logger.warning("Distributor alert skipped: whatsapp_order_phone not configured for tenant %s", str(tenant_val.id))
                 except Exception as inner_ex:

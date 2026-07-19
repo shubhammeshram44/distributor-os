@@ -89,8 +89,10 @@ def test_confirm_order_success(db_session, client):
 def test_confirm_order_insufficient_stock(db_session, client):
     """
     With partial allocation: requesting more than available stock should now return 200.
-    The order is confirmed with allocated_quantity = available stock,
-    and a STOCK_SHORTAGE DemandGap row is persisted with a non-null revenue_at_risk.
+    The order is confirmed with allocated_quantity = available stock, transitions to
+    "Partially Confirmed" (not "Confirmed", since fulfillment state now reflects the
+    actual allocation outcome), and a STOCK_SHORTAGE DemandGap row is persisted with
+    a non-null revenue_at_risk.
     """
     # Setup Tenant
     tenant = DistributorTenant(name="Orders Test Tenant 2")
@@ -135,7 +137,7 @@ def test_confirm_order_insufficient_stock(db_session, client):
 
     # Partial allocation — should succeed (200), NOT reject
     assert response.status_code == 200
-    assert response.json()["new_status"] == "Confirmed"
+    assert response.json()["new_status"] == "Partially Confirmed"
 
     # Inventory physical stock should be unchanged, committed should be fully allocated (20)
     db_session.expire_all()
@@ -155,6 +157,213 @@ def test_confirm_order_insufficient_stock(db_session, client):
     assert gap.revenue_at_risk is not None
     assert float(gap.revenue_at_risk) == 450.0  # 10 units × ₹45
     assert gap.status == "OPEN"
+
+
+def test_confirm_order_zero_stock_awaiting_stock(db_session, client):
+    """Confirming an order with 0 units available anywhere should set
+    'Awaiting Stock' (not 'Confirmed' and not 'Partially Confirmed')."""
+    tenant = DistributorTenant(name="Awaiting Stock Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+    tenant_context.set(tenant.id)
+
+    p = Product(sku_id="PROD-ZERO-STOCK", brand="HUL", category="Soap", pack_size="100g", base_price=45.0, stock_quantity=0)
+    db_session.add(p)
+    db_session.flush()
+
+    inv = Inventory(tenant_id=tenant.id, sku_id=p.id, location="Loc", quantity_on_hand=0, low_stock_threshold=10)
+    db_session.add(inv)
+    db_session.flush()
+
+    cust = Customer(
+        retailer_name="Zero Stock Kirana", customer_id="C-ZERO", address_text="Delhi",
+        gstin="07AAAAA1111A1Z1", tax_group="GST", payment_terms="COD"
+    )
+    db_session.add(cust)
+    db_session.flush()
+
+    order = Order(tenant_id=tenant.id, internal_order_id="ORD-ZERO-STOCK-1", source="Portal", customer_id=cust.id)
+    db_session.add(order)
+    db_session.flush()
+
+    db_session.add(OrderLineItem(order_id=order.id, product_id=p.id, quantity=10, unit_price=45.0))
+    db_session.commit()
+
+    response = client.put(f"/api/v1/orders/{order.id}/status", json={"to_status": "Confirmed"})
+    assert response.status_code == 200
+    assert response.json()["new_status"] == "Awaiting Stock"
+
+
+def test_pending_allocations_queue_and_approve(db_session, client):
+    """Open STOCK_SHORTAGE gaps appear in the pending-allocations queue, and
+    approving after restock allocates the remaining units and upgrades the
+    order's fulfillment status."""
+    tenant = DistributorTenant(name="Allocation Queue Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+    tenant_context.set(tenant.id)
+
+    p = Product(sku_id="PROD-QUEUE-1", brand="HUL", category="Soap", pack_size="100g", base_price=45.0, stock_quantity=20)
+    db_session.add(p)
+    db_session.flush()
+
+    inv = Inventory(tenant_id=tenant.id, sku_id=p.id, location="Loc", quantity_on_hand=20, low_stock_threshold=10)
+    db_session.add(inv)
+    db_session.flush()
+
+    cust = Customer(
+        retailer_name="Queue Test Kirana", customer_id="C-QUEUE", address_text="Delhi",
+        gstin="07AAAAA1111A1Z1", tax_group="GST", payment_terms="COD"
+    )
+    db_session.add(cust)
+    db_session.flush()
+
+    order = Order(tenant_id=tenant.id, internal_order_id="ORD-QUEUE-1", source="Portal", customer_id=cust.id)
+    db_session.add(order)
+    db_session.flush()
+
+    db_session.add(OrderLineItem(order_id=order.id, product_id=p.id, quantity=30, unit_price=45.0))
+    db_session.commit()
+
+    confirm_resp = client.put(f"/api/v1/orders/{order.id}/status", json={"to_status": "Confirmed"})
+    assert confirm_resp.status_code == 200
+    assert confirm_resp.json()["new_status"] == "Partially Confirmed"
+
+    # Queue should list the gap
+    queue_resp = client.get(f"/api/v1/orders/pending-allocations?tenant_id={tenant.id}")
+    assert queue_resp.status_code == 200
+    items = queue_resp.json()["items"]
+    assert len(items) == 1
+    assert items[0]["gap_qty"] == 10
+    assert items[0]["can_fulfil_now"] is False
+
+    # Restock: 15 more units arrive
+    db_session.expire_all()
+    inv_db = db_session.query(Inventory).filter_by(sku_id=p.id).one()
+    inv_db.quantity_on_hand += 15
+    db_session.commit()
+
+    demand_gap_id = items[0]["demand_gap_id"]
+    approve_resp = client.post(
+        f"/api/v1/orders/pending-allocations/{demand_gap_id}/approve?tenant_id={tenant.id}"
+    )
+    assert approve_resp.status_code == 200
+    approve_data = approve_resp.json()
+    assert approve_data["status"] == "allocated"
+    assert approve_data["newly_allocated_qty"] == 10  # only the remaining gap, not all 15 new units
+    assert approve_data["remaining_gap_qty"] == 0
+    assert approve_data["order_status"] == "Confirmed"
+
+    # Queue should now be empty
+    queue_resp_2 = client.get(f"/api/v1/orders/pending-allocations?tenant_id={tenant.id}")
+    assert queue_resp_2.json()["items"] == []
+
+    db_session.expire_all()
+    item_db = db_session.query(OrderLineItem).filter_by(order_id=order.id).one()
+    assert item_db.allocated_quantity == 30
+    order_db = db_session.query(Order).filter_by(id=order.id).one()
+    assert order_db.current_status == "Confirmed"
+
+
+def test_dispatch_releases_committed_inventory(db_session, client):
+    """Dispatching a confirmed order should release its allocated units from
+    quantity_committed (they've physically left the warehouse) without
+    touching quantity_on_hand again."""
+    tenant = DistributorTenant(name="Dispatch Release Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+    tenant_context.set(tenant.id)
+
+    p = Product(sku_id="PROD-DISPATCH-1", brand="HUL", category="Soap", pack_size="100g", base_price=45.0, stock_quantity=50)
+    db_session.add(p)
+    db_session.flush()
+
+    inv = Inventory(tenant_id=tenant.id, sku_id=p.id, location="Loc", quantity_on_hand=50, low_stock_threshold=10)
+    db_session.add(inv)
+    db_session.flush()
+
+    cust = Customer(
+        retailer_name="Dispatch Test Kirana", customer_id="C-DISPATCH", address_text="Delhi",
+        gstin="07AAAAA1111A1Z1", tax_group="GST", payment_terms="COD"
+    )
+    db_session.add(cust)
+    db_session.flush()
+
+    order = Order(tenant_id=tenant.id, internal_order_id="ORD-DISPATCH-1", source="Portal", customer_id=cust.id)
+    db_session.add(order)
+    db_session.flush()
+
+    db_session.add(OrderLineItem(order_id=order.id, product_id=p.id, quantity=20, unit_price=45.0))
+    db_session.commit()
+
+    confirm_resp = client.put(f"/api/v1/orders/{order.id}/status", json={"to_status": "Confirmed"})
+    assert confirm_resp.status_code == 200
+
+    db_session.expire_all()
+    inv_after_confirm = db_session.query(Inventory).filter_by(sku_id=p.id).one()
+    assert inv_after_confirm.quantity_on_hand == 30
+    assert inv_after_confirm.quantity_committed == 20
+
+    dispatch_resp = client.post(
+        f"/api/v1/orders/{order.id}/dispatch",
+        json={"delivery_partner": "Test Courier", "vehicle_number": "KA-01-AB-1234"}
+    )
+    assert dispatch_resp.status_code == 200
+
+    db_session.expire_all()
+    inv_after_dispatch = db_session.query(Inventory).filter_by(sku_id=p.id).one()
+    # on_hand unchanged by dispatch — already deducted at confirm time
+    assert inv_after_dispatch.quantity_on_hand == 30
+    # committed released back to 0 — units have physically shipped
+    assert inv_after_dispatch.quantity_committed == 0
+
+
+def test_cancel_partially_confirmed_order_restores_correctly(db_session, client):
+    """Cancelling a Partially Confirmed order should restore only the units
+    that were actually allocated (not the full requested quantity), and fully
+    release quantity_committed."""
+    tenant = DistributorTenant(name="Cancel Partial Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+    tenant_context.set(tenant.id)
+
+    p = Product(sku_id="PROD-CANCEL-PARTIAL-1", brand="HUL", category="Soap", pack_size="100g", base_price=45.0, stock_quantity=20)
+    db_session.add(p)
+    db_session.flush()
+
+    inv = Inventory(tenant_id=tenant.id, sku_id=p.id, location="Loc", quantity_on_hand=20, low_stock_threshold=10)
+    db_session.add(inv)
+    db_session.flush()
+
+    cust = Customer(
+        retailer_name="Cancel Partial Kirana", customer_id="C-CANCEL-PARTIAL", address_text="Delhi",
+        gstin="07AAAAA1111A1Z1", tax_group="GST", payment_terms="COD", credit_limit=100000.0
+    )
+    db_session.add(cust)
+    db_session.flush()
+
+    order = Order(tenant_id=tenant.id, internal_order_id="ORD-CANCEL-PARTIAL-1", source="Portal", customer_id=cust.id)
+    db_session.add(order)
+    db_session.flush()
+
+    # requested 30, only 20 in stock -> allocated_quantity will be 20
+    db_session.add(OrderLineItem(order_id=order.id, product_id=p.id, quantity=30, unit_price=45.0))
+    db_session.commit()
+
+    confirm_resp = client.put(f"/api/v1/orders/{order.id}/status", json={"to_status": "Confirmed"})
+    assert confirm_resp.status_code == 200
+    assert confirm_resp.json()["new_status"] == "Partially Confirmed"
+
+    cancel_resp = client.post(f"/api/v1/orders/{order.id}/cancel")
+    assert cancel_resp.status_code == 200
+    assert cancel_resp.json()["new_status"] == "Cancelled"
+
+    db_session.expire_all()
+    inv_db = db_session.query(Inventory).filter_by(sku_id=p.id).one()
+    # Only the 20 allocated units should be restored to on-hand (not 30 requested)
+    assert inv_db.quantity_on_hand == 20
+    assert inv_db.quantity_committed == 0
+
 
 
 def test_confirm_order_atomic_rollback(db_session, client):
@@ -811,6 +1020,19 @@ def test_batch_confirm_order_success(db_session, client):
         stock_quantity=100
     )
     db_session.add(p)
+    db_session.flush()
+
+    # Inventory row with enough stock to fully allocate the line item below,
+    # so this happy-path test exercises a true "Confirmed" (fully allocated)
+    # outcome rather than "Awaiting Stock" (0 allocated, no Inventory row).
+    inv = Inventory(
+        tenant_id=tenant.id,
+        sku_id=p.id,
+        location="WH1",
+        quantity_on_hand=100,
+        low_stock_threshold=10
+    )
+    db_session.add(inv)
     db_session.flush()
 
     # Setup Customer
