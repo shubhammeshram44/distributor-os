@@ -13,6 +13,7 @@ import DemandGapCard from "@/components/DemandGapCard";
 import OnboardingChecklist from "@/components/OnboardingChecklist";
 import { useDashboardData, DashboardMetrics } from "@/hooks/useDashboardData";
 import ErrorBanner from "@/components/ui/ErrorBanner";
+import { Skeleton, SkeletonCard, SkeletonChartCard } from "@/components/ui/Skeleton";
 import { formatDateTime } from "@/utils/datetime";
 import PlaceOrderModal from "@/components/PlaceOrderModal";
 import RevenueTrendChart from "@/components/RevenueTrendChart";
@@ -317,9 +318,62 @@ export default function DashboardPage() {
         {/* 3. Dashboard Scrollable Content */}
         <main className="flex-1 mt-16 p-6 overflow-y-auto space-y-6">
           {isHydrating ? (
-            <div className="flex flex-col items-center justify-center py-32 gap-3 bg-white dark:bg-dashboard-card rounded-xl border border-dashboard-border shadow-sm h-[400px]">
-              <div className="w-8 h-8 rounded-full border-4 border-slate-200 dark:border-white/10 border-t-brand-blue animate-spin" />
-              <span className="text-sm font-semibold text-slate-500 dark:text-slate-400">Setting up your workspace...</span>
+            <div className="space-y-6" aria-busy="true" aria-live="polite">
+              {/* Header skeleton */}
+              <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+                <div className="space-y-2">
+                  <Skeleton className="h-5 w-56" />
+                  <Skeleton className="h-3 w-72" />
+                </div>
+                <div className="flex gap-2">
+                  <Skeleton className="h-9 w-24 rounded-lg" />
+                  <Skeleton className="h-9 w-28 rounded-lg" />
+                </div>
+              </div>
+
+              {/* KPI row skeleton */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                {Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)}
+              </div>
+
+              {/* Quick actions skeleton */}
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="flex min-h-20 items-center gap-3 rounded-lg border border-dashboard-border bg-white dark:bg-dashboard-card px-3">
+                    <Skeleton className="h-9 w-9 rounded-lg shrink-0" />
+                    <div className="min-w-0 flex-1 space-y-1.5">
+                      <Skeleton className="h-3 w-3/4" />
+                      <Skeleton className="h-2.5 w-1/2" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Business health skeleton */}
+              <div className="bg-white dark:bg-dashboard-card rounded-xl border border-slate-200 dark:border-white/10 p-6 shadow-sm flex items-center gap-5">
+                <Skeleton className="w-16 h-16 rounded-full shrink-0" />
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-3.5 w-40" />
+                  <Skeleton className="h-2.5 w-64" />
+                </div>
+              </div>
+
+              {/* Credit risk / operational widgets skeleton */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                <div className="lg:col-span-5"><SkeletonChartCard height="h-[280px]" /></div>
+                <div className="lg:col-span-4"><SkeletonChartCard height="h-[280px]" /></div>
+                <div className="lg:col-span-3"><SkeletonChartCard height="h-[280px]" /></div>
+              </div>
+
+              {/* Revenue trend skeleton */}
+              <SkeletonChartCard height="h-[320px]" />
+
+              {/* Bottom widget row skeleton */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <SkeletonCard />
+                <SkeletonCard />
+                <SkeletonCard />
+              </div>
             </div>
           ) : (
             <>

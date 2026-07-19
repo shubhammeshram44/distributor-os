@@ -5,6 +5,7 @@ import Sidebar from "@/components/Sidebar";
 import DashboardHeader from "@/components/DashboardHeader";
 import Pagination from "@/components/ui/Pagination";
 import { useDebounce } from "@/lib/debounce";
+import { SkeletonTable } from "@/components/ui/Skeleton";
 import {
   Search,
   Loader2,
@@ -302,10 +303,19 @@ export default function CollectionsPage() {
 
             <div className="flex-1 overflow-x-auto">
               {loading ? (
-                <div className="flex flex-col items-center justify-center py-24 gap-3">
-                  <Loader2 className="w-8 h-8 text-brand-blue animate-spin" />
-                  <span className="text-sm font-semibold text-slate-500 dark:text-slate-400">Loading collection records...</span>
-                </div>
+                <table className="w-full text-left text-sm border-collapse">
+                  <thead>
+                    <tr className="text-slate-400 font-semibold text-xs border-b border-dashboard-border bg-slate-50/50 dark:bg-dashboard-inset">
+                      <th className="py-3 px-6">Customer Code</th>
+                      <th className="py-3 px-6">Store Name</th>
+                      <th className="py-3 px-6 text-right">Credit Limit</th>
+                      <th className="py-3 px-6 text-right">Outstanding Balance</th>
+                      <th className="py-3 px-6 text-center">Liability Status</th>
+                      <th className="py-3 px-6 text-center">History</th>
+                    </tr>
+                  </thead>
+                  <SkeletonTable rows={8} cols={6} />
+                </table>
               ) : error ? (
                 <div className="flex flex-col items-center justify-center py-24 gap-3 text-rose-600 dark:text-rose-400">
                   <AlertCircle className="w-8 h-8" />
