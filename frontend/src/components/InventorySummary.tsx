@@ -14,6 +14,25 @@ interface InventorySummaryProps {
 }
 
 export default function InventorySummary({ data }: InventorySummaryProps) {
+  const totalSkus = data?.total_skus ?? 0;
+  const lowStockCount = data?.low_stock_count ?? 0;
+  const outOfStockCount = data?.out_of_stock_count ?? 0;
+  const healthyCount = Math.max(0, totalSkus - lowStockCount - outOfStockCount);
+  const healthPct = totalSkus > 0 ? Math.round((healthyCount / totalSkus) * 100) : 0;
+
+  const healthBand =
+    totalSkus === 0
+      ? { label: "No data", color: "text-slate-400", bar: "bg-slate-300" }
+      : healthPct >= 80
+      ? { label: "Healthy", color: "text-emerald-600 dark:text-emerald-400", bar: "bg-emerald-500" }
+      : healthPct >= 50
+      ? { label: "Needs attention", color: "text-amber-600 dark:text-amber-400", bar: "bg-amber-500" }
+      : { label: "At risk", color: "text-rose-600 dark:text-rose-400", bar: "bg-rose-500" };
+
+  const healthyPct = totalSkus > 0 ? (healthyCount / totalSkus) * 100 : 0;
+  const lowPct = totalSkus > 0 ? (lowStockCount / totalSkus) * 100 : 0;
+  const outPct = totalSkus > 0 ? (outOfStockCount / totalSkus) * 100 : 0;
+
   return (
     <div className="bg-white dark:bg-dashboard-card p-5 rounded-xl border border-dashboard-border shadow-sm flex flex-col justify-between h-full">
       {/* Header */}
@@ -23,6 +42,32 @@ export default function InventorySummary({ data }: InventorySummaryProps) {
           <span>View stock</span>
           <ArrowRight className="w-3.5 h-3.5" />
         </Link>
+      </div>
+
+      {/* Inventory Health Gauge — composition of healthy vs low vs out-of-stock SKUs */}
+      <div className="pb-4 mb-1 border-b border-dashboard-border">
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Inventory Health</span>
+          <span className={`text-xs font-bold ${healthBand.color}`}>
+            {totalSkus > 0 ? `${healthPct}% healthy` : healthBand.label}
+          </span>
+        </div>
+        <div className="w-full h-2 rounded-full overflow-hidden bg-slate-100 dark:bg-white/5 flex">
+          {totalSkus === 0 ? (
+            <div className="h-full w-full bg-slate-200 dark:bg-white/10" />
+          ) : (
+            <>
+              {healthyPct > 0 && <div className="h-full bg-emerald-500" style={{ width: `${healthyPct}%` }} title={`${healthyCount} healthy`} />}
+              {lowPct > 0 && <div className="h-full bg-amber-500" style={{ width: `${lowPct}%` }} title={`${lowStockCount} low stock`} />}
+              {outPct > 0 && <div className="h-full bg-rose-500" style={{ width: `${outPct}%` }} title={`${outOfStockCount} out of stock`} />}
+            </>
+          )}
+        </div>
+        <div className="flex items-center gap-3 mt-2 text-[10px] font-semibold text-slate-400">
+          <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />{healthyCount} healthy</span>
+          <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-amber-500" />{lowStockCount} low</span>
+          <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-rose-500" />{outOfStockCount} out</span>
+        </div>
       </div>
 
       {/* Summary List with Data Bars */}
@@ -37,9 +82,9 @@ export default function InventorySummary({ data }: InventorySummaryProps) {
           </div>
           
           <div className="flex items-center gap-3 text-right">
-            <span className="text-sm font-bold text-slate-800 dark:text-slate-100">{data?.total_skus ?? 0}</span>
+            <span className="text-sm font-bold text-slate-800 dark:text-slate-100">{totalSkus}</span>
             <div className="w-16 h-1.5 bg-slate-100 dark:bg-white/5 rounded-full overflow-hidden hidden sm:block">
-              <div className="h-full rounded-full bg-blue-500" style={{ width: "90%" }} />
+              <div className="h-full rounded-full bg-blue-500" style={{ width: totalSkus > 0 ? "100%" : "0%" }} />
             </div>
           </div>
         </div>
@@ -54,9 +99,9 @@ export default function InventorySummary({ data }: InventorySummaryProps) {
           </div>
           
           <div className="flex items-center gap-3 text-right">
-            <span className="text-sm font-bold text-slate-800 dark:text-slate-100">{data?.low_stock_count ?? 0}</span>
+            <span className="text-sm font-bold text-slate-800 dark:text-slate-100">{lowStockCount}</span>
             <div className="w-16 h-1.5 bg-slate-100 dark:bg-white/5 rounded-full overflow-hidden hidden sm:block">
-              <div className="h-full rounded-full bg-amber-500" style={{ width: "35%" }} />
+              <div className="h-full rounded-full bg-amber-500" style={{ width: `${lowPct}%` }} />
             </div>
           </div>
         </div>
@@ -71,9 +116,9 @@ export default function InventorySummary({ data }: InventorySummaryProps) {
           </div>
           
           <div className="flex items-center gap-3 text-right">
-            <span className="text-sm font-bold text-slate-800 dark:text-slate-100">{data?.out_of_stock_count ?? 0}</span>
+            <span className="text-sm font-bold text-slate-800 dark:text-slate-100">{outOfStockCount}</span>
             <div className="w-16 h-1.5 bg-slate-100 dark:bg-white/5 rounded-full overflow-hidden hidden sm:block">
-              <div className="h-full rounded-full bg-rose-500" style={{ width: "10%" }} />
+              <div className="h-full rounded-full bg-rose-500" style={{ width: `${outPct}%` }} />
             </div>
           </div>
         </div>
@@ -91,9 +136,6 @@ export default function InventorySummary({ data }: InventorySummaryProps) {
             <span className="text-sm font-bold text-slate-800 dark:text-slate-100">
               ₹{((data?.total_inventory_value ?? 0) / 100000).toFixed(2)}L
             </span>
-            <div className="w-16 h-1.5 bg-slate-100 dark:bg-white/5 rounded-full overflow-hidden hidden sm:block">
-              <div className="h-full rounded-full bg-emerald-500" style={{ width: "70%" }} />
-            </div>
           </div>
         </div>
       </div>
