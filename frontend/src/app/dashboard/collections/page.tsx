@@ -175,7 +175,7 @@ export default function CollectionsPage() {
       const resp = await fetch(`${apiBase}/api/v1/payments/collection-voucher?tenant_id=${activeTenantId}`, {
         method: "POST",
         credentials: "include",
-        headers: { 
+        headers: {
           "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {})
         },
@@ -196,7 +196,7 @@ export default function CollectionsPage() {
         setAmount("");
         setReferenceNumber("");
         setPaymentMethod("CASH");
-        
+
         setTimeout(() => fetchCustomers(activeTenantId, skip), 50);
       } else {
         const detail = data.detail || "Failed to record collection voucher.";
@@ -239,7 +239,7 @@ export default function CollectionsPage() {
     <div className="flex bg-dashboard-bg min-h-screen text-slate-800 dark:text-slate-100">
       <Sidebar
         activeTab="Collections"
-        setActiveTab={() => {}}
+        setActiveTab={() => { }}
         tenantName={getTenantName()}
       />
 
@@ -338,7 +338,7 @@ export default function CollectionsPage() {
                     {filteredCustomers.map((c) => {
                       const percentage = c.credit_limit > 0 ? (c.outstanding_balance / c.credit_limit) * 100 : 0;
                       return (
-                        <tr key={c.id} className="hover:bg-slate-50/50 transition-colors group">
+                        <tr key={c.id} className="hover:bg-slate-50/50 dark:hover:bg-white/5 transition-colors group">
                           <td className="py-4 px-6 font-bold text-slate-800 dark:text-slate-100 text-sm">
                             {c.customer_id}
                           </td>
@@ -442,8 +442,8 @@ export default function CollectionsPage() {
                       <span>
                         {p.created_at
                           ? new Date(p.created_at).toLocaleDateString("en-IN", {
-                              day: "numeric", month: "short", year: "numeric",
-                            })
+                            day: "numeric", month: "short", year: "numeric",
+                          })
                           : "—"}
                       </span>
                     </div>

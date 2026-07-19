@@ -270,7 +270,7 @@ export default function NotificationsSettingsPage() {
                       const label = PREF_LABELS[key];
                       const isChecked = prefs[key];
                       return (
-                        <div key={key} className="px-6 py-5 flex items-center justify-between hover:bg-slate-50/50 transition-all duration-200">
+                        <div key={key} className="px-6 py-5 flex items-center justify-between hover:bg-slate-50/50 dark:hover:bg-white/5 transition-all duration-200">
                           <div className="space-y-1 pr-6">
                             <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-100">{label.title}</h4>
                             <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed max-w-xl">{label.desc}</p>
@@ -306,7 +306,7 @@ export default function NotificationsSettingsPage() {
                       const label = PREF_LABELS[key];
                       const isChecked = prefs[key];
                       return (
-                        <div key={key} className="px-6 py-5 flex items-center justify-between hover:bg-slate-50/50 transition-all duration-200">
+                        <div key={key} className="px-6 py-5 flex items-center justify-between hover:bg-slate-50/50 dark:hover:bg-white/5 transition-all duration-200">
                           <div className="space-y-1 pr-6">
                             <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-100">{label.title}</h4>
                             <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed max-w-xl">{label.desc}</p>

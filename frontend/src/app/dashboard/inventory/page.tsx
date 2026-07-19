@@ -140,7 +140,7 @@ export default function InventoryPage() {
       const response = await fetch(`${apiBase}/api/v1/products/adjust-stock?tenant_id=${activeTenantId}`, {
         method: "POST",
         credentials: "include",
-        headers: { 
+        headers: {
           "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {})
         },
@@ -382,7 +382,7 @@ export default function InventoryPage() {
 
                 </div>
               ) : filteredInventory.length === 0 ? (
-                <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed border-slate-200 dark:border-white/10 rounded-xl bg-slate-50/40 dark:bg-white/6 text-center my-4">
+                <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed border-slate-200 dark:border-white/10 rounded-xl bg-slate-50/40 dark:bg-white/[0.06] text-center my-4">
                   <div className="p-3 bg-slate-100 dark:bg-white/5 text-slate-400 rounded-full mb-3">
                     <Box className="w-6 h-6" />
                   </div>
@@ -423,7 +423,7 @@ export default function InventoryPage() {
                       }
 
                       return (
-                        <tr key={item.id} className="hover:bg-slate-50/50 transition-colors group">
+                        <tr key={item.id} className="hover:bg-slate-50/50 dark:hover:bg-white/5 transition-colors group">
                           <td className="py-4 px-6 font-bold text-slate-800 dark:text-slate-100 text-sm">
                             {item.sku_id}
                           </td>

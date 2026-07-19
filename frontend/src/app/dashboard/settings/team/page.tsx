@@ -438,7 +438,7 @@ export default function TeamSettingsPage() {
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-white/5">
                       {filteredUsers.map((u) => (
-                        <tr key={u.id} className="hover:bg-slate-50/50 transition-colors">
+                        <tr key={u.id} className="hover:bg-slate-50/50 dark:hover:bg-white/5 transition-colors">
                           <td className="py-4 px-6 font-bold text-slate-800 dark:text-slate-100 text-sm">
                             {u.full_name}
                           </td>
@@ -502,7 +502,7 @@ export default function TeamSettingsPage() {
                     <button
                       key={r.role}
                       onClick={() => setSelectedRoleCode(r.role)}
-                      className={`w-full p-4 text-left border rounded-xl shadow-sm transition-all flex flex-col gap-1 cursor-pointer bg-white dark:bg-dashboard-card ${isSelected ? "border-brand-blue ring-1 ring-brand-blue" : "border-dashboard-border hover:bg-slate-50/50"
+                      className={`w-full p-4 text-left border rounded-xl shadow-sm transition-all flex flex-col gap-1 cursor-pointer bg-white dark:bg-dashboard-card ${isSelected ? "border-brand-blue ring-1 ring-brand-blue" : "border-dashboard-border hover:bg-slate-50/50 dark:hover:bg-white/5"
                         }`}
                     >
                       <div className="flex items-center justify-between w-full">
@@ -533,7 +533,7 @@ export default function TeamSettingsPage() {
 
                 <div className="divide-y divide-slate-100 dark:divide-white/5 border border-slate-100 dark:border-white/5 rounded-xl overflow-hidden">
                   {activeRoleDetails.permissions.map((p, idx) => (
-                    <div key={idx} className="flex items-center justify-between p-4 hover:bg-slate-50/20 transition-colors">
+                    <div key={idx} className="flex items-center justify-between p-4 hover:bg-slate-50/20 dark:hover:bg-white/5 transition-colors">
                       <div>
                         <p className="text-xs font-bold text-slate-800 dark:text-slate-100">{p.feature}</p>
                         <p className="text-[11px] text-slate-400 font-medium mt-0.5">{p.description}</p>

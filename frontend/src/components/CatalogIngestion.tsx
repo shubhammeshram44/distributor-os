@@ -144,7 +144,7 @@ export default function CatalogIngestion({
           <div
             className={`flex-1 border-2 border-dashed rounded-xl p-6 flex flex-col items-center justify-center gap-2 cursor-pointer transition-all ${dragActive
                 ? "border-brand-blue bg-blue-50/20 dark:bg-blue-500/5"
-                : "border-slate-200 dark:border-white/10 hover:border-brand-blue hover:bg-slate-50/30"
+                : "border-slate-200 dark:border-white/10 hover:border-brand-blue hover:bg-slate-50/30 dark:hover:bg-white/5"
               }`}
             onDragEnter={handleDrag}
             onDragLeave={handleDrag}
@@ -161,7 +161,7 @@ export default function CatalogIngestion({
             <p className="text-[10px] text-slate-400 font-medium">Supported file type: .csv</p>
           </div>
         ) : (
-          <div className="flex-1 border border-slate-200 dark:border-white/10 bg-slate-50/40 dark:bg-white/6 rounded-xl p-4 flex flex-col justify-between gap-4">
+          <div className="flex-1 border border-slate-200 dark:border-white/10 bg-slate-50/40 dark:bg-white/[0.06] rounded-xl p-4 flex flex-col justify-between gap-4">
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-2.5 min-w-0">
                 <div className="w-9 h-9 rounded-lg bg-blue-50 dark:bg-blue-500/10 border border-blue-100 dark:border-blue-500/20 flex items-center justify-center text-blue-500 shrink-0">
@@ -199,11 +199,11 @@ export default function CatalogIngestion({
         )}
 
         {/* Reference Format Info Box */}
-        <div className="p-3 bg-slate-50 dark:bg-dashboard-inset border border-slate-200/60 dark:border-white/8 rounded-xl text-[10px] flex gap-2">
+        <div className="p-3 bg-slate-50 dark:bg-dashboard-inset border border-slate-200/60 dark:border-white/[0.08] rounded-xl text-[10px] flex gap-2">
           <Info className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
           <div className="space-y-1">
             <p className="font-bold text-slate-700 dark:text-slate-300">Required CSV Columns:</p>
-            <code className="block bg-slate-100 dark:bg-white/5 px-2 py-1 rounded text-slate-600 dark:text-slate-400 font-semibold border border-slate-200/50 dark:border-white/8">
+            <code className="block bg-slate-100 dark:bg-white/5 px-2 py-1 rounded text-slate-600 dark:text-slate-400 font-semibold border border-slate-200/50 dark:border-white/[0.08]">
               sku_id, brand, category, pack_size, base_price
             </code>
             <p className="text-slate-400 font-semibold mt-1">Updates price if SKU exists, otherwise inserts a new SKU row.</p>

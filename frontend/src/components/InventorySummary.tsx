@@ -100,7 +100,7 @@ export default function InventorySummary({ data }: InventorySummaryProps) {
 
       {/* Warning notice */}
       {data?.low_stock_count !== undefined && data.low_stock_count > 0 && (
-        <div className="mt-4 p-3 bg-amber-50/70 dark:bg-amber-500/8 border border-amber-200 dark:border-amber-500/20 rounded-xl flex items-center gap-2.5 text-xs text-amber-800 dark:text-amber-300">
+        <div className="mt-4 p-3 bg-amber-50/70 dark:bg-amber-500/[0.08] border border-amber-200 dark:border-amber-500/20 rounded-xl flex items-center gap-2.5 text-xs text-amber-800 dark:text-amber-300">
           <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
           <span>{data.low_stock_count} SKUs are below minimum stock level</span>
         </div>

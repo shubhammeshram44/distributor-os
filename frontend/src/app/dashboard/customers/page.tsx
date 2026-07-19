@@ -548,7 +548,7 @@ function CustomersContent() {
                     {filteredCustomers.map((c) => {
                       const isRisk = c.credit_limit > 0 && (c.outstanding_balance / c.credit_limit) >= 0.9;
                       return (
-                        <tr key={c.id} className="hover:bg-slate-50/50 transition-colors group">
+                        <tr key={c.id} className="hover:bg-slate-50/50 dark:hover:bg-white/5 transition-colors group">
                           <td className="py-4 px-6 font-bold text-slate-800 dark:text-slate-100 text-sm">
                             {c.customer_id}
                           </td>
@@ -562,7 +562,7 @@ function CustomersContent() {
                             {c.phone}
                           </td>
                           <td className="py-4 px-6 text-xs font-semibold text-slate-500 dark:text-slate-400">
-                            <span className="inline-block whitespace-nowrap bg-slate-100 dark:bg-white/5 px-2 py-1 rounded border border-slate-200/50 dark:border-white/8">
+                            <span className="inline-block whitespace-nowrap bg-slate-100 dark:bg-white/5 px-2 py-1 rounded border border-slate-200/50 dark:border-white/[0.08]">
                               {(c as any).payment_terms || "Net 30"}
                             </span>
                           </td>
@@ -937,7 +937,7 @@ function CustomersContent() {
               ) : (
                 <div className="space-y-6">
                   {/* Summary Metric inside Statement Drawer */}
-                  <div className="bg-slate-50 dark:bg-dashboard-inset p-4 rounded-xl border border-slate-200/50 dark:border-white/8 flex justify-between items-center">
+                  <div className="bg-slate-50 dark:bg-dashboard-inset p-4 rounded-xl border border-slate-200/50 dark:border-white/[0.08] flex justify-between items-center">
                     <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">Current Account Balance</span>
                     <span className="text-base font-extrabold text-slate-800 dark:text-slate-100">
                       {formatCurrency(activeStatementRows[activeStatementRows.length - 1].running_balance)}
@@ -957,7 +957,7 @@ function CustomersContent() {
                       </thead>
                       <tbody className="divide-y divide-slate-100 dark:divide-white/5 font-semibold text-slate-700 dark:text-slate-300">
                         {activeStatementRows.map((row) => (
-                          <tr key={row.id} className="hover:bg-slate-50/50">
+                          <tr key={row.id} className="hover:bg-slate-50/50 dark:hover:bg-white/5">
                             <td className="py-3 px-4 text-slate-500 dark:text-slate-400 text-[10px] whitespace-nowrap">
                               {formatDateTime(row.created_at, "datetime")}
                             </td>
