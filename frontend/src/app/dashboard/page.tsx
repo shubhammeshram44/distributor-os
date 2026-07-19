@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import Sidebar from "@/components/Sidebar";
 import DashboardHeader from "@/components/DashboardHeader";
+import MetricCards from "@/components/MetricCards";
 import CollectionsDonut from "@/components/CollectionsDonut";
 // LiveDeliveries import removed 2026-06-28 — replaced by DemandGapCard in the bottom grid.
 // The component file (LiveDeliveries.tsx) is preserved on disk for future use.
@@ -332,6 +333,11 @@ export default function DashboardPage() {
                 </div>
               </div>
 
+              {/* KPI row skeleton */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                {Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)}
+              </div>
+
               {/* Quick actions skeleton */}
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                 {Array.from({ length: 4 }).map((_, i) => (
@@ -446,6 +452,9 @@ export default function DashboardPage() {
               {/* Getting Started checklist — only renders for a brand-new,
                   unfinished workspace; disappears once dismissed or complete. */}
               <OnboardingChecklist activeTenantId={tenantId} />
+
+              {/* The KPI strip turns raw operational data into momentum at a glance. */}
+              <MetricCards metrics={metrics} />
 
               {/* High-frequency workflows stay visible without competing with the primary order action. */}
               <section aria-label="Quick actions" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
