@@ -1,11 +1,13 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import { useRouter } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
 import DashboardHeader from "@/components/DashboardHeader";
 import Link from "next/link";
 import { useDebounce } from "@/lib/debounce";
 import { SkeletonListItem } from "@/components/ui/Skeleton";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import {
   Search,
   MessageSquare,
@@ -73,6 +75,16 @@ interface CustomerThread {
 }
 
 export default function MessagesPage() {
+  const router = useRouter();
+
+  // Messages is still behind a feature flag — bounce direct navigation back to
+  // the dashboard instead of exposing a half-finished page via bookmark/URL.
+  useEffect(() => {
+    if (!FEATURE_FLAGS.messages) {
+      router.replace("/dashboard");
+    }
+  }, [router]);
+
   const [activeTenantId, setActiveTenantId] = useState("");
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
@@ -399,6 +411,12 @@ export default function MessagesPage() {
   const isConfirmed = activeOrder
     ? (confirmedOrderIds[activeOrder.id] || activeOrder.status === "Confirmed")
     : false;
+
+  if (!FEATURE_FLAGS.messages) {
+    // Redirect effect above is already in flight — render nothing rather than
+    // flashing the messages UI before the router.replace() takes effect.
+    return null;
+  }
 
   if (!activeTenantId) {
     return (
