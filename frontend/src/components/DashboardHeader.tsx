@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Search, MessageSquare, ChevronDown, LogOut, HelpCircle, Globe, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import ThemeToggle from "@/components/ui/ThemeToggle";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 
 interface SearchResult {
   type: "order" | "customer" | "product";
@@ -205,9 +206,11 @@ export default function DashboardHeader({
         {/* Notifications */}
         <div className="flex items-center gap-4">
           <ThemeToggle />
-          <Link href="/dashboard/messages" className="relative p-2 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-white/5 rounded-full transition-all" aria-label="Messages">
-            <MessageSquare className="w-5 h-5 text-emerald-600" />
-          </Link>
+          {FEATURE_FLAGS.messages && (
+            <Link href="/dashboard/messages" className="relative p-2 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-white/5 rounded-full transition-all" aria-label="Messages">
+              <MessageSquare className="w-5 h-5 text-emerald-600" />
+            </Link>
+          )}
         </div>
 
         {/* User Profile Dropdown */}
