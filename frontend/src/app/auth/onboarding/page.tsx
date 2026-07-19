@@ -118,7 +118,7 @@ export default function OnboardingPage() {
   }
 
   return (
-    <div className="flex min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/50 items-center justify-center p-6">
+    <div className="flex min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/50 dark:from-dashboard-bg dark:via-dashboard-bg dark:to-dashboard-bg items-center justify-center p-6">
       <div className="w-full max-w-lg bg-white dark:bg-dashboard-card border border-slate-100/80 dark:border-white/10 rounded-3xl shadow-2xl p-10 flex flex-col justify-between relative overflow-hidden">
 
         <div className="absolute -top-10 -right-10 w-32 h-32 bg-blue-400/10 rounded-full blur-2xl pointer-events-none" />

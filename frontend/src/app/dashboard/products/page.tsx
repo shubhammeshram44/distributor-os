@@ -159,7 +159,7 @@ export default function ProductsPage() {
       const resp = await fetch(`${apiBase}/api/v1/products?tenant_id=${activeTenantId}`, {
         method: "POST",
         credentials: "include",
-        headers: { 
+        headers: {
           "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {})
         },
@@ -424,7 +424,7 @@ export default function ProductsPage() {
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-white/5">
                     {filteredProducts.map((p) => (
-                      <tr key={p.id} className="hover:bg-slate-50/50 transition-colors group">
+                      <tr key={p.id} className="hover:bg-slate-50/50 dark:hover:bg-white/5 transition-colors group">
                         <td className="py-4 px-6 font-bold text-slate-800 dark:text-slate-100 text-sm">
                           {p.sku_id}
                         </td>
@@ -435,7 +435,7 @@ export default function ProductsPage() {
                           {p.category}
                         </td>
                         <td className="py-4 px-6 text-slate-600 dark:text-slate-400 font-semibold text-xs">
-                          <span className="bg-slate-100 dark:bg-white/5 px-2.5 py-1 rounded-md border border-slate-200/50 dark:border-white/8">
+                          <span className="bg-slate-100 dark:bg-white/5 px-2.5 py-1 rounded-md border border-slate-200/50 dark:border-white/[0.08]">
                             {p.pack_size}
                           </span>
                         </td>

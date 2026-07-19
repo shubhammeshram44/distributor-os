@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import Sidebar from "@/components/Sidebar";
 import DashboardHeader from "@/components/DashboardHeader";
-// MetricCards inlined locally to format change percentages to 1 decimal place
+import MetricCards from "@/components/MetricCards";
 import CollectionsDonut from "@/components/CollectionsDonut";
 // LiveDeliveries import removed 2026-06-28 — replaced by DemandGapCard in the bottom grid.
 // The component file (LiveDeliveries.tsx) is preserved on disk for future use.
@@ -14,6 +14,8 @@ import OnboardingChecklist from "@/components/OnboardingChecklist";
 import { useDashboardData, DashboardMetrics } from "@/hooks/useDashboardData";
 import ErrorBanner from "@/components/ui/ErrorBanner";
 import { formatDateTime } from "@/utils/datetime";
+import PlaceOrderModal from "@/components/PlaceOrderModal";
+import { BarChart3, PackagePlus, Plus, ReceiptText, RefreshCw, UserPlus } from "lucide-react";
 
 
 export default function DashboardPage() {
@@ -78,6 +80,7 @@ export default function DashboardPage() {
   } | null>(null);
   const [healthLoading, setHealthLoading] = useState(true);
   const [healthExpanded, setHealthExpanded] = useState(false);
+  const [isPlaceOrderOpen, setIsPlaceOrderOpen] = useState(false);
 
 
   // Sync profile and tenant from backend / localStorage
@@ -320,13 +323,30 @@ export default function DashboardPage() {
           ) : (
             <>
               {/* Dashboard Control Header */}
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
                 <div>
-                  <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">Dashboard</h1>
-                  <p className="text-xs text-slate-400 font-semibold mt-0.5">Real-time operational workflow management</p>
+                  <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">Business command center</h1>
+                  <p className="text-xs text-slate-400 font-semibold mt-0.5">Your current performance, priorities, and next actions in one place.</p>
                 </div>
-
-
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={refreshAll}
+                    className="inline-flex h-9 items-center gap-2 rounded-lg border border-dashboard-border bg-white px-3 text-xs font-semibold text-slate-600 shadow-sm transition-colors hover:bg-slate-50 dark:hover:bg-white/5 dark:bg-dashboard-card dark:text-slate-300 dark:hover:bg-white/5"
+                    title="Refresh dashboard data"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                    Refresh
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsPlaceOrderOpen(true)}
+                    className="inline-flex h-9 items-center gap-2 rounded-lg bg-emerald-600 px-3 text-xs font-bold text-white shadow-sm transition-colors hover:bg-emerald-700"
+                  >
+                    <Plus className="h-4 w-4" />
+                    New order
+                  </button>
+                </div>
               </div>
 
               {/* API Error Banner */}
@@ -376,6 +396,41 @@ export default function DashboardPage() {
                   unfinished workspace; disappears once dismissed or complete. */}
               <OnboardingChecklist activeTenantId={tenantId} />
 
+              {/* The KPI strip turns raw operational data into momentum at a glance. */}
+              <MetricCards metrics={metrics} />
+
+              {/* High-frequency workflows stay visible without competing with the primary order action. */}
+              <section aria-label="Quick actions" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <a
+                  href="/dashboard/products"
+                  className="group flex min-h-20 items-center gap-3 rounded-lg border border-dashboard-border bg-white px-3 shadow-sm transition-colors hover:border-blue-200 hover:bg-blue-50/50 dark:bg-dashboard-card dark:hover:border-blue-500/30 dark:hover:bg-blue-500/5"
+                >
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400"><PackagePlus className="h-4 w-4" /></span>
+                  <span className="min-w-0 text-left"><span className="block text-xs font-bold text-slate-700 dark:text-slate-200">Add product</span><span className="mt-0.5 block text-[10px] font-medium text-slate-400">Update catalog</span></span>
+                </a>
+                <a
+                  href="/dashboard/customers"
+                  className="group flex min-h-20 items-center gap-3 rounded-lg border border-dashboard-border bg-white px-3 shadow-sm transition-colors hover:border-violet-200 hover:bg-violet-50/50 dark:bg-dashboard-card dark:hover:border-violet-500/30 dark:hover:bg-violet-500/5"
+                >
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-50 text-violet-600 dark:bg-violet-500/10 dark:text-violet-400"><UserPlus className="h-4 w-4" /></span>
+                  <span className="min-w-0 text-left"><span className="block text-xs font-bold text-slate-700 dark:text-slate-200">Add customer</span><span className="mt-0.5 block text-[10px] font-medium text-slate-400">Grow your network</span></span>
+                </a>
+                <a
+                  href="/dashboard/collections"
+                  className="group flex min-h-20 items-center gap-3 rounded-lg border border-dashboard-border bg-white px-3 shadow-sm transition-colors hover:border-amber-200 hover:bg-amber-50/50 dark:bg-dashboard-card dark:hover:border-amber-500/30 dark:hover:bg-amber-500/5"
+                >
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400"><ReceiptText className="h-4 w-4" /></span>
+                  <span className="min-w-0 text-left"><span className="block text-xs font-bold text-slate-700 dark:text-slate-200">Record payment</span><span className="mt-0.5 block text-[10px] font-medium text-slate-400">Keep receivables current</span></span>
+                </a>
+                <a
+                  href="/dashboard/reports"
+                  className="group flex min-h-20 items-center gap-3 rounded-lg border border-dashboard-border bg-white px-3 shadow-sm transition-colors hover:border-emerald-200 hover:bg-emerald-50/50 dark:bg-dashboard-card dark:hover:border-emerald-500/30 dark:hover:bg-emerald-500/5"
+                >
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400"><BarChart3 className="h-4 w-4" /></span>
+                  <span className="min-w-0 text-left"><span className="block text-xs font-bold text-slate-700 dark:text-slate-200">View reports</span><span className="mt-0.5 block text-[10px] font-medium text-slate-400">Review performance</span></span>
+                </a>
+              </section>
+
               {/* Business Health Score */}
               {/* Business Health Score - Full Width */}
               {!healthLoading && healthScore?.has_sufficient_data && (
@@ -385,14 +440,14 @@ export default function DashboardPage() {
                       {/* Circular score */}
                       <div className="relative w-16 h-16 flex-shrink-0">
                         <svg className="w-16 h-16 -rotate-90" viewBox="0 0 56 56">
-                          <circle cx="28" cy="28" r="24" fill="none" stroke="#e2e8f0" strokeWidth="4.5"/>
+                          <circle cx="28" cy="28" r="24" fill="none" stroke="#e2e8f0" strokeWidth="4.5" />
                           <circle
                             cx="28" cy="28" r="24"
                             fill="none"
                             stroke={
                               healthScore.band === "excellent" ? "#10b981" :
-                              healthScore.band === "good" ? "#f59e0b" :
-                              healthScore.band === "attention" ? "#f97316" : "#ef4444"
+                                healthScore.band === "good" ? "#f59e0b" :
+                                  healthScore.band === "attention" ? "#f97316" : "#ef4444"
                             }
                             strokeWidth="4.5"
                             strokeDasharray={`${(healthScore.score / 100) * 150.8} 150.8`}
@@ -412,22 +467,20 @@ export default function DashboardPage() {
                           <span className="text-sm font-bold text-slate-800 dark:text-slate-100">
                             Business Health
                           </span>
-                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                            healthScore.band === "excellent" ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" :
-                            healthScore.band === "good" ? "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400" :
-                            healthScore.band === "attention" ? "bg-orange-50 dark:bg-orange-500/10 text-orange-700 dark:text-orange-400" :
-                            "bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400"
-                          }`}>
+                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${healthScore.band === "excellent" ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" :
+                              healthScore.band === "good" ? "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400" :
+                                healthScore.band === "attention" ? "bg-orange-50 dark:bg-orange-500/10 text-orange-700 dark:text-orange-400" :
+                                  "bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400"
+                            }`}>
                             {healthScore.band_label}
                           </span>
                           {/* Trend */}
-                          <span className={`text-xs font-medium ${
-                            healthScore.trend === "up" ? "text-emerald-600 dark:text-emerald-400" :
-                            healthScore.trend === "down" ? "text-red-500" :
-                            "text-slate-400"
-                          }`}>
+                          <span className={`text-xs font-medium ${healthScore.trend === "up" ? "text-emerald-600 dark:text-emerald-400" :
+                              healthScore.trend === "down" ? "text-red-500" :
+                                "text-slate-400"
+                            }`}>
                             {healthScore.trend === "up" ? "↑" :
-                             healthScore.trend === "down" ? "↓" : "→"}
+                              healthScore.trend === "down" ? "↓" : "→"}
                           </span>
                         </div>
                         <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
@@ -435,7 +488,34 @@ export default function DashboardPage() {
                         </p>
                       </div>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => setHealthExpanded((expanded) => !expanded)}
+                      className="self-start rounded-lg border border-dashboard-border px-3 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-white/5 sm:self-auto"
+                    >
+                      {healthExpanded ? "Hide drivers" : "View drivers"}
+                    </button>
                   </div>
+                  {healthExpanded && (
+                    <div className="mt-5 grid grid-cols-1 gap-2 border-t border-slate-100 pt-4 dark:border-white/5 sm:grid-cols-2 lg:grid-cols-5">
+                      {[
+                        ["Collections", healthScore.signals.collections],
+                        ["Sales", healthScore.signals.sales],
+                        ["Recovery", healthScore.signals.recovery],
+                        ["Inventory", healthScore.signals.inventory],
+                        ["Fulfillment", healthScore.signals.fulfillment],
+                      ].map(([label, signal]) => {
+                        const driver = signal as { score: number; max: number; status: string };
+                        const color = driver.status === "good" ? "bg-emerald-500" : driver.status === "attention" ? "bg-amber-500" : "bg-red-500";
+                        return (
+                          <div key={label as string} className="rounded-lg bg-slate-50 p-3 dark:bg-dashboard-inset">
+                            <div className="flex items-center justify-between gap-2"><span className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">{label as string}</span><span className="text-[10px] font-bold text-slate-400">{driver.score}/{driver.max}</span></div>
+                            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200 dark:bg-white/10"><div className={`h-full rounded-full ${color}`} style={{ width: `${(driver.score / driver.max) * 100}%` }} /></div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -518,8 +598,8 @@ export default function DashboardPage() {
                         <a
                           href={decision.action_url}
                           className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${idx === 0
-                              ? "bg-red-600 text-white hover:bg-red-700"
-                              : "bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-slate-300 hover:bg-slate-200"
+                            ? "bg-red-600 text-white hover:bg-red-700"
+                            : "bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-slate-300 hover:bg-slate-200"
                             }`}
                         >
                           {decision.action_label} →
@@ -544,12 +624,12 @@ export default function DashboardPage() {
                               ⚠️ Credit Risk Alerts
                             </h3>
                             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                              {creditRisk.total_at_risk_count} customers · 
+                              {creditRisk.total_at_risk_count} customers ·
                               ₹{creditRisk.total_at_risk_amount.toLocaleString("en-IN")} at risk
                             </p>
                           </div>
-                          <a href="/dashboard/customers" 
-                             className="text-xs text-emerald-600 dark:text-emerald-400 font-medium hover:underline">
+                          <a href="/dashboard/customers"
+                            className="text-xs text-emerald-600 dark:text-emerald-400 font-medium hover:underline">
                             View All →
                           </a>
                         </div>
@@ -581,13 +661,12 @@ export default function DashboardPage() {
                         {/* Customer list */}
                         <div className="space-y-2">
                           {creditRisk.alerts.map((alert) => (
-                            <div 
+                            <div
                               key={alert.customer_id}
-                              className={`flex items-center gap-3 p-3 rounded-lg border-l-4 ${
-                                alert.risk_level === "high_risk"
+                              className={`flex items-center gap-3 p-3 rounded-lg border-l-4 ${alert.risk_level === "high_risk"
                                   ? "bg-red-50 dark:bg-red-500/10 border-red-400"
                                   : "bg-amber-50 dark:bg-amber-500/10 border-amber-400"
-                              }`}
+                                }`}
                             >
                               <span className="text-base flex-shrink-0">
                                 {alert.risk_level === "high_risk" ? "🔴" : "🟡"}
@@ -597,17 +676,16 @@ export default function DashboardPage() {
                                 <p className="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">
                                   {alert.customer_name}
                                 </p>
-                                
+
                                 <div className="flex items-center gap-2 mt-1">
                                   <div className="flex-1 bg-slate-200 rounded-full h-1.5">
-                                    <div 
-                                      className={`h-1.5 rounded-full ${
-                                        alert.risk_level === "high_risk" 
-                                          ? "bg-red-400" 
+                                    <div
+                                      className={`h-1.5 rounded-full ${alert.risk_level === "high_risk"
+                                          ? "bg-red-400"
                                           : "bg-amber-400"
-                                      }`}
-                                      style={{ 
-                                        width: `${Math.min(100, (alert.overdue_days / 90) * 100)}%` 
+                                        }`}
+                                      style={{
+                                        width: `${Math.min(100, (alert.overdue_days / 90) * 100)}%`
                                       }}
                                     />
                                   </div>
@@ -618,11 +696,10 @@ export default function DashboardPage() {
                               </div>
 
                               <div className="text-right flex-shrink-0">
-                                <p className={`text-xs font-bold ${
-                                  alert.risk_level === "high_risk" 
-                                    ? "text-red-600 dark:text-red-400" 
+                                <p className={`text-xs font-bold ${alert.risk_level === "high_risk"
+                                    ? "text-red-600 dark:text-red-400"
                                     : "text-amber-600 dark:text-amber-400"
-                                }`}>
+                                  }`}>
                                   ₹{alert.outstanding.toLocaleString("en-IN")}
                                 </p>
                                 <p className="text-xs text-slate-400">
@@ -696,10 +773,10 @@ export default function DashboardPage() {
                             suffix: "→ In transit"
                           }
                         ].map(item => (
-                          <a 
+                          <a
                             key={item.label}
                             href={item.url}
-                            className={`flex items-center justify-between py-3.5 px-4 rounded-lg ${item.bg} hover:opacity-80 transition-opacity border border-slate-100/50 dark:border-white/8`}
+                            className={`flex items-center justify-between py-3.5 px-4 rounded-lg ${item.bg} hover:opacity-80 transition-opacity border border-slate-100/50 dark:border-white/[0.08]`}
                           >
                             <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">{item.label}</span>
                             <div className="flex items-center gap-2">
@@ -760,11 +837,10 @@ export default function DashboardPage() {
                             const signal = healthScore.signals[key as keyof typeof healthScore.signals];
                             return (
                               <div key={key} className="flex items-center gap-3">
-                                <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                                  signal.status === "good" ? "bg-emerald-400" :
-                                  signal.status === "attention" ? "bg-amber-400" :
-                                  "bg-red-400"
-                                }`} />
+                                <div className={`w-2 h-2 rounded-full flex-shrink-0 ${signal.status === "good" ? "bg-emerald-400" :
+                                    signal.status === "attention" ? "bg-amber-400" :
+                                      "bg-red-400"
+                                  }`} />
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center justify-between">
                                     <span className="text-xs font-semibold text-slate-600 dark:text-slate-400 truncate mr-2">{label}</span>
@@ -772,11 +848,10 @@ export default function DashboardPage() {
                                   </div>
                                   <div className="mt-1 h-1.5 bg-slate-100 dark:bg-white/5 rounded-full overflow-hidden">
                                     <div
-                                      className={`h-full rounded-full ${
-                                        signal.status === "good" ? "bg-emerald-400" :
-                                        signal.status === "attention" ? "bg-amber-400" :
-                                        "bg-red-400"
-                                      }`}
+                                      className={`h-full rounded-full ${signal.status === "good" ? "bg-emerald-400" :
+                                          signal.status === "attention" ? "bg-amber-400" :
+                                            "bg-red-400"
+                                        }`}
                                       style={{
                                         width: `${(signal.score / signal.max) * 100}%`
                                       }}
@@ -848,6 +923,12 @@ export default function DashboardPage() {
             </>
           )}
         </main>
+        <PlaceOrderModal
+          activeTenantId={tenantId}
+          isOpen={isPlaceOrderOpen}
+          onClose={() => setIsPlaceOrderOpen(false)}
+          onSuccess={refreshAll}
+        />
       </div>
     </div>
   );

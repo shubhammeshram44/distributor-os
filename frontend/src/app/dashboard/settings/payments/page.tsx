@@ -172,7 +172,7 @@ export default function PaymentsPage() {
   };
 
   return (
-    <div className="flex h-screen bg-[#F8FAFC]">
+    <div className="flex h-screen bg-dashboard-bg">
       <Sidebar activeTab="Payments" setActiveTab={() => {}} tenantName={getTenantName()} />
       
       <div className="flex-1 flex flex-col md:pl-64 min-h-screen">
@@ -229,12 +229,12 @@ export default function PaymentsPage() {
                 <div className="p-6 space-y-6">
                   {connected && !showUpdateForm ? (
                     <div className="space-y-4">
-                      <div className="bg-slate-50 dark:bg-dashboard-inset border border-slate-200/60 dark:border-white/8 rounded-xl p-4 flex flex-col gap-2 font-semibold">
+                      <div className="bg-slate-50 dark:bg-dashboard-inset border border-slate-200/60 dark:border-white/[0.08] rounded-xl p-4 flex flex-col gap-2 font-semibold">
                         <div className="flex justify-between items-center">
                           <span className="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wide">Account Name</span>
                           <span className="text-sm text-slate-800 dark:text-slate-100">{accountName || "—"}</span>
                         </div>
-                        <div className="flex justify-between items-center border-t border-slate-200/60 dark:border-white/8 pt-2 mt-1">
+                        <div className="flex justify-between items-center border-t border-slate-200/60 dark:border-white/[0.08] pt-2 mt-1">
                           <span className="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wide">Key ID</span>
                           <span className="text-sm font-mono text-slate-800 dark:text-slate-100">{keyIdMasked}</span>
                         </div>
@@ -259,7 +259,7 @@ export default function PaymentsPage() {
                     </div>
                   ) : (
                     <>
-                      <div className="bg-slate-50 dark:bg-dashboard-inset border border-slate-200/60 dark:border-white/8 rounded-xl p-4 flex gap-3 text-slate-600 dark:text-slate-400 text-xs leading-relaxed font-semibold">
+                      <div className="bg-slate-50 dark:bg-dashboard-inset border border-slate-200/60 dark:border-white/[0.08] rounded-xl p-4 flex gap-3 text-slate-600 dark:text-slate-400 text-xs leading-relaxed font-semibold">
                         <ShieldCheck className="w-5 h-5 text-brand-blue flex-shrink-0 mt-0.5" />
                         <div>
                           <span className="text-slate-800 dark:text-slate-100 font-bold">Secure connection:</span>
@@ -280,7 +280,7 @@ export default function PaymentsPage() {
                             value={keyIdInput}
                             onChange={e => setKeyIdInput(e.target.value)}
                             placeholder="rzp_test_xxxxxxxxxxxx"
-                            className="w-full px-4 py-2.5 border border-slate-200 dark:border-white/10 rounded-lg text-sm font-medium focus:ring-2 focus:ring-brand-blue/20 focus:border-brand-blue outline-none transition-all"
+                            className="w-full px-4 py-2.5 border border-slate-200 dark:border-white/10 rounded-lg text-sm font-medium bg-white dark:bg-dashboard-inset text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-brand-blue/20 focus:border-brand-blue outline-none transition-all"
                           />
                         </div>
 
@@ -294,7 +294,7 @@ export default function PaymentsPage() {
                               value={keySecretInput}
                               onChange={e => setKeySecretInput(e.target.value)}
                               placeholder="••••••••••••••••••••••••••••••"
-                              className="w-full px-4 py-2.5 border border-slate-200 dark:border-white/10 rounded-lg text-sm font-medium focus:ring-2 focus:ring-brand-blue/20 focus:border-brand-blue outline-none transition-all pr-12"
+                              className="w-full px-4 py-2.5 border border-slate-200 dark:border-white/10 rounded-lg text-sm font-medium bg-white dark:bg-dashboard-inset text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-brand-blue/20 focus:border-brand-blue outline-none transition-all pr-12"
                             />
                             <button
                               type="button"

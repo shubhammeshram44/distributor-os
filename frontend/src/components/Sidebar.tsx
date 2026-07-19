@@ -164,9 +164,15 @@ export default function Sidebar({ activeTab, setActiveTab, tenantName }: Sidebar
           }
 
           const Icon = item.icon;
+          // Match on exact path or a full path-segment boundary only — a naive
+          // `pathname.startsWith(item.href)` would also match "/dashboard/settings/integrations-v2"
+          // against the "Integrations" item's href ("/dashboard/settings/integrations"), since one
+          // string is a literal prefix of the other, causing both menu items to render as active
+          // at once. Requiring a trailing "/" (or an exact match) enforces a real segment boundary.
           const isActive = item.href
-
-            ? (item.href === "/dashboard" ? pathname === "/dashboard" || pathname === "/" : pathname.startsWith(item.href))
+            ? (item.href === "/dashboard"
+              ? pathname === "/dashboard" || pathname === "/"
+              : pathname === item.href || pathname.startsWith(`${item.href}/`))
             : activeTab === item.name;
 
           const className = `w-full flex items-center ${effectiveCollapsed ? 'justify-center p-3' : 'gap-3 px-4 py-3'

@@ -104,7 +104,7 @@ export default function CollectionsDonut({ data, viewReportHref, overdue60Count 
       </div>
 
       {/* Warnings Card */}
-      <div className="mt-3 p-2.5 bg-amber-50/70 dark:bg-amber-500/8 border border-amber-200 dark:border-amber-500/20 rounded-xl flex items-center justify-between text-[11px] gap-2">
+      <div className="mt-3 p-2.5 bg-amber-50/70 dark:bg-amber-500/[0.08] border border-amber-200 dark:border-amber-500/20 rounded-xl flex items-center justify-between text-[11px] gap-2">
         <div className="flex items-center gap-2 text-amber-800 dark:text-amber-300">
           <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
           <span className="font-semibold">{overdue60Count ?? 0} customers have outstanding balances &gt; 60 days</span>

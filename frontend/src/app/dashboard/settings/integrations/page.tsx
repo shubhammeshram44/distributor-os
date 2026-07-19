@@ -24,11 +24,11 @@ export default function IntegrationsPage() {
   const [ownerJid, setOwnerJid] = useState("");
   const [showDisconnectModal, setShowDisconnectModal] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
-  
+
   // Masked visibility states
   const [showPhoneId, setShowPhoneId] = useState(false);
   const [showToken, setShowToken] = useState(false);
-  
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -51,7 +51,7 @@ export default function IntegrationsPage() {
     if (provisioningStatus !== "connecting" || !instanceName) return;
 
     const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-    
+
     const checkStatus = async () => {
       try {
         const resp = await fetch(`${apiBase}/api/v1/evolution/status?instance_name=${instanceName}&tenant_id=${activeTenantId}`);
@@ -122,7 +122,7 @@ export default function IntegrationsPage() {
       showToast("Network connection error.", "error");
     }
   };
-  
+
   const [toast, setToast] = useState<{ show: boolean; message: string; type: "success" | "error" }>({
     show: false,
     message: "",
@@ -166,24 +166,24 @@ export default function IntegrationsPage() {
             setInstanceName(data.whatsapp_phone_id);
             // Verify connection status
             try {
-            const statusResp = await fetch(
-              `${apiBase}/api/v1/evolution/status?instance_name=${data.whatsapp_phone_id}&tenant_id=${activeTenantId}`
-            );
-            if (statusResp.ok) {
-              const statusData = await statusResp.json();
-              if (statusData.connected === true || statusData.status === "open") {
-                setProvisioningStatus("connected");
-                if (statusData.owner_phone) {
-                  setWhatsappOrderPhone(statusData.owner_phone);
+              const statusResp = await fetch(
+                `${apiBase}/api/v1/evolution/status?instance_name=${data.whatsapp_phone_id}&tenant_id=${activeTenantId}`
+              );
+              if (statusResp.ok) {
+                const statusData = await statusResp.json();
+                if (statusData.connected === true || statusData.status === "open") {
+                  setProvisioningStatus("connected");
+                  if (statusData.owner_phone) {
+                    setWhatsappOrderPhone(statusData.owner_phone);
+                  }
+                } else {
+                  // Was previously connected (phone_id exists) but now disconnected
+                  setProvisioningStatus("disconnected");
                 }
               } else {
-                // Was previously connected (phone_id exists) but now disconnected
+                // API call failed — assume disconnected if phone_id existed
                 setProvisioningStatus("disconnected");
               }
-            } else {
-              // API call failed — assume disconnected if phone_id existed
-              setProvisioningStatus("disconnected");
-            }
             } catch (err) {
               console.error("Error fetching connection status on mount:", err);
               setProvisioningStatus("idle");
@@ -289,7 +289,7 @@ export default function IntegrationsPage() {
       const resp = await fetch(`${apiBase}/api/v1/tenant/integrations/whatsapp?tenant_id=${activeTenantId}`, {
         method: "PATCH",
         credentials: "include",
-        headers: { 
+        headers: {
           "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {})
         },
@@ -357,12 +357,12 @@ export default function IntegrationsPage() {
   const displayPhone = ownerJid ? ownerJid.replace("@s.whatsapp.net", "") : whatsappOrderPhone;
 
   return (
-    <div className="flex h-screen bg-[#F8FAFC]">
-      <Sidebar activeTab="Integrations" setActiveTab={() => {}} tenantName={getTenantName()} />
-      
+    <div className="flex h-screen bg-dashboard-bg">
+      <Sidebar activeTab="Integrations" setActiveTab={() => { }} tenantName={getTenantName()} />
+
       <div className="flex-1 flex flex-col md:pl-64 min-h-screen">
         <DashboardHeader onTenantChange={handleTenantChange} />
-        
+
         <main className="flex-1 p-6 space-y-6 max-w-4xl w-full mx-auto">
 
           <div>
@@ -464,7 +464,7 @@ export default function IntegrationsPage() {
                 </div>
 
                 <div className="p-6 space-y-6">
-                  <div className="bg-slate-50 dark:bg-dashboard-inset border border-slate-200/60 dark:border-white/8 rounded-xl p-4 flex gap-3 text-slate-600 dark:text-slate-400 text-xs leading-relaxed font-semibold">
+                  <div className="bg-slate-50 dark:bg-dashboard-inset border border-slate-200/60 dark:border-white/[0.08] rounded-xl p-4 flex gap-3 text-slate-600 dark:text-slate-400 text-xs leading-relaxed font-semibold">
                     <AlertCircle className="w-5 h-5 text-brand-blue flex-shrink-0 mt-0.5" />
                     <div>
                       <span className="text-slate-800 dark:text-slate-100 font-bold">Configuration Instructions:</span>
@@ -600,14 +600,14 @@ export default function IntegrationsPage() {
                 <div className="p-6 space-y-6">
                   {provisioningStatus === "connected" ? (
                     <div className="space-y-4">
-                      <div className="bg-slate-50 dark:bg-dashboard-inset border border-slate-200/60 dark:border-white/8 rounded-xl p-4 flex flex-col gap-2">
+                      <div className="bg-slate-50 dark:bg-dashboard-inset border border-slate-200/60 dark:border-white/[0.08] rounded-xl p-4 flex flex-col gap-2">
                         <div className="flex justify-between items-center">
                           <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Connected Phone Number</span>
                           <span className="text-sm font-bold text-slate-800 dark:text-slate-100">
                             +{displayPhone.replace("+", "")}
                           </span>
                         </div>
-                        <div className="flex justify-between items-center border-t border-slate-200/60 dark:border-white/8 pt-2 mt-1">
+                        <div className="flex justify-between items-center border-t border-slate-200/60 dark:border-white/[0.08] pt-2 mt-1">
                           <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Instance ID</span>
                           <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 font-mono">
                             {instanceName}
@@ -635,7 +635,7 @@ export default function IntegrationsPage() {
                               WhatsApp Disconnected
                             </p>
                             <p className="text-xs text-red-500 mt-1 leading-relaxed">
-                              Your WhatsApp connection was lost. Orders from retailers are 
+                              Your WhatsApp connection was lost. Orders from retailers are
                               NOT being received until you reconnect.
                             </p>
                             {whatsappOrderPhone && (
@@ -647,7 +647,7 @@ export default function IntegrationsPage() {
                         </div>
                       </div>
 
-                      <div className="bg-slate-50 dark:bg-dashboard-inset border border-slate-200/60 dark:border-white/8 rounded-xl p-4 text-xs text-slate-500 dark:text-slate-400 leading-relaxed font-semibold">
+                      <div className="bg-slate-50 dark:bg-dashboard-inset border border-slate-200/60 dark:border-white/[0.08] rounded-xl p-4 text-xs text-slate-500 dark:text-slate-400 leading-relaxed font-semibold">
                         <p className="font-semibold text-slate-700 dark:text-slate-300 mb-1">To reconnect:</p>
                         <ol className="list-decimal pl-4 space-y-1 text-slate-500 dark:text-slate-400 font-medium">
                           <li>Click "Reconnect WhatsApp" below</li>
@@ -676,7 +676,7 @@ export default function IntegrationsPage() {
                     </div>
                   ) : (
                     <>
-                      <div className="bg-slate-50 dark:bg-dashboard-inset border border-slate-200/60 dark:border-white/8 rounded-xl p-4 flex gap-3 text-slate-600 dark:text-slate-400 text-xs leading-relaxed font-semibold">
+                      <div className="bg-slate-50 dark:bg-dashboard-inset border border-slate-200/60 dark:border-white/[0.08] rounded-xl p-4 flex gap-3 text-slate-600 dark:text-slate-400 text-xs leading-relaxed font-semibold">
                         <AlertCircle className="w-5 h-5 text-brand-blue flex-shrink-0 mt-0.5" />
                         <div>
                           <span className="text-slate-800 dark:text-slate-100 font-bold">Evolution API Connection Instructions:</span>
@@ -782,11 +782,10 @@ export default function IntegrationsPage() {
       {/* Elegant Toast Notifications */}
       {toast.show && (
         <div className="fixed bottom-5 right-5 z-50 animate-slide-in">
-          <div className={`flex items-center gap-3 px-5 py-3 rounded-lg border shadow-xl bg-white dark:bg-dashboard-card ${
-            toast.type === "success" 
-              ? "border-emerald-200 dark:border-emerald-500/20 text-emerald-800 dark:text-emerald-300" 
+          <div className={`flex items-center gap-3 px-5 py-3 rounded-lg border shadow-xl bg-white dark:bg-dashboard-card ${toast.type === "success"
+              ? "border-emerald-200 dark:border-emerald-500/20 text-emerald-800 dark:text-emerald-300"
               : "border-rose-200 dark:border-rose-500/20 text-rose-800 dark:text-rose-300"
-          }`}>
+            }`}>
             <span className="text-lg">
               {toast.type === "success" ? "✓" : "⚠"}
             </span>
