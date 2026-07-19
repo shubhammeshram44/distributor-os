@@ -44,9 +44,16 @@ def update_tenant_profile(
             
     # Check JWT from cookie or authorization header
     if not resolved_tenant_id:
-        token = access_token
-        if not token and authorization and authorization.startswith("Bearer "):
+        # Prefer the Authorization header over the cookie — see
+        # resolve_tenant_id in tenant_service.py for the full rationale
+        # (stale cookies must never shadow a freshly issued, valid session
+        # token; this endpoint had its own separate, unfixed copy of the
+        # same cookie-first bug fixed elsewhere in PR #14).
+        token = None
+        if authorization and authorization.startswith("Bearer "):
             token = authorization.split(" ")[1]
+        if not token:
+            token = access_token
         if token:
             token_payload = verify_jwt(token)
             if token_payload and "tenant_id" in token_payload:

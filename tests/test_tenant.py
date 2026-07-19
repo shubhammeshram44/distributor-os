@@ -85,3 +85,35 @@ def test_get_tenant_profile_prefers_header_over_stale_cookie(db_session, client)
     )
     assert response.status_code == 200
     assert response.json()["tenant"]["id"] == str(tenant_id)
+
+
+def test_update_tenant_profile_prefers_header_over_stale_cookie(db_session, client):
+    """
+    Regression test for update_tenant_profile (PUT /api/v1/tenant/profile):
+    unlike every other endpoint in this router, this one previously carried
+    its OWN separate, unfixed copy of the cookie-first precedence bug (it
+    resolves the JWT inline instead of delegating to the already-fixed
+    resolve_tenant_id() helper). A stale/garbage access_token cookie must
+    never shadow a valid, freshly-issued Authorization header here either —
+    otherwise saving your business profile could wrongly 401 you out on a
+    fresh tab/session even though your login is perfectly valid.
+    """
+    tenant_id = uuid.uuid4()
+    tenant = DistributorTenant(id=tenant_id, name="Original Name", category=None)
+    db_session.add(tenant)
+    db_session.commit()
+
+    token = sign_jwt({
+        "user_id": str(uuid.uuid4()),
+        "tenant_id": str(tenant_id),
+        "role": "SUPER_ADMIN"
+    })
+
+    client.cookies.set("access_token", "garbage-stale-cookie-value")
+    response = client.put(
+        "/api/v1/tenant/profile",
+        json={"name": "Updated Via Header", "category": "FMCG"},
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    assert response.status_code == 200
+    assert response.json()["tenant"]["name"] == "Updated Via Header"
