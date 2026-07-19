@@ -21,7 +21,6 @@ class Order(Base, TenantMixin):
     # ONE-TIME DATA MIGRATION:
     # UPDATE orders SET status = 'pending_review' WHERE status = 'NEEDS_REVIEW';
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="Draft")
-    idempotency_key: Mapped[uuid.UUID | None] = mapped_column(unique=True, nullable=True, default=None)
 
     @hybrid_property
     def customer_mobile(self) -> str:
