@@ -15,6 +15,7 @@ import { useDashboardData, DashboardMetrics } from "@/hooks/useDashboardData";
 import ErrorBanner from "@/components/ui/ErrorBanner";
 import { formatDateTime } from "@/utils/datetime";
 import PlaceOrderModal from "@/components/PlaceOrderModal";
+import RevenueTrendChart from "@/components/RevenueTrendChart";
 import { BarChart3, PackagePlus, Plus, ReceiptText, RefreshCw, UserPlus } from "lucide-react";
 
 
@@ -468,16 +469,16 @@ export default function DashboardPage() {
                             Business Health
                           </span>
                           <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${healthScore.band === "excellent" ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" :
-                              healthScore.band === "good" ? "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400" :
-                                healthScore.band === "attention" ? "bg-orange-50 dark:bg-orange-500/10 text-orange-700 dark:text-orange-400" :
-                                  "bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400"
+                            healthScore.band === "good" ? "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400" :
+                              healthScore.band === "attention" ? "bg-orange-50 dark:bg-orange-500/10 text-orange-700 dark:text-orange-400" :
+                                "bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400"
                             }`}>
                             {healthScore.band_label}
                           </span>
                           {/* Trend */}
                           <span className={`text-xs font-medium ${healthScore.trend === "up" ? "text-emerald-600 dark:text-emerald-400" :
-                              healthScore.trend === "down" ? "text-red-500" :
-                                "text-slate-400"
+                            healthScore.trend === "down" ? "text-red-500" :
+                              "text-slate-400"
                             }`}>
                             {healthScore.trend === "up" ? "↑" :
                               healthScore.trend === "down" ? "↓" : "→"}
@@ -664,8 +665,8 @@ export default function DashboardPage() {
                             <div
                               key={alert.customer_id}
                               className={`flex items-center gap-3 p-3 rounded-lg border-l-4 ${alert.risk_level === "high_risk"
-                                  ? "bg-red-50 dark:bg-red-500/10 border-red-400"
-                                  : "bg-amber-50 dark:bg-amber-500/10 border-amber-400"
+                                ? "bg-red-50 dark:bg-red-500/10 border-red-400"
+                                : "bg-amber-50 dark:bg-amber-500/10 border-amber-400"
                                 }`}
                             >
                               <span className="text-base flex-shrink-0">
@@ -681,8 +682,8 @@ export default function DashboardPage() {
                                   <div className="flex-1 bg-slate-200 rounded-full h-1.5">
                                     <div
                                       className={`h-1.5 rounded-full ${alert.risk_level === "high_risk"
-                                          ? "bg-red-400"
-                                          : "bg-amber-400"
+                                        ? "bg-red-400"
+                                        : "bg-amber-400"
                                         }`}
                                       style={{
                                         width: `${Math.min(100, (alert.overdue_days / 90) * 100)}%`
@@ -697,8 +698,8 @@ export default function DashboardPage() {
 
                               <div className="text-right flex-shrink-0">
                                 <p className={`text-xs font-bold ${alert.risk_level === "high_risk"
-                                    ? "text-red-600 dark:text-red-400"
-                                    : "text-amber-600 dark:text-amber-400"
+                                  ? "text-red-600 dark:text-red-400"
+                                  : "text-amber-600 dark:text-amber-400"
                                   }`}>
                                   ₹{alert.outstanding.toLocaleString("en-IN")}
                                 </p>
@@ -838,8 +839,8 @@ export default function DashboardPage() {
                             return (
                               <div key={key} className="flex items-center gap-3">
                                 <div className={`w-2 h-2 rounded-full flex-shrink-0 ${signal.status === "good" ? "bg-emerald-400" :
-                                    signal.status === "attention" ? "bg-amber-400" :
-                                      "bg-red-400"
+                                  signal.status === "attention" ? "bg-amber-400" :
+                                    "bg-red-400"
                                   }`} />
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center justify-between">
@@ -849,8 +850,8 @@ export default function DashboardPage() {
                                   <div className="mt-1 h-1.5 bg-slate-100 dark:bg-white/5 rounded-full overflow-hidden">
                                     <div
                                       className={`h-full rounded-full ${signal.status === "good" ? "bg-emerald-400" :
-                                          signal.status === "attention" ? "bg-amber-400" :
-                                            "bg-red-400"
+                                        signal.status === "attention" ? "bg-amber-400" :
+                                          "bg-red-400"
                                         }`}
                                       style={{
                                         width: `${(signal.score / signal.max) * 100}%`
@@ -870,6 +871,11 @@ export default function DashboardPage() {
                     </div>
                   </div>
                 </div>
+              </div>
+
+              {/* Row 4.5: Revenue Trend — same data source as the full Reports page */}
+              <div className="h-[320px]">
+                <RevenueTrendChart activeTenantId={tenantId} />
               </div>
 
               {/* Row 5: Collections aging donut | Demand Gap | Inventory Summary */}
