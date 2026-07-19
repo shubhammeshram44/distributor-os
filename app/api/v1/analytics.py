@@ -115,7 +115,7 @@ def get_revenue_analytics(
         .where(
             and_(
                 OrderStateLedger.tenant_id == resolved_tenant_id,
-                OrderStateLedger.to_status == "Confirmed",
+                OrderStateLedger.to_status.in_(["Confirmed", "Partially Confirmed", "Awaiting Stock"]),
                 OrderStateLedger.timestamp == (
                     select(func.max(ledger_alias.timestamp))
                     .where(

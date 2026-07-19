@@ -279,7 +279,7 @@ def cancel_order(
     tenant_context.set(order.tenant_id)
     current = order.current_status
 
-    if current not in ("Draft", "Pending", "Confirmed", "Needs Review"):
+    if current not in ("Draft", "Pending", "Confirmed", "Needs Review", "Partially Confirmed", "Awaiting Stock"):
         raise HTTPException(
             status_code=400,
             detail=f"Cannot cancel order with status '{current}'. Only Draft/Confirmed orders can be cancelled."
@@ -288,23 +288,31 @@ def cancel_order(
     try:
         items = db.query(OrderLineItem).filter(OrderLineItem.order_id == order_id).all()
 
-        # If Confirmed, reverse inventory and customer balance
-        if current == "Confirmed":
+        # If any commercially-confirmed state (Confirmed / Partially Confirmed /
+        # Awaiting Stock), reverse inventory and customer balance — all three
+        # states already debited the customer ledger and committed inventory
+        # during confirm_order(), regardless of how much was actually allocated.
+        if current in ("Confirmed", "Partially Confirmed", "Awaiting Stock"):
             customer = db.get(Customer, order.customer_id)
             order_total = sum(float(i.quantity * i.unit_price) for i in items)
 
-            # Restore inventory
+            # Restore inventory — only the units actually allocated were ever
+            # deducted from quantity_on_hand, so restore that amount (not the
+            # full requested quantity, which would over-restore stock on a
+            # partially-allocated order). Fetched and mutated via the ORM
+            # (rather than a raw SQL clamp) since a portable 2-arg "greatest"
+            # expression doesn't exist across SQLite (tests) and Postgres (prod).
             for item in items:
-                db.execute(
-                    sa_update(Inventory)
-                    .where(
-                        and_(
-                            Inventory.tenant_id == order.tenant_id,
-                            Inventory.sku_id == item.product_id
-                        )
-                    )
-                    .values(quantity_on_hand=Inventory.quantity_on_hand + item.quantity)
-                )
+                restored_qty = item.allocated_quantity if item.allocated_quantity is not None else item.quantity
+                if restored_qty <= 0:
+                    continue
+                inv_record = db.query(Inventory).filter(
+                    Inventory.tenant_id == order.tenant_id,
+                    Inventory.sku_id == item.product_id
+                ).first()
+                if inv_record:
+                    inv_record.quantity_on_hand = (inv_record.quantity_on_hand or 0) + restored_qty
+                    inv_record.quantity_committed = max(0, (inv_record.quantity_committed or 0) - restored_qty)
 
             # Reverse customer outstanding balance via ledger service.
             # Use invoice.total_amount (actual billed amount at confirmation),
@@ -341,6 +349,38 @@ def cancel_order(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Cancellation failed: {str(e)}")
+
+
+@router.get("/pending-allocations", status_code=status.HTTP_200_OK)
+def get_pending_allocations(
+    tenant_id: uuid.UUID,
+    db: Session = Depends(get_db),
+):
+    """
+    Lists open STOCK_SHORTAGE demand gaps, oldest first, so a distributor can
+    see what's waiting on restock and approve fulfillment once stock arrives.
+    """
+    tenant_context.set(tenant_id)
+    from app.services.allocation_queue_service import list_pending_allocations
+    return {"items": list_pending_allocations(db, tenant_id)}
+
+
+@router.post("/pending-allocations/{demand_gap_id}/approve", status_code=status.HTTP_200_OK)
+def approve_pending_allocation_endpoint(
+    demand_gap_id: uuid.UUID,
+    tenant_id: uuid.UUID,
+    db: Session = Depends(get_db),
+):
+    """
+    Approves as much of an open demand gap as current stock allows. Safe to
+    call again later if stock only partially covers the gap.
+    """
+    tenant_context.set(tenant_id)
+    from app.services.allocation_queue_service import approve_pending_allocation
+    try:
+        return approve_pending_allocation(db, tenant_id, demand_gap_id)
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
 
 
 import csv as csv_module
@@ -444,6 +484,8 @@ def update_order_status(
         "Draft": {"Confirmed"},
         "NEEDS_REVIEW": set(),  # Must resolve via triage first
         "Confirmed": {"Dispatched"},
+        "Partially Confirmed": {"Dispatched"},  # can dispatch whatever was allocated
+        "Awaiting Stock": set(),  # nothing allocated yet — resolve via pending-allocations queue first
         "Dispatched": {"Delivered"},
         "Delivered": set(),
     }
@@ -478,7 +520,7 @@ def update_order_status(
         return {
             "status": "success",
             "order_id": str(order.id),
-            "new_status": payload.to_status
+            "new_status": order.current_status
         }
 
     except HTTPException:
@@ -848,8 +890,9 @@ def get_order_invoice(
     # Set tenant isolation context
     tenant_context.set(order.tenant_id)
 
-    # 2. Restrict to Confirmed orders
-    if order.current_status != "Confirmed":
+    # 2. Restrict to commercially-confirmed orders (Confirmed / Partially
+    # Confirmed / Awaiting Stock all have an invoice created at confirm time)
+    if order.current_status not in ("Confirmed", "Partially Confirmed", "Awaiting Stock"):
         raise HTTPException(
             status_code=400,
             detail="Invoices can only be generated for Confirmed orders"
@@ -1003,7 +1046,7 @@ def process_bulk_invoices(job_id: str, order_ids: list[str], tenant_id: uuid.UUI
                     if not order:
                         raise ValueError("Order not found")
                     
-                    if order.current_status != "Confirmed":
+                    if order.current_status not in ("Confirmed", "Partially Confirmed", "Awaiting Stock"):
                         raise ValueError("Order is not Confirmed")
 
                     pdf_bytes = generate_invoice_pdf_bytes(order, db)
@@ -1301,7 +1344,7 @@ def create_order(
         "status": "success",
         "order_id": str(new_order.id),
         "internal_order_id": generated_order_id,
-        "new_status": payload.status
+        "new_status": new_order.current_status
     }
 
 
@@ -1497,7 +1540,7 @@ def confirm_order_post(order_id: uuid.UUID, db: Session = Depends(get_db)):
 
 
 
-    return {"status": "success", "order_id": str(order.id), "new_status": "Confirmed"}
+    return {"status": "success", "order_id": str(order.id), "new_status": order.current_status}
 
 
 # ---------------------------------------------------------------------------
@@ -1546,7 +1589,7 @@ def batch_confirm_order(
     tenant_context.set(order.tenant_id)
 
     current_status = order.current_status
-    if current_status == "Confirmed":
+    if current_status in ("Confirmed", "Partially Confirmed", "Awaiting Stock"):
         raise HTTPException(
             status_code=409,
             detail="Order is already confirmed.",
@@ -1731,7 +1774,7 @@ def batch_confirm_order(
         return {
             "status": "success",
             "order_id": str(order.id),
-            "new_status": "Confirmed",
+            "new_status": order.current_status,
             "changes_applied": len(payload.resolved_items),
         }
 
@@ -1782,6 +1825,23 @@ def dispatch_order_post(order_id: uuid.UUID, payload: DispatchPayload, db: Sessi
         shipment.status = "DISPATCHED"
         shipment.carrier = payload.delivery_partner
         shipment.tracking_id = payload.vehicle_number
+
+    # Release committed inventory on dispatch: the allocated units have now
+    # physically left the warehouse, so they're no longer "committed" (reserved
+    # but on-hand) — quantity_on_hand was already decremented at confirm time
+    # and must NOT change again here. Previously `quantity_committed` was never
+    # released at dispatch, silently inflating it forever (open tech debt).
+    items = db.query(OrderLineItem).filter(OrderLineItem.order_id == order_id).all()
+    for item in items:
+        released_qty = item.allocated_quantity if item.allocated_quantity is not None else item.quantity
+        if released_qty <= 0:
+            continue
+        inv_record = db.query(Inventory).filter(
+            Inventory.tenant_id == order.tenant_id,
+            Inventory.sku_id == item.product_id
+        ).first()
+        if inv_record:
+            inv_record.quantity_committed = max(0, (inv_record.quantity_committed or 0) - released_qty)
 
     # Check if OrderStateLedger model exists
     has_ledger = False

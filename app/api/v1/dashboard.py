@@ -919,7 +919,7 @@ def get_recent_activity(
         minutes_ago = int((datetime.utcnow() - l.timestamp).total_seconds() / 60)
         time_text = f"{minutes_ago} min ago" if minutes_ago < 60 else f"{minutes_ago//60} hr ago" if minutes_ago < 1440 else "1 day ago"
 
-        if l.to_status == "Confirmed":
+        if l.to_status in ("Confirmed", "Partially Confirmed", "Awaiting Stock"):
             msg = f"Order {order.internal_order_id} confirmed by {cust_name}"
             category = "order"
         elif l.to_status == "Dispatched":

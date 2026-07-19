@@ -10,6 +10,7 @@ import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import { ToastContainer, useToast } from "@/components/ui/Toast";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import PlaceOrderModal from "@/components/PlaceOrderModal";
+import PendingAllocationsCard from "@/components/PendingAllocationsCard";
 import { useDebounce, fetchWithTimeout } from "@/lib/debounce";
 import {
   Search,
@@ -712,6 +713,9 @@ export default function OrdersPage() {
             </div>
 
           </div>
+
+          {/* Stock Arrived — Review Allocations queue (only renders when non-empty) */}
+          <PendingAllocationsCard activeTenantId={activeTenantId} />
 
           {/* Status Navigation & Search Bar Card */}
           <div className="bg-white dark:bg-dashboard-card rounded-xl border border-dashboard-border shadow-sm p-4 flex flex-col sm:flex-row items-center justify-between gap-4">

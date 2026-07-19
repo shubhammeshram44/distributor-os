@@ -148,7 +148,7 @@ def confirm_order(db: Session, order: Order, updated_by: str) -> Invoice:
                 Order.customer_id == order.customer_id,
                 Order.tenant_id == order.tenant_id,
                 Order.id != order.id,
-                Order.status == "Confirmed"
+                Order.status.in_(["Confirmed", "Partially Confirmed", "Awaiting Stock"])
             )
         )
     ).scalar() or 0.0)
@@ -217,13 +217,27 @@ def confirm_order(db: Session, order: Order, updated_by: str) -> Invoice:
     process_order_self_learning(db, order.id, order.tenant_id)
 
     # ── 11. State transition ───────────────────────────────────────────────────
+    # Fulfillment state reflects physical allocation outcome, distinct from the
+    # commercial "Confirmed" acceptance that already happened above:
+    #   - Awaiting Stock       -> 0 units allocated across the whole order (fully out of stock)
+    #   - Partially Confirmed  -> some, but not all, requested units allocated
+    #   - Confirmed            -> fully allocated, ready to dispatch
+    total_requested = sum(item.quantity for item in items)
+    total_allocated = sum(item.allocated_quantity or 0 for item in items)
+    if total_requested > 0 and total_allocated == 0:
+        final_status = "Awaiting Stock"
+    elif total_allocated < total_requested:
+        final_status = "Partially Confirmed"
+    else:
+        final_status = "Confirmed"
+
     db.add(OrderStateLedger(
         tenant_id=order.tenant_id,
         order_id=order.id,
         from_status=from_status,
-        to_status="Confirmed",
+        to_status=final_status,
         updated_by=updated_by
     ))
-    order.status = "Confirmed"
+    order.status = final_status
 
     return invoice
