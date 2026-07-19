@@ -5,6 +5,7 @@ import Sidebar from "@/components/Sidebar";
 import DashboardHeader from "@/components/DashboardHeader";
 import { Search, Loader2, RefreshCw, AlertCircle, Box, AlertTriangle, CheckCircle2, X, Sparkles, MessageCircle } from "lucide-react";
 import { useDebounce, fetchWithTimeout } from "@/lib/debounce";
+import AllocationPriorityCard from "@/components/AllocationPriorityCard";
 
 interface InventoryItem {
   id: string;
@@ -389,6 +390,9 @@ export default function InventoryPage() {
               </form>
             </div>
           </div>
+
+          {/* Allocation priority preview — advisory only, only renders when there is an open demand gap */}
+          <AllocationPriorityCard activeTenantId={activeTenantId} />
 
           {/* AI Reorder Suggestions Panel — only rendered when there is something
               actionable, so it never clutters the page for a healthy catalog. */}

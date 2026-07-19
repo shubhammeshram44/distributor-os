@@ -1089,6 +1089,29 @@ def get_demand_gap_summary(
     }
 
 
+@router.get("/allocation-priority")
+def get_allocation_priority(
+    tenant_id: str | None = None,
+    sku_id: str | None = None,
+    access_token: str | None = Cookie(None),
+    authorization: str | None = Header(None),
+    db: Session = Depends(get_db)
+):
+    """
+    Read-only preview of customer allocation priority ranking for open
+    stock-shortage demand gaps — see customer_scoring_service.py for the
+    scoring methodology. Not wired into any one-click-approve action; this is
+    an advisory ranking a distributor can consult manually.
+    """
+    resolved_tenant_id = resolve_tenant_id(tenant_id, access_token, authorization)
+    tenant_context.set(resolved_tenant_id)
+
+    from app.services.customer_scoring_service import rank_customers_for_allocation
+    parsed_sku_id = uuid.UUID(sku_id) if sku_id else None
+    ranked = rank_customers_for_allocation(db, resolved_tenant_id, sku_id=parsed_sku_id)
+    return {"items": ranked}
+
+
 @router.get("/onboarding-status")
 def get_onboarding_status(
     tenant_id: str | None = None,
