@@ -78,7 +78,7 @@ export default function MessagesPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearchQuery] = useDebounce(searchQuery, 300);
   const [loading, setLoading] = useState(true);
-  
+
   const [chatStreams, setChatStreams] = useState<Record<string, Message[]>>({});
   const [unreadStates, setUnreadStates] = useState<Record<string, number>>({});
   const [inputText, setInputText] = useState("");
@@ -194,7 +194,7 @@ export default function MessagesPage() {
     }
     fetchTriageOrderDetails(order.id);
   };
-  
+
   const [toast, setToast] = useState<{ show: boolean; message: string; type: "success" | "error" }>({
     show: false,
     message: "",
@@ -242,7 +242,7 @@ export default function MessagesPage() {
       if (!resp.ok) throw new Error("Failed to fetch customers");
       const data = await resp.json();
       setCustomers(data);
-      
+
       // Auto-select first customer (prefer Kaveri)
       if (data.length > 0) {
         const kaveri = data.find((c: Customer) => c.retailer_name.toLowerCase().includes("kaveri"));
@@ -315,19 +315,19 @@ export default function MessagesPage() {
   const handleSendMessage = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!inputText.trim() || !selectedCustomer) return;
-    
+
     const newMessage: Message = {
       id: Date.now(),
       text: inputText,
       sender: "operator",
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
-    
+
     setChatStreams(prev => ({
       ...prev,
       [selectedCustomer.id]: [...(prev[selectedCustomer.id] || []), newMessage]
     }));
-    
+
     setInputText("");
   };
 
@@ -348,7 +348,7 @@ export default function MessagesPage() {
       const response = await fetch(`${apiBase}/api/v1/orders/${order.id}/confirm`, {
         method: "POST",
         credentials: "include",
-        headers: { 
+        headers: {
           "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {})
         }
@@ -380,13 +380,13 @@ export default function MessagesPage() {
   // Synthesize a chat bubble from the real ingested order, then append operator-typed messages.
   const syntheticMessages: Message[] = thread?.order
     ? [{
-        id: -1,
-        sender: "customer",
-        timestamp: thread.order.created_on,
-        text:
-          `Order ${thread.order.order_id} received via WhatsApp:\n` +
-          thread.items.map(it => `• ${it.quantity} × ${it.product_name}`).join("\n")
-      }]
+      id: -1,
+      sender: "customer",
+      timestamp: thread.order.created_on,
+      text:
+        `Order ${thread.order.order_id} received via WhatsApp:\n` +
+        thread.items.map(it => `• ${it.quantity} × ${it.product_name}`).join("\n")
+    }]
     : [];
   const operatorMessages = selectedCustomer ? chatStreams[selectedCustomer.id] || [] : [];
   const activeMessages = [...syntheticMessages, ...operatorMessages];
@@ -412,13 +412,13 @@ export default function MessagesPage() {
       {/* Sidebar panel */}
       <Sidebar
         activeTab="Messages"
-        setActiveTab={() => {}}
+        setActiveTab={() => { }}
         tenantName={getTenantName()}
       />
 
       {/* Main viewport */}
       <div className="flex-1 pl-64 flex flex-col h-screen overflow-hidden">
-        
+
         {/* Top bar */}
         <DashboardHeader
           activeTenantId={activeTenantId}
@@ -428,7 +428,7 @@ export default function MessagesPage() {
 
         {/* Three-pane layout cockpit wrapper */}
         <div className="flex flex-1 overflow-hidden mt-16 min-w-[1024px]">
-          
+
           {/* Panel 1: Left Pane (Retailers List) */}
           <div className="w-80 border-r border-slate-200 dark:border-white/10 bg-white dark:bg-dashboard-card flex flex-col h-full shadow-sm">
             <div className="p-4 border-b border-slate-100 dark:border-white/5 flex items-center justify-between">
@@ -452,7 +452,7 @@ export default function MessagesPage() {
                   placeholder="Filter by shop name or phone..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-medium focus:outline-none focus:ring-1 focus:ring-brand-blue focus:border-brand-blue transition-all"
+                  className="w-full pl-9 pr-4 py-2 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-medium bg-white dark:bg-dashboard-card text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-brand-blue focus:border-brand-blue transition-all"
                 />
               </div>
             </div>
@@ -461,21 +461,19 @@ export default function MessagesPage() {
             <div className="flex border-b border-slate-100 dark:border-white/5 bg-white dark:bg-dashboard-card">
               <button
                 onClick={() => setActiveFeedTab("inbox")}
-                className={`flex-1 text-center py-2.5 text-xs font-bold border-b-2 transition-all ${
-                  activeFeedTab === "inbox"
+                className={`flex-1 text-center py-2.5 text-xs font-bold border-b-2 transition-all ${activeFeedTab === "inbox"
                     ? "border-emerald-500 text-emerald-600 dark:text-emerald-400"
                     : "border-transparent text-slate-400 hover:text-slate-600"
-                }`}
+                  }`}
               >
                 Inbox
               </button>
               <button
                 onClick={() => setActiveFeedTab("triage")}
-                className={`flex-1 text-center py-2.5 text-xs font-bold border-b-2 transition-all flex items-center justify-center gap-1.5 ${
-                  activeFeedTab === "triage"
+                className={`flex-1 text-center py-2.5 text-xs font-bold border-b-2 transition-all flex items-center justify-center gap-1.5 ${activeFeedTab === "triage"
                     ? "border-rose-500 text-rose-600 dark:text-rose-400"
                     : "border-transparent text-slate-400 hover:text-slate-600"
-                }`}
+                  }`}
               >
                 <span>Triage Queue</span>
                 {orders.filter(o => o.status === "Needs Review").length > 0 && (
@@ -503,7 +501,7 @@ export default function MessagesPage() {
                   filteredCustomers.map((c) => {
                     const isSelected = selectedCustomer?.id === c.id;
                     const unread = unreadStates[c.id] || 0;
-                    const lastMessage = chatStreams[c.id]?.length 
+                    const lastMessage = chatStreams[c.id]?.length
                       ? chatStreams[c.id][chatStreams[c.id].length - 1].text
                       : "No messages yet";
 
@@ -511,11 +509,10 @@ export default function MessagesPage() {
                       <button
                         key={c.id}
                         onClick={() => handleSelectCustomer(c)}
-                        className={`w-full text-left p-4 transition-all duration-200 flex gap-3 ${
-                          isSelected 
-                            ? "bg-slate-50 dark:bg-dashboard-inset border-l-4 border-brand-blue" 
-                            : "hover:bg-slate-50/60 border-l-4 border-transparent"
-                        }`}
+                        className={`w-full text-left p-4 transition-all duration-200 flex gap-3 ${isSelected
+                            ? "bg-slate-50 dark:bg-dashboard-inset border-l-4 border-brand-blue"
+                            : "hover:bg-slate-50/60 dark:hover:bg-white/5 border-l-4 border-transparent"
+                          }`}
                       >
                         {/* Avatar */}
                         <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-white/5 flex items-center justify-center font-bold text-slate-600 dark:text-slate-400 text-sm border border-slate-200 dark:border-white/10 shadow-sm flex-shrink-0">
@@ -563,11 +560,10 @@ export default function MessagesPage() {
                       <button
                         key={o.id}
                         onClick={() => handleSelectTriageOrder(o)}
-                        className={`w-full text-left p-4 transition-all duration-200 border-l-4 ${
-                          isSelected 
-                            ? "bg-rose-50/50 dark:bg-rose-500/8 border-rose-500" 
+                        className={`w-full text-left p-4 transition-all duration-200 border-l-4 ${isSelected
+                            ? "bg-rose-50/50 dark:bg-rose-500/[0.08] border-rose-500"
                             : "hover:bg-rose-50/20 border-transparent"
-                        }`}
+                          }`}
                       >
                         <div className="flex items-start gap-3">
                           <div className="w-10 h-10 rounded-full bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 flex items-center justify-center font-bold text-rose-600 dark:text-rose-400 text-xs shrink-0">
@@ -600,7 +596,7 @@ export default function MessagesPage() {
           </div>
 
           {/* Panel 2: Middle Pane (WhatsApp Chat Stream) */}
-          <div className="flex-1 bg-[#efeae2] flex flex-col h-full border-r border-slate-200 dark:border-white/10 relative">
+          <div className="flex-1 bg-[#efeae2] dark:bg-dashboard-bg flex flex-col h-full border-r border-slate-200 dark:border-white/10 relative">
             {selectedCustomer ? (
               <>
                 {/* Chat Header */}
@@ -628,7 +624,7 @@ export default function MessagesPage() {
                 <div className="flex-1 overflow-y-auto p-4 space-y-3 flex flex-col">
                   {/* WhatsApp background pattern (represented by CSS styling of this div) */}
                   <div className="text-center my-2">
-                    <span className="bg-slate-200/80 text-slate-600 dark:text-slate-400 text-[10px] font-bold px-3 py-1 rounded-lg">
+                    <span className="bg-slate-200/80 dark:bg-white/10 text-slate-600 dark:text-slate-400 text-[10px] font-bold px-3 py-1 rounded-lg">
                       TODAY
                     </span>
                   </div>
@@ -645,23 +641,21 @@ export default function MessagesPage() {
                     return (
                       <div
                         key={msg.id || index}
-                        className={`flex flex-col max-w-[70%] rounded-2xl p-3 text-xs shadow-sm relative transition-all duration-200 ${
-                          isOp 
-                            ? "bg-[#d9fdd3] text-slate-800 dark:text-slate-100 self-end rounded-tr-none border border-emerald-100 dark:border-emerald-500/20" 
+                        className={`flex flex-col max-w-[70%] rounded-2xl p-3 text-xs shadow-sm relative transition-all duration-200 ${isOp
+                            ? "bg-[#d9fdd3] dark:bg-emerald-900/30 text-slate-800 dark:text-slate-100 self-end rounded-tr-none border border-emerald-100 dark:border-emerald-500/20"
                             : "bg-white dark:bg-dashboard-card text-slate-800 dark:text-slate-100 self-start rounded-tl-none border border-slate-200 dark:border-white/10"
-                        }`}
+                          }`}
                       >
                         {/* Sender Label */}
-                        <span className={`text-[9px] font-bold mb-1 block uppercase tracking-wider ${
-                          isOp ? "text-emerald-700 dark:text-emerald-400" : "text-slate-500 dark:text-slate-400"
-                        }`}>
+                        <span className={`text-[9px] font-bold mb-1 block uppercase tracking-wider ${isOp ? "text-emerald-700 dark:text-emerald-400" : "text-slate-500 dark:text-slate-400"
+                          }`}>
                           {isOp ? "OPERATOR" : "CUSTOMER"}
                         </span>
-                        
+
                         <p className="font-medium whitespace-pre-wrap leading-relaxed">
                           {msg.text}
                         </p>
-                        
+
                         {/* Timestamp & double checkmarks */}
                         <div className="flex items-center justify-end gap-1 mt-1 text-[9px] text-slate-400 font-semibold">
                           <span>{msg.timestamp}</span>
@@ -683,7 +677,7 @@ export default function MessagesPage() {
                     placeholder="Type an operator message to B2B retailer..."
                     value={inputText}
                     onChange={(e) => setInputText(e.target.value)}
-                    className="flex-1 px-4 py-3 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-medium focus:outline-none focus:ring-1 focus:ring-brand-blue"
+                    className="flex-1 px-4 py-3 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-medium bg-white dark:bg-dashboard-inset text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-brand-blue"
                   />
                   <button
                     type="submit"
@@ -706,7 +700,7 @@ export default function MessagesPage() {
             {activeFeedTab === "triage" && selectedTriageOrderId ? (
               // Triage Resolution Pane
               <div className="flex flex-col h-full">
-                <div className="bg-gradient-to-r from-rose-50 to-orange-50 border-b border-rose-100 dark:border-rose-500/20 p-4">
+                <div className="bg-gradient-to-r from-rose-50 to-orange-50 dark:from-rose-500/10 dark:to-orange-500/10 border-b border-rose-100 dark:border-rose-500/20 p-4">
                   <div className="flex items-center gap-2 text-rose-800 dark:text-rose-300">
                     <div className="w-8 h-8 rounded-lg bg-rose-500 text-white flex items-center justify-center">
                       <AlertCircle className="w-5 h-5" />
@@ -728,7 +722,7 @@ export default function MessagesPage() {
                     </div>
                   ) : triageOrderDetails ? (
                     <div className="space-y-4">
-                      <div className="bg-slate-50 dark:bg-dashboard-inset border border-slate-200/60 dark:border-white/8 rounded-xl p-3.5 space-y-2">
+                      <div className="bg-slate-50 dark:bg-dashboard-inset border border-slate-200/60 dark:border-white/[0.08] rounded-xl p-3.5 space-y-2">
                         <div className="flex justify-between items-center text-xs">
                           <span className="font-semibold text-slate-400">Retailer</span>
                           <span className="font-bold text-slate-700 dark:text-slate-300">{selectedCustomer?.retailer_name}</span>
@@ -758,7 +752,7 @@ export default function MessagesPage() {
                                       <p className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold leading-relaxed">
                                         Original Input: <span className="italic font-bold text-slate-700 dark:text-slate-300">"{item.brand}"</span>
                                       </p>
-                                      
+
                                       <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wide">Map to Catalog SKU</label>
                                       <select
                                         disabled={resolvingTriageItemId === item.id}
@@ -808,7 +802,7 @@ export default function MessagesPage() {
               // Normal AI Extraction Pane
               <div className="flex flex-col h-full">
                 {/* AI Banner Header */}
-                <div className="bg-gradient-to-r from-emerald-50 to-teal-50 border-b border-emerald-100 dark:border-emerald-500/20 p-4">
+                <div className="bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-500/10 dark:to-teal-500/10 border-b border-emerald-100 dark:border-emerald-500/20 p-4">
                   <div className="flex items-center gap-2 text-emerald-800 dark:text-emerald-300">
                     <div className="w-8 h-8 rounded-lg bg-emerald-500 text-white flex items-center justify-center">
                       <Bot className="w-5 h-5" />
@@ -825,7 +819,7 @@ export default function MessagesPage() {
 
                 {/* Extraction Body */}
                 <div className="p-4 space-y-5 flex-1">
-                  
+
                   {/* Scope details */}
                   <div className="bg-slate-50 dark:bg-dashboard-inset border border-slate-100 dark:border-white/5 rounded-xl p-3.5 space-y-2">
                     <div className="flex justify-between items-center text-xs">
@@ -841,13 +835,12 @@ export default function MessagesPage() {
                     </div>
                     <div className="flex justify-between items-center text-xs">
                       <span className="font-semibold text-slate-400">Order Status</span>
-                      <span className={`font-bold px-2 py-0.5 rounded border text-[10px] ${
-                        activeOrder.status === "Confirmed"
+                      <span className={`font-bold px-2 py-0.5 rounded border text-[10px] ${activeOrder.status === "Confirmed"
                           ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-100 dark:border-emerald-500/20"
                           : thread?.has_unmatched
                             ? "bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-100 dark:border-rose-500/20"
                             : "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-100 dark:border-amber-500/20"
-                      }`}>
+                        }`}>
                         {activeOrder.status}
                       </span>
                     </div>
@@ -872,7 +865,7 @@ export default function MessagesPage() {
                           {activeItems.map((item, index) => {
                             const isUnmatched = item.sku_id === "UNMATCHED_SKU" || item.sku_id === "UNMATCHED_TRIAGE_SKU";
                             return (
-                              <tr key={item.id || index} className="hover:bg-slate-50/50 font-medium">
+                              <tr key={item.id || index} className="hover:bg-slate-50/50 dark:hover:bg-white/5 font-medium">
                                 <td className="py-2.5 px-3">
                                   <p className={`font-bold ${isUnmatched ? "text-rose-600 dark:text-rose-400" : "text-slate-700 dark:text-slate-300"}`}>
                                     {isUnmatched ? "Unmatched item" : item.product_name}
@@ -921,11 +914,10 @@ export default function MessagesPage() {
                           )}
                           <span className="text-slate-600 dark:text-slate-400">SKU Catalog Match</span>
                         </div>
-                        <span className={`font-bold px-2 py-0.5 rounded border text-[10px] ${
-                          thread?.has_unmatched
+                        <span className={`font-bold px-2 py-0.5 rounded border text-[10px] ${thread?.has_unmatched
                             ? "text-rose-700 dark:text-rose-400 bg-rose-50 dark:bg-rose-500/10 border-rose-100 dark:border-rose-500/20"
                             : "text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 border-emerald-100 dark:border-emerald-500/20"
-                        }`}>
+                          }`}>
                           {matchedCount}/{activeItems.length} resolved
                         </span>
                       </div>
@@ -999,11 +991,10 @@ export default function MessagesPage() {
 
       {/* Local Toast UI notification */}
       {toast.show && (
-        <div className={`fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-3 rounded-lg shadow-lg border transition-all duration-300 ${
-          toast.type === "success" 
-            ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-500/20" 
+        <div className={`fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-3 rounded-lg shadow-lg border transition-all duration-300 ${toast.type === "success"
+            ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-500/20"
             : "bg-rose-50 dark:bg-rose-500/10 text-rose-800 dark:text-rose-300 border-rose-200 dark:border-rose-500/20"
-        }`}>
+          }`}>
           {toast.type === "success" ? (
             <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
           ) : (

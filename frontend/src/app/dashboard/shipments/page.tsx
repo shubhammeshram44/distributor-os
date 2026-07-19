@@ -50,7 +50,7 @@ export default function ShipmentsPage() {
   const [pendingOrders, setPendingOrders] = useState<PendingOrder[]>([]);
   const [activeShipments, setActiveShipments] = useState<ActiveShipment[]>([]);
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
-  
+
   // Search, Filter & Keyset Pagination states
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
@@ -63,7 +63,7 @@ export default function ShipmentsPage() {
   const [selectedDriverId, setSelectedDriverId] = useState("");
   const [vehicleNumber, setVehicleNumber] = useState("");
 
-  
+
   // Status states
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -118,7 +118,9 @@ export default function ShipmentsPage() {
     }
     try {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-      
+      const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
+      const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+
       const pendingParams = new URLSearchParams();
       if (debouncedSearchQuery) pendingParams.append("q", debouncedSearchQuery);
       pendingParams.append("limit", "20");
@@ -129,8 +131,8 @@ export default function ShipmentsPage() {
       activeParams.append("limit", "20");
 
       const [pendingResp, activeResp] = await Promise.all([
-        fetchWithTimeout(`${apiBase}/api/v1/shipments/pending?${pendingParams.toString()}`, { credentials: "include", timeout: 12000 }),
-        fetchWithTimeout(`${apiBase}/api/v1/shipments/active?${activeParams.toString()}`, { credentials: "include", timeout: 12000 })
+        fetchWithTimeout(`${apiBase}/api/v1/shipments/pending?${pendingParams.toString()}`, { credentials: "include", headers: authHeaders, timeout: 12000 }),
+        fetchWithTimeout(`${apiBase}/api/v1/shipments/active?${activeParams.toString()}`, { credentials: "include", headers: authHeaders, timeout: 12000 })
       ]);
 
       if (!pendingResp.ok || !activeResp.ok) {
@@ -175,12 +177,13 @@ export default function ShipmentsPage() {
     if (!pendingCursor) return;
     try {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
       const params = new URLSearchParams();
       if (debouncedSearchQuery) params.append("q", debouncedSearchQuery);
       params.append("limit", "20");
       params.append("cursor", pendingCursor);
 
-      const resp = await fetch(`${apiBase}/api/v1/shipments/pending?${params.toString()}`, { credentials: "include" });
+      const resp = await fetch(`${apiBase}/api/v1/shipments/pending?${params.toString()}`, { credentials: "include", headers: token ? { Authorization: `Bearer ${token}` } : {} });
       if (resp.ok) {
         const data = await resp.json();
         const newItems = data.items || [];
@@ -196,13 +199,14 @@ export default function ShipmentsPage() {
     if (!activeCursor) return;
     try {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
       const params = new URLSearchParams();
       if (debouncedSearchQuery) params.append("q", debouncedSearchQuery);
       if (statusFilter) params.append("status", statusFilter);
       params.append("limit", "20");
       params.append("cursor", activeCursor);
 
-      const resp = await fetch(`${apiBase}/api/v1/shipments/active?${params.toString()}`, { credentials: "include" });
+      const resp = await fetch(`${apiBase}/api/v1/shipments/active?${params.toString()}`, { credentials: "include", headers: token ? { Authorization: `Bearer ${token}` } : {} });
       if (resp.ok) {
         const data = await resp.json();
         const newItems = data.items || [];
@@ -217,7 +221,8 @@ export default function ShipmentsPage() {
   const fetchDrivers = useCallback(async (tenantId: string) => {
     try {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-      const resp = await fetch(`${apiBase}/api/v1/users?role=Driver&tenant_id=${tenantId}`, { credentials: "include" });
+      const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
+      const resp = await fetch(`${apiBase}/api/v1/users?role=Driver&tenant_id=${tenantId}`, { credentials: "include", headers: token ? { Authorization: `Bearer ${token}` } : {} });
       if (resp.ok) {
         const data = await resp.json();
         setDrivers(data);
@@ -253,7 +258,7 @@ export default function ShipmentsPage() {
       }
     };
     window.addEventListener("focus", handleFocus);
-    
+
     // Increased poll interval to 30s as a stopgap (should move to WebSocket/SSE push or ETag/304 polling later instead of fixed-interval polling)
     const interval = setInterval(handleFocus, 30000);
 
@@ -284,7 +289,7 @@ export default function ShipmentsPage() {
       const resp = await fetch(`${apiBase}/api/v1/shipments`, {
         method: "POST",
         credentials: "include",
-        headers: { 
+        headers: {
           "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {})
         },
@@ -322,7 +327,7 @@ export default function ShipmentsPage() {
       const resp = await fetch(`${apiBase}/api/v1/shipments/${shipmentId}/status`, {
         method: "PATCH",
         credentials: "include",
-        headers: { 
+        headers: {
           "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {})
         },
@@ -382,7 +387,7 @@ export default function ShipmentsPage() {
     <div className="flex bg-dashboard-bg min-h-screen text-slate-800 dark:text-slate-100">
       <Sidebar
         activeTab="Shipments"
-        setActiveTab={() => {}}
+        setActiveTab={() => { }}
         tenantName={getTenantName()}
       />
 
@@ -456,7 +461,7 @@ export default function ShipmentsPage() {
                     placeholder="Search customer, order ID, or tracking ID..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-9 pr-4 py-2 border border-slate-200 dark:border-white/10 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-brand-blue"
+                    className="w-full pl-9 pr-4 py-2 border border-slate-200 dark:border-white/10 rounded-lg text-xs font-semibold bg-white dark:bg-dashboard-card text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-brand-blue"
                   />
                   <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -464,7 +469,7 @@ export default function ShipmentsPage() {
                     </svg>
                   </div>
                 </div>
-                
+
                 <div className="flex items-center gap-3 w-full sm:w-auto">
                   <select
                     value={statusFilter}
@@ -488,7 +493,7 @@ export default function ShipmentsPage() {
                   </h3>
                   <div className="flex-1 overflow-y-auto border border-slate-100 dark:border-white/5 rounded-lg mb-3">
                     {pendingOrders.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed border-slate-200 dark:border-white/10 rounded-xl bg-slate-50/40 dark:bg-white/6 text-center my-4 mx-6">
+                      <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed border-slate-200 dark:border-white/10 rounded-xl bg-slate-50/40 dark:bg-white/[0.06] text-center my-4 mx-6">
                         <div className="p-3 bg-slate-100 dark:bg-white/5 text-slate-400 rounded-full mb-3">
                           <Truck className="w-6 h-6" />
                         </div>
@@ -509,7 +514,7 @@ export default function ShipmentsPage() {
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-white/5 font-medium">
                           {pendingOrders.map(o => (
-                            <tr key={o.order_id} className="hover:bg-slate-50/50">
+                            <tr key={o.order_id} className="hover:bg-slate-50/50 dark:hover:bg-white/5">
                               <td className="py-3 px-4 text-center">
                                 <input
                                   type="checkbox"
@@ -581,7 +586,7 @@ export default function ShipmentsPage() {
                           value={vehicleNumber}
                           onChange={(e) => setVehicleNumber(e.target.value)}
                           placeholder="e.g. KA-01-MJ-9876"
-                          className="w-full p-2.5 border border-slate-200 dark:border-white/10 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-brand-blue"
+                          className="w-full p-2.5 border border-slate-200 dark:border-white/10 rounded-lg text-xs font-semibold bg-white dark:bg-dashboard-inset text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-brand-blue"
                           required
                         />
                       </div>
@@ -614,7 +619,7 @@ export default function ShipmentsPage() {
                 </div>
 
                 {hasNoShipments ? (
-                  <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed border-slate-200 dark:border-white/10 rounded-xl bg-slate-50/40 dark:bg-white/6 text-center my-4 mx-6">
+                  <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed border-slate-200 dark:border-white/10 rounded-xl bg-slate-50/40 dark:bg-white/[0.06] text-center my-4 mx-6">
                     <div className="p-3 bg-slate-100 dark:bg-white/5 text-slate-400 rounded-full mb-3">
                       <Truck className="w-6 h-6" />
                     </div>
@@ -638,7 +643,7 @@ export default function ShipmentsPage() {
                       </thead>
                       <tbody className="divide-y divide-slate-100 dark:divide-white/5 font-semibold text-slate-700 dark:text-slate-300">
                         {shipments.map(s => (
-                          <tr key={s.shipment_id} className="hover:bg-slate-50/50 transition-colors">
+                          <tr key={s.shipment_id} className="hover:bg-slate-50/50 dark:hover:bg-white/5 transition-colors">
                             <td className="py-4 px-6">
                               <span className="font-bold text-slate-800 dark:text-slate-100">{s.shipment_id.slice(0, 8).toUpperCase()}...</span>
                             </td>
@@ -651,11 +656,10 @@ export default function ShipmentsPage() {
                               <div className="text-[10px] text-slate-400 mt-0.5">{s.customer_name}</div>
                             </td>
                             <td className="py-4 px-6">
-                              <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                                s.status === "Delivered"
+                              <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold border ${s.status === "Delivered"
                                   ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20"
                                   : "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/20"
-                              }`}>
+                                }`}>
                                 {s.status}
                               </span>
                             </td>

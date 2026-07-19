@@ -165,7 +165,7 @@ export default function RecentOrders({
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-white/5">
                 {orders.map((order) => (
-                  <tr key={order.id} className="hover:bg-slate-50/70 transition-colors group">
+                  <tr key={order.id} className="hover:bg-slate-50/70 dark:hover:bg-white/5 transition-colors group">
                     <td className="py-3.5 px-4 font-semibold text-brand-blue hover:text-brand-blueHover">
                       <button
                         onClick={() => handleOrderIdClick(order)}

@@ -821,7 +821,7 @@ export default function OrdersPage() {
                 </div>
               ) : filteredOrders.length === 0 ? (
                 orders.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed border-slate-200 dark:border-white/10 rounded-xl bg-slate-50/40 dark:bg-white/6 text-center my-4">
+                  <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed border-slate-200 dark:border-white/10 rounded-xl bg-slate-50/40 dark:bg-white/[0.06] text-center my-4">
                     <div className="p-3 bg-slate-100 dark:bg-white/5 text-slate-400 rounded-full mb-3">
                       <MessageSquare className="w-6 h-6" />
                     </div>
@@ -837,7 +837,7 @@ export default function OrdersPage() {
                     </button>
                   </div>
                 ) : (
-                  <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed border-slate-200 dark:border-white/10 rounded-xl bg-slate-50/40 dark:bg-white/6 text-center my-4">
+                  <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed border-slate-200 dark:border-white/10 rounded-xl bg-slate-50/40 dark:bg-white/[0.06] text-center my-4">
                     <div className="p-3 bg-slate-100 dark:bg-white/5 text-slate-400 rounded-full mb-3">
                       <Search className="w-6 h-6" />
                     </div>
@@ -873,7 +873,7 @@ export default function OrdersPage() {
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-white/5">
                     {filteredOrders.map((order) => (
-                      <tr key={order.id} className="hover:bg-slate-50/70 transition-colors group">
+                      <tr key={order.id} className="hover:bg-slate-50/70 dark:hover:bg-white/5 transition-colors group">
                         <td className="py-4 px-6 font-bold text-brand-blue hover:underline">
                           <button
                             onClick={() => handleOrderIdClick(order)}
@@ -1397,7 +1397,7 @@ export default function OrdersPage() {
                   type="date"
                   value={tallyStartDate}
                   onChange={(e) => setTallyStartDate(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 dark:border-white/10 rounded-lg text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                  className="w-full px-3 py-2 border border-slate-200 dark:border-white/10 rounded-lg text-xs font-semibold bg-white dark:bg-dashboard-inset text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                 />
               </div>
               <div>
@@ -1406,7 +1406,7 @@ export default function OrdersPage() {
                   type="date"
                   value={tallyEndDate}
                   onChange={(e) => setTallyEndDate(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 dark:border-white/10 rounded-lg text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                  className="w-full px-3 py-2 border border-slate-200 dark:border-white/10 rounded-lg text-xs font-semibold bg-white dark:bg-dashboard-inset text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                 />
               </div>
             </div>
@@ -1478,7 +1478,7 @@ export default function OrdersPage() {
             )}
 
             {bulkFailedOrders && bulkFailedOrders.length > 0 && (
-              <div className="max-h-24 overflow-y-auto bg-rose-50/50 dark:bg-rose-500/8 border border-rose-100 dark:border-rose-500/20 rounded-lg p-2.5 text-[10px] text-rose-700 dark:text-rose-400 font-medium space-y-1">
+              <div className="max-h-24 overflow-y-auto bg-rose-50/50 dark:bg-rose-500/[0.08] border border-rose-100 dark:border-rose-500/20 rounded-lg p-2.5 text-[10px] text-rose-700 dark:text-rose-400 font-medium space-y-1">
                 <p className="font-bold uppercase tracking-wider text-[9px] text-rose-800 dark:text-rose-300">Failed Orders ({bulkFailedOrders.length}):</p>
                 {bulkFailedOrders.map((fail, idx) => (
                   <div key={idx} className="flex justify-between font-mono">
