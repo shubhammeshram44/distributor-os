@@ -105,6 +105,23 @@ export default function IntegrationsPageV2() {
               setOwnerJid(data.ownerJid);
             }
             showToast("WhatsApp Instance successfully connected!", "success");
+            // Re-fetch tenant data to get updated phone number
+            try {
+              const refreshResp = await fetch(
+                `${apiBase}/api/v1/tenant/integrations/whatsapp?tenant_id=${activeTenantId}`
+              );
+              if (refreshResp.ok) {
+                const refreshData = await refreshResp.json();
+                if (refreshData.whatsapp_order_phone) {
+                  setWhatsappOrderPhone(refreshData.whatsapp_order_phone);
+                }
+                if (refreshData.whatsapp_phone_id) {
+                  setWhatsappPhoneId(refreshData.whatsapp_phone_id);
+                }
+              }
+            } catch (e) {
+              // silent fail
+            }
             clearInterval(interval);
             return;
           }
@@ -230,6 +247,23 @@ export default function IntegrationsPageV2() {
                 setProvisioningStatus("connected");
                 if (statusData.owner_phone) {
                   setWhatsappOrderPhone(statusData.owner_phone);
+                }
+                // Re-fetch tenant data to get updated phone number
+                try {
+                  const refreshResp = await fetch(
+                    `${apiBase}/api/v1/tenant/integrations/whatsapp?tenant_id=${activeTenantId}`
+                  );
+                  if (refreshResp.ok) {
+                    const refreshData = await refreshResp.json();
+                    if (refreshData.whatsapp_order_phone) {
+                      setWhatsappOrderPhone(refreshData.whatsapp_order_phone);
+                    }
+                    if (refreshData.whatsapp_phone_id) {
+                      setWhatsappPhoneId(refreshData.whatsapp_phone_id);
+                    }
+                  }
+                } catch (e) {
+                  // silent fail
                 }
               } else {
                 // Was previously connected (phone_id exists) but now disconnected
