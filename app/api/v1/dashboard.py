@@ -625,6 +625,10 @@ def get_dashboard_overview(
             {"name": "60+ Days", "value": 205000, "percentage": 10}
         ]
     else:
+        # Bucket by the invoice's own created_at (avoids an N+1 db.get(Order, ...) call
+        # per invoice — see get_collections_donut below for the identical fix/rationale;
+        # this duplicate copy runs on every dashboard-overview load, the main dashboard
+        # page's initial fetch).
         invoices = db.query(Invoice).filter(Invoice.tenant_id == tenant_id).all()
         buckets = {
             "0-15 Days": 0.0,
@@ -633,10 +637,7 @@ def get_dashboard_overview(
             "60+ Days": 0.0
         }
         for inv in invoices:
-            order_for_inv = db.get(Order, inv.order_id)
-            if not order_for_inv:
-                continue
-            days_old = (now - order_for_inv.created_at).days
+            days_old = (now - inv.created_at).days
             if days_old <= 15:
                 buckets["0-15 Days"] += float(inv.total_amount)
             elif days_old <= 30:
@@ -680,9 +681,17 @@ def get_order_details(
         raise HTTPException(status_code=404, detail="Order not found")
 
     items = db.query(OrderLineItem).filter_by(order_id=order_id).all()
+    # Batch-fetch all referenced products in a single query instead of one db.get() per
+    # line item — avoids an N+1 query pattern that scaled with order size.
+    product_ids = {item.product_id for item in items if item.product_id is not None}
+    products_by_id = {}
+    if product_ids:
+        products_by_id = {
+            p.id: p for p in db.query(Product).filter(Product.id.in_(product_ids)).all()
+        }
     details = []
     for item in items:
-        prod = db.get(Product, item.product_id) if item.product_id is not None else None
+        prod = products_by_id.get(item.product_id) if item.product_id is not None else None
         allocated_qty = item.allocated_quantity if item.allocated_quantity is not None else item.quantity
         details.append({
             "id": str(item.id),
@@ -738,8 +747,17 @@ def get_customer_whatsapp_thread(
     items = []
     total = 0.0
     has_unmatched = False
-    for item in db.query(OrderLineItem).filter_by(order_id=order.id).all():
-        prod = db.get(Product, item.product_id)
+    line_items = db.query(OrderLineItem).filter_by(order_id=order.id).all()
+    # Batch-fetch all referenced products in a single query instead of one db.get() per
+    # line item — avoids an N+1 query pattern that scaled with order size.
+    product_ids = {li.product_id for li in line_items if li.product_id is not None}
+    products_by_id = {}
+    if product_ids:
+        products_by_id = {
+            p.id: p for p in db.query(Product).filter(Product.id.in_(product_ids)).all()
+        }
+    for item in line_items:
+        prod = products_by_id.get(item.product_id)
         sku_id = prod.sku_id if prod else "UNKNOWN"
         if sku_id in UNMATCHED_SKUS:
             has_unmatched = True
@@ -797,7 +815,10 @@ def get_collections_donut(
             {"name": "60+ Days", "value": 205000, "percentage": 10}
         ]
 
-    # Dynamic calculation based on invoice dates
+    # Dynamic calculation based on invoice age (invoice.created_at, not a per-row Order
+    # lookup — using the invoice's own timestamp avoids an N+1 db.get(Order, ...) call
+    # per invoice, which previously made this endpoint scale linearly with invoice count
+    # (10-50+ seconds for tenants with thousands of invoices).
     now = datetime.utcnow()
     invoices = db.query(Invoice).filter(Invoice.tenant_id == tenant_id).all()
 
@@ -808,15 +829,9 @@ def get_collections_donut(
         "60+ Days": 0.0
     }
 
-    # As this is a simulation, we use a simple day count:
-    # (Since SQLite might not have complex date diff, we do it in Python)
     for inv in invoices:
-        # Match order to get created_at
-        order = db.get(Order, inv.order_id)
-        if not order:
-            continue
-        days_old = (now - order.created_at).days
-        
+        days_old = (now - inv.created_at).days
+
         if days_old <= 15:
             buckets["0-15 Days"] += float(inv.total_amount)
         elif days_old <= 30:
@@ -860,26 +875,42 @@ def get_recent_activity(
 
     # 1. Fetch newest Order Ledger logs
     ledgers = db.query(OrderStateLedger).order_by(OrderStateLedger.timestamp.desc()).limit(5).all()
+
+    # Batch-fetch the orders and customers referenced by these ledger rows instead of
+    # issuing a db.get(Order, ...) + a separate Customer query per ledger row.
+    ledger_order_ids = {l.order_id for l in ledgers}
+    orders_by_id = {}
+    customers_by_id = {}
+    if ledger_order_ids:
+        orders_by_id = {
+            o.id: o for o in db.query(Order).filter(Order.id.in_(ledger_order_ids)).all()
+        }
+        customer_ids = {o.customer_id for o in orders_by_id.values() if o.customer_id is not None}
+        if customer_ids:
+            try:
+                customers_by_id = {
+                    c.id: c
+                    for c in db.query(Customer)
+                    .filter(Customer.id.in_(customer_ids))
+                    .options(defer(Customer.phone_number))
+                    .all()
+                }
+            except ProgrammingError as db_api_err:
+                logger.error(
+                    f"Database Schema Mismatch Intercepted inside Dashboard Processing Rails: {str(db_api_err)}"
+                )
+                customers_by_id = {}
+
     for l in ledgers:
-        order = db.get(Order, l.order_id)
+        order = orders_by_id.get(l.order_id)
         if not order:
             continue
         try:
-            customer = (
-                db.query(Customer)
-                .filter(Customer.id == order.customer_id)
-                .options(defer(Customer.phone_number))
-                .first()
-            )
+            customer = customers_by_id.get(order.customer_id) if order.customer_id is not None else None
             if customer:
                 cust_name = getattr(customer, "retailer_name", "Registered Retailer")
             else:
                 cust_name = "Walk-in Retailer"
-        except ProgrammingError as db_api_err:
-            logger.error(
-                f"Database Schema Mismatch Intercepted inside Dashboard Processing Rails: {str(db_api_err)}"
-            )
-            cust_name = "Operational Ingestion Influx"
         except Exception as general_err:
             logger.error(f"Unhandled Dashboard Pipeline Exception: {str(general_err)}")
             cust_name = "System Node"

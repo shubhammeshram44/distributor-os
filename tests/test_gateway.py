@@ -190,3 +190,71 @@ def test_evolution_disconnect_endpoint_success(monkeypatch, db_session):
         assert updated_tenant.whatsapp_order_phone is None
 
 
+def test_evolution_provision_skips_stabilization_sleep_when_nothing_deleted(monkeypatch):
+    """
+    Regression test: /evolution/provision previously slept unconditionally (~6-8s
+    total across a delete-retry loop + two fixed "wait for Evolution API" sleeps) on
+    every call, even for a brand-new tenant with no existing instance to tear down.
+    This directly caused the WhatsApp-connection lag reported by users. The sleep
+    that waits for the gateway to "clear memory" after a delete should only run when
+    a legacy instance actually existed and was deleted (delete_response 200/201) —
+    not when there was nothing to delete (404).
+    """
+    with patch("app.services.gateway_service.EvolutionGatewayService.initialize_instance", new_callable=AsyncMock) as mock_init, \
+         patch("app.services.gateway_service.EvolutionGatewayService.configure_webhook", new_callable=AsyncMock) as mock_webhook, \
+         patch("app.services.gateway_service.EvolutionGatewayService.generate_qr_code", new_callable=AsyncMock) as mock_qr, \
+         patch("app.services.gateway_service.EvolutionGatewayService.get_connection_status", new_callable=AsyncMock) as mock_status, \
+         patch("httpx.AsyncClient.delete", new_callable=AsyncMock) as mock_delete, \
+         patch("app.api.v1.evolution.asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+
+        mock_delete.return_value = MagicMock(status_code=404)
+        mock_init.return_value = {"status": "created"}
+        mock_webhook.return_value = {"status": "webhook_set"}
+        mock_qr.return_value = "data:image/png;base64,mockqr"
+        # First call (pre-check) returns "close" so the fast-path "already_connected"
+        # return isn't taken; second call (final status) also "close".
+        mock_status.return_value = "close"
+
+        fake_uuid = "7e8bed10-8339-446f-b851-de96ab5f0cad"
+        from app.services import tenant_service
+        monkeypatch.setattr(tenant_service, "resolve_tenant_id", lambda *args, **kwargs: fake_uuid)
+
+        response = client.post("/api/v1/evolution/provision", json={})
+
+        assert response.status_code == 200
+        assert response.json()["status"] == "success"
+        # Nothing existed to delete (404) — the "wait for Evolution API to clear
+        # memory" sleep must be skipped entirely.
+        mock_sleep.assert_not_called()
+
+
+def test_evolution_provision_still_waits_after_deleting_legacy_instance(monkeypatch):
+    """
+    When a legacy instance genuinely existed and was deleted (200/201), the brief
+    stabilization sleep must still run — this preserves the original race-condition
+    protection for the one scenario it was meant to guard against.
+    """
+    with patch("app.services.gateway_service.EvolutionGatewayService.initialize_instance", new_callable=AsyncMock) as mock_init, \
+         patch("app.services.gateway_service.EvolutionGatewayService.configure_webhook", new_callable=AsyncMock) as mock_webhook, \
+         patch("app.services.gateway_service.EvolutionGatewayService.generate_qr_code", new_callable=AsyncMock) as mock_qr, \
+         patch("app.services.gateway_service.EvolutionGatewayService.get_connection_status", new_callable=AsyncMock) as mock_status, \
+         patch("httpx.AsyncClient.delete", new_callable=AsyncMock) as mock_delete, \
+         patch("app.api.v1.evolution.asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+
+        mock_delete.return_value = MagicMock(status_code=200)
+        mock_init.return_value = {"status": "created"}
+        mock_webhook.return_value = {"status": "webhook_set"}
+        mock_qr.return_value = "data:image/png;base64,mockqr"
+        mock_status.return_value = "close"
+
+        fake_uuid = "7e8bed10-8339-446f-b851-de96ab5f0cad"
+        from app.services import tenant_service
+        monkeypatch.setattr(tenant_service, "resolve_tenant_id", lambda *args, **kwargs: fake_uuid)
+
+        response = client.post("/api/v1/evolution/provision", json={})
+
+        assert response.status_code == 200
+        # A legacy instance was actually deleted — the stabilization sleep must run.
+        mock_sleep.assert_called_once()
+
+

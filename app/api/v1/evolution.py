@@ -58,36 +58,47 @@ async def provision_instance(
     # 4. Check DB for existing instance record
     tenant = db.get(DistributorTenant, resolved_tenant_id)
     
-    # 5. Delete any stale instance (with retry)
+    # 5. Delete any stale instance (with retry), reusing one HTTP connection for the
+    # whole flow (delete, init, webhook, QR, status) instead of opening a fresh
+    # TCP/TLS connection per call — cuts several round-trips of handshake latency.
     import httpx
-    async with httpx.AsyncClient(timeout=15.0) as client:
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        service = EvolutionGatewayService(client=client)
+
+        legacy_instance_deleted = False
         for attempt in range(2):
             del_response = await client.delete(
                 f"{service.base_url}/instance/delete/{instance_name}",
                 headers=service._get_headers()
             )
             logger.info("Delete attempt %d: status=%d", attempt+1, del_response.status_code)
-            if del_response.status_code in (200, 201, 404):
+            if del_response.status_code in (200, 201):
+                legacy_instance_deleted = True
+                break
+            if del_response.status_code == 404:
                 break
             await asyncio.sleep(2)
-    
-    await asyncio.sleep(3)  # Wait for Evolution API to clear memory
 
-    # 6. Create fresh instance
-    init_res = await service.initialize_instance(instance_name)
-    await asyncio.sleep(3)
+        # Only wait for the gateway's background teardown when we actually deleted a
+        # live instance — this is the sole scenario the race condition applies to.
+        # Skips a needless several-second stall for first-time/new-tenant provisioning.
+        if legacy_instance_deleted:
+            await asyncio.sleep(3)  # Wait for Evolution API to clear memory
 
-    # 7. Configure webhook
-    try:
-        await service.configure_webhook(instance_name)
-        webhook_ok = True
-    except Exception as wh_exc:
-        logger.warning("Webhook config failed: %s", str(wh_exc))
-        webhook_ok = False
+        # 6. Create fresh instance
+        init_res = await service.initialize_instance(instance_name)
 
-    # 8. Generate QR
-    qr_base64 = await service.generate_qr_code(instance_name)
-    conn_status = await service.get_connection_status(instance_name)
+        # 7. Configure webhook
+        try:
+            await service.configure_webhook(instance_name)
+            webhook_ok = True
+        except Exception as wh_exc:
+            logger.warning("Webhook config failed: %s", str(wh_exc))
+            webhook_ok = False
+
+        # 8. Generate QR
+        qr_base64 = await service.generate_qr_code(instance_name)
+        conn_status = await service.get_connection_status(instance_name)
 
     # 9. Update DB with correct instance name (clear phone until QR scanned)
     if tenant:

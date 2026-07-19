@@ -104,20 +104,23 @@ export default function MessagesPage() {
     if (!activeTenantId) return;
     try {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-      
-      // Fetch orders
-      const ordersResp = await fetch(`${apiBase}/api/v1/orders?tenant_id=${activeTenantId}&limit=200`, {
-        credentials: "include"
-      });
+
+      // Orders and products are independent reference data — fetch them concurrently
+      // instead of one-after-another to cut this page's load/re-fetch time in half.
+      const [ordersResp, productsResp] = await Promise.all([
+        fetch(`${apiBase}/api/v1/orders?tenant_id=${activeTenantId}&limit=200`, {
+          credentials: "include"
+        }),
+        fetch(`${apiBase}/api/v1/products?tenant_id=${activeTenantId}&limit=200`, {
+          credentials: "include"
+        }),
+      ]);
+
       if (ordersResp.ok) {
         const ordersData = await ordersResp.json();
         setOrders(ordersData.items ?? ordersData);
       }
 
-      // Fetch products catalog
-      const productsResp = await fetch(`${apiBase}/api/v1/products?tenant_id=${activeTenantId}&limit=200`, {
-        credentials: "include"
-      });
       if (productsResp.ok) {
         const productsData = await productsResp.json();
         setProductsList(productsData.items ?? productsData);
