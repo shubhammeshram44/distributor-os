@@ -20,6 +20,7 @@ from app.models.user import User
 from app.models.ledger import CustomerLedger
 from app.utils.security import hash_password, verify_jwt
 from app.models.demand_gap import DemandGap
+from app.utils.payment_terms import parse_credit_days
 
 from pydantic import BaseModel
 
@@ -1227,6 +1228,83 @@ def get_credit_risk_alerts(
         "alerts": results[:5],  # max 5
         "total_at_risk_count": len(results),
         "total_at_risk_amount": sum(r["outstanding"] for r in results)
+    }
+
+
+@router.get("/cash-flow-forecast")
+def get_cash_flow_forecast(
+    tenant_id: str | None = None,
+    access_token: str | None = Cookie(None),
+    authorization: str | None = Header(None),
+    db: Session = Depends(get_db)
+):
+    """
+    Cash flow forecasting signal for the collections dashboard:
+      - expected_collections_this_week: outstanding balance for customers who are NOT
+        already overdue beyond their credit terms, restricted to invoices whose due date
+        (invoice.created_at + customer credit_days, via parse_credit_days) falls within
+        the next 7 days.
+      - at_risk: full outstanding balance for customers who already have at least one
+        invoice past its due date (mirrors the "oldest unpaid invoice" overdue check used
+        by /credit-risk-alerts).
+    """
+    resolved_tenant_id = resolve_tenant_id(tenant_id, access_token, authorization)
+    tenant_context.set(resolved_tenant_id)
+
+    tenant = db.get(DistributorTenant, resolved_tenant_id)
+    tenant_name = tenant.name if tenant else "Unknown"
+
+    now = datetime.utcnow()
+    week_from_now = now + timedelta(days=7)
+
+    customers = db.query(Customer).filter(
+        Customer.tenant_id == resolved_tenant_id,
+        Customer.outstanding_balance > 0
+    ).all()
+
+    expected_total = 0.0
+    at_risk_total = 0.0
+    expected_customers_count = 0
+    at_risk_customers_count = 0
+
+    for customer in customers:
+        invoices = db.query(Invoice).filter(
+            Invoice.customer_id == customer.id,
+            Invoice.payment_status.in_(["UNPAID", "PARTIALLY_PAID"]),
+            Invoice.total_amount > 0
+        ).all()
+        if not invoices:
+            continue
+
+        credit_days = parse_credit_days(customer.payment_terms, customer.name, tenant_name)
+
+        # Customer-level overdue check: same "oldest unpaid invoice" idiom as
+        # /credit-risk-alerts — if the oldest unpaid invoice has passed its due date,
+        # the customer is already overdue beyond their credit terms.
+        oldest_created = min(inv.created_at for inv in invoices)
+        oldest_due_date = oldest_created + timedelta(days=credit_days)
+        is_overdue = oldest_due_date < now
+
+        customer_outstanding = sum(float(inv.total_amount - inv.amount_paid) for inv in invoices)
+
+        if is_overdue:
+            at_risk_total += customer_outstanding
+            at_risk_customers_count += 1
+        else:
+            due_this_week = sum(
+                float(inv.total_amount - inv.amount_paid)
+                for inv in invoices
+                if (inv.created_at + timedelta(days=credit_days)) <= week_from_now
+            )
+            if due_this_week > 0:
+                expected_total += due_this_week
+                expected_customers_count += 1
+
+    return {
+        "expected_collections_this_week": round(expected_total, 2),
+        "at_risk": round(at_risk_total, 2),
+        "expected_customers_count": expected_customers_count,
+        "at_risk_customers_count": at_risk_customers_count,
     }
 
 
