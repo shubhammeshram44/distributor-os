@@ -53,7 +53,15 @@ Thank you for your order. We look forward to serving you again!
 From: {customer_name}
 Order ID: {order_id}
 Items: {item_summary}
-Total: ₹{total}"""
+Total: ₹{total}""",
+
+    "order_needs_review_alert": """⚠️ Order Needs Review!
+
+Order {order_id} from {customer_name} has items that couldn't be auto-matched to your catalog.
+Items: {item_summary}
+
+Please open the Orders page and resolve the unmatched items so this order isn't missed.
+— DistributorOS"""
 }
 
 PAYMENT_REMINDER_TEMPLATES = {
@@ -96,6 +104,16 @@ Pay full outstanding balance: {outstanding_link}
 Please clear immediately.
 — {distributor_name}"""
 }
+
+CONSOLIDATED_PAYMENT_REMINDER_TEMPLATE = """Hi {customer_name},
+
+You have {invoice_count} unpaid invoices totaling ₹{total:,.0f}.
+
+Pay all outstanding invoices in one go: {outstanding_link}
+
+Thank you for your business!
+— {distributor_name}"""
+
 
 
 class NotificationService:
@@ -191,14 +209,18 @@ class NotificationService:
         Never raises — all errors are logged and swallowed.
         """
         try:
-            # 1. Check tenant notification preferences
+            # 1. Check tenant notification preferences.
+            # Distributor-facing safety alerts default to enabled even for tenants
+            # whose stored notification_prefs JSON predates this event key —
+            # a silently-missed order is worse than an unwanted extra message.
             prefs = tenant.notification_prefs or {}
-            if not prefs.get(event, False):
+            default_enabled_events = {"new_order_alert_to_distributor", "order_needs_review_alert"}
+            if not prefs.get(event, event in default_enabled_events):
                 logger.info("Notification skipped: %s disabled for tenant %s", event, str(tenant.id))
                 return False
 
-            # 2. Check customer notifications enablement (skipped for distributor alert)
-            if event != "new_order_alert_to_distributor":
+            # 2. Check customer notifications enablement (skipped for distributor-facing alerts)
+            if event not in ("new_order_alert_to_distributor", "order_needs_review_alert"):
                 if not customer.whatsapp_notifications_enabled:
                     logger.info("Notification skipped: customer %s opted out", str(customer.id))
                     return False
@@ -305,4 +327,55 @@ class NotificationService:
 
         except Exception as e:
             logger.warning("Payment reminder fire failed silently: %s", str(e))
+            return False
+
+    async def notify_consolidated_payment_reminder(
+        self,
+        tenant: DistributorTenant,
+        customer: Customer,
+        total_outstanding: float,
+        invoice_count: int,
+        db: Session,
+        outstanding_link: str | None = None,
+    ) -> bool:
+        """
+        Renders and sends a single consolidated reminder covering all of a customer's
+        outstanding invoices (used instead of the tiered single-invoice reminder for
+        customers with many open invoices). Logged as event="consolidated_payment_reminder"
+        so it has its own frequency-cap dedup lane in WhatsappMessageLog.
+        Never raises.
+        """
+        try:
+            # 1. Check tenant notification preferences
+            prefs = tenant.notification_prefs or {}
+            if not prefs.get("payment_reminder", True):
+                logger.info("Notification skipped: payment_reminder disabled for tenant %s", str(tenant.id))
+                return False
+
+            # 2. Check customer notifications enablement
+            if not customer.whatsapp_notifications_enabled:
+                logger.info("Notification skipped: customer %s opted out", str(customer.id))
+                return False
+
+            # 3. Render template
+            link_to_show = outstanding_link if outstanding_link else "Contact your distributor to pay"
+            rendered_message = CONSOLIDATED_PAYMENT_REMINDER_TEMPLATE.format(
+                customer_name=customer.name,
+                invoice_count=invoice_count,
+                total=total_outstanding,
+                outstanding_link=link_to_show,
+                distributor_name=tenant.name
+            )
+
+            # 4. Delegate sending and logging to private helper
+            return await self._send_and_log(
+                tenant=tenant,
+                customer=customer,
+                order_id=None,
+                event="consolidated_payment_reminder",
+                rendered_message=rendered_message
+            )
+
+        except Exception as e:
+            logger.warning("Consolidated payment reminder fire failed silently: %s", str(e))
             return False

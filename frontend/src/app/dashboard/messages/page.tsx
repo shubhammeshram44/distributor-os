@@ -5,6 +5,7 @@ import Sidebar from "@/components/Sidebar";
 import DashboardHeader from "@/components/DashboardHeader";
 import Link from "next/link";
 import { useDebounce } from "@/lib/debounce";
+import { SkeletonListItem } from "@/components/ui/Skeleton";
 import {
   Search,
   MessageSquare,
@@ -462,8 +463,8 @@ export default function MessagesPage() {
               <button
                 onClick={() => setActiveFeedTab("inbox")}
                 className={`flex-1 text-center py-2.5 text-xs font-bold border-b-2 transition-all ${activeFeedTab === "inbox"
-                    ? "border-emerald-500 text-emerald-600 dark:text-emerald-400"
-                    : "border-transparent text-slate-400 hover:text-slate-600"
+                  ? "border-emerald-500 text-emerald-600 dark:text-emerald-400"
+                  : "border-transparent text-slate-400 hover:text-slate-600"
                   }`}
               >
                 Inbox
@@ -471,8 +472,8 @@ export default function MessagesPage() {
               <button
                 onClick={() => setActiveFeedTab("triage")}
                 className={`flex-1 text-center py-2.5 text-xs font-bold border-b-2 transition-all flex items-center justify-center gap-1.5 ${activeFeedTab === "triage"
-                    ? "border-rose-500 text-rose-600 dark:text-rose-400"
-                    : "border-transparent text-slate-400 hover:text-slate-600"
+                  ? "border-rose-500 text-rose-600 dark:text-rose-400"
+                  : "border-transparent text-slate-400 hover:text-slate-600"
                   }`}
               >
                 <span>Triage Queue</span>
@@ -488,9 +489,10 @@ export default function MessagesPage() {
             <div className="flex-1 overflow-y-auto divide-y divide-slate-50">
               {activeFeedTab === "inbox" ? (
                 loading ? (
-                  <div className="flex flex-col items-center justify-center py-12 gap-3">
-                    <Loader2 className="w-6 h-6 text-brand-blue animate-spin" />
-                    <span className="text-xs text-slate-500 dark:text-slate-400 font-semibold">Loading Retailers...</span>
+                  <div className="divide-y divide-slate-50 dark:divide-white/5">
+                    {Array.from({ length: 6 }).map((_, i) => (
+                      <SkeletonListItem key={i} />
+                    ))}
                   </div>
                 ) : filteredCustomers.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-12 text-slate-400">
@@ -510,8 +512,8 @@ export default function MessagesPage() {
                         key={c.id}
                         onClick={() => handleSelectCustomer(c)}
                         className={`w-full text-left p-4 transition-all duration-200 flex gap-3 ${isSelected
-                            ? "bg-slate-50 dark:bg-dashboard-inset border-l-4 border-brand-blue"
-                            : "hover:bg-slate-50/60 dark:hover:bg-white/5 border-l-4 border-transparent"
+                          ? "bg-slate-50 dark:bg-dashboard-inset border-l-4 border-brand-blue"
+                          : "hover:bg-slate-50/60 dark:hover:bg-white/5 border-l-4 border-transparent"
                           }`}
                       >
                         {/* Avatar */}
@@ -561,8 +563,8 @@ export default function MessagesPage() {
                         key={o.id}
                         onClick={() => handleSelectTriageOrder(o)}
                         className={`w-full text-left p-4 transition-all duration-200 border-l-4 ${isSelected
-                            ? "bg-rose-50/50 dark:bg-rose-500/[0.08] border-rose-500"
-                            : "hover:bg-rose-50/20 border-transparent"
+                          ? "bg-rose-50/50 dark:bg-rose-500/[0.08] border-rose-500"
+                          : "hover:bg-rose-50/20 border-transparent"
                           }`}
                       >
                         <div className="flex items-start gap-3">
@@ -642,8 +644,8 @@ export default function MessagesPage() {
                       <div
                         key={msg.id || index}
                         className={`flex flex-col max-w-[70%] rounded-2xl p-3 text-xs shadow-sm relative transition-all duration-200 ${isOp
-                            ? "bg-[#d9fdd3] dark:bg-emerald-900/30 text-slate-800 dark:text-slate-100 self-end rounded-tr-none border border-emerald-100 dark:border-emerald-500/20"
-                            : "bg-white dark:bg-dashboard-card text-slate-800 dark:text-slate-100 self-start rounded-tl-none border border-slate-200 dark:border-white/10"
+                          ? "bg-[#d9fdd3] dark:bg-emerald-900/30 text-slate-800 dark:text-slate-100 self-end rounded-tr-none border border-emerald-100 dark:border-emerald-500/20"
+                          : "bg-white dark:bg-dashboard-card text-slate-800 dark:text-slate-100 self-start rounded-tl-none border border-slate-200 dark:border-white/10"
                           }`}
                       >
                         {/* Sender Label */}
@@ -836,10 +838,10 @@ export default function MessagesPage() {
                     <div className="flex justify-between items-center text-xs">
                       <span className="font-semibold text-slate-400">Order Status</span>
                       <span className={`font-bold px-2 py-0.5 rounded border text-[10px] ${activeOrder.status === "Confirmed"
-                          ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-100 dark:border-emerald-500/20"
-                          : thread?.has_unmatched
-                            ? "bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-100 dark:border-rose-500/20"
-                            : "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-100 dark:border-amber-500/20"
+                        ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-100 dark:border-emerald-500/20"
+                        : thread?.has_unmatched
+                          ? "bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-100 dark:border-rose-500/20"
+                          : "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-100 dark:border-amber-500/20"
                         }`}>
                         {activeOrder.status}
                       </span>
@@ -915,8 +917,8 @@ export default function MessagesPage() {
                           <span className="text-slate-600 dark:text-slate-400">SKU Catalog Match</span>
                         </div>
                         <span className={`font-bold px-2 py-0.5 rounded border text-[10px] ${thread?.has_unmatched
-                            ? "text-rose-700 dark:text-rose-400 bg-rose-50 dark:bg-rose-500/10 border-rose-100 dark:border-rose-500/20"
-                            : "text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 border-emerald-100 dark:border-emerald-500/20"
+                          ? "text-rose-700 dark:text-rose-400 bg-rose-50 dark:bg-rose-500/10 border-rose-100 dark:border-rose-500/20"
+                          : "text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 border-emerald-100 dark:border-emerald-500/20"
                           }`}>
                           {matchedCount}/{activeItems.length} resolved
                         </span>
@@ -992,8 +994,8 @@ export default function MessagesPage() {
       {/* Local Toast UI notification */}
       {toast.show && (
         <div className={`fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-3 rounded-lg shadow-lg border transition-all duration-300 ${toast.type === "success"
-            ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-500/20"
-            : "bg-rose-50 dark:bg-rose-500/10 text-rose-800 dark:text-rose-300 border-rose-200 dark:border-rose-500/20"
+          ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-500/20"
+          : "bg-rose-50 dark:bg-rose-500/10 text-rose-800 dark:text-rose-300 border-rose-200 dark:border-rose-500/20"
           }`}>
           {toast.type === "success" ? (
             <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />

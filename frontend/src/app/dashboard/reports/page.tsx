@@ -12,6 +12,7 @@ import {
   ResponsiveContainer
 } from "recharts";
 import { Loader2, AlertCircle, FileText, IndianRupee, LineChart, ShieldAlert } from "lucide-react";
+import { SkeletonCard, SkeletonChartCard } from "@/components/ui/Skeleton";
 
 interface TimeSeriesPoint {
   date: string;
@@ -101,7 +102,7 @@ export default function ReportsPage() {
     <div className="flex bg-dashboard-bg min-h-screen text-slate-800 dark:text-slate-100">
       <Sidebar
         activeTab="Reports"
-        setActiveTab={() => {}}
+        setActiveTab={() => { }}
         tenantName={getTenantName()}
       />
 
@@ -124,9 +125,12 @@ export default function ReportsPage() {
           </div>
 
           {loading ? (
-            <div className="flex flex-col items-center justify-center py-32 gap-3">
-              <Loader2 className="w-8 h-8 text-brand-blue animate-spin" />
-              <span className="text-sm font-semibold text-slate-500 dark:text-slate-400">Aggregating database financial metrics...</span>
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <SkeletonCard />
+                <SkeletonCard />
+              </div>
+              <SkeletonChartCard />
             </div>
           ) : error ? (
             <div className="flex flex-col items-center justify-center py-32 gap-3 text-rose-600 dark:text-rose-400">
@@ -185,12 +189,12 @@ export default function ReportsPage() {
                       >
                         <defs>
                           <linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.2}/>
-                            <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                            <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.2} />
+                            <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
                           </linearGradient>
                         </defs>
                         <XAxis dataKey="date" stroke="#94a3b8" fontSize={10} />
-                        <YAxis stroke="#94a3b8" fontSize={10} tickFormatter={(tick) => `₹${tick/1000}k`} />
+                        <YAxis stroke="#94a3b8" fontSize={10} tickFormatter={(tick) => `₹${tick / 1000}k`} />
                         <Tooltip
                           contentStyle={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "8px", color: "var(--color-text)" }}
                           formatter={(value: any) => [formatCurrency(value), "Sales"]}

@@ -5,6 +5,7 @@ import Sidebar from "@/components/Sidebar";
 import DashboardHeader from "@/components/DashboardHeader";
 import { formatDateTime } from "@/utils/datetime";
 import { useDebounce, fetchWithTimeout } from "@/lib/debounce";
+import { Skeleton, SkeletonTable } from "@/components/ui/Skeleton";
 import {
   Loader2,
   AlertCircle,
@@ -438,9 +439,60 @@ export default function ShipmentsPage() {
           </div>
 
           {loading && (
-            <div className="flex flex-col items-center justify-center py-24 gap-3 bg-white dark:bg-dashboard-card rounded-xl border border-dashboard-border">
-              <Loader2 className="w-8 h-8 text-brand-blue animate-spin" />
-              <span className="text-sm font-semibold text-slate-500 dark:text-slate-400">Retrieving logistics status...</span>
+            <div className="space-y-6">
+              {/* Search & filter bar skeleton */}
+              <div className="bg-white dark:bg-dashboard-card p-4 rounded-xl border border-dashboard-border shadow-sm flex flex-col sm:flex-row gap-4 items-center justify-between">
+                <Skeleton className="h-9 w-full sm:max-w-md rounded-lg" />
+                <Skeleton className="h-9 w-full sm:w-48 rounded-lg" />
+              </div>
+
+              {/* Split-screen builder skeleton */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-2 bg-white dark:bg-dashboard-card rounded-xl border border-dashboard-border shadow-sm p-5 flex flex-col min-h-[350px]">
+                  <Skeleton className="h-3.5 w-56 mb-4" />
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="text-slate-400 font-bold border-b border-dashboard-border bg-slate-50 dark:bg-dashboard-inset">
+                        <th className="py-2.5 px-4 text-center w-12">Load</th>
+                        <th className="py-2.5 px-4">Order ID</th>
+                        <th className="py-2.5 px-4">Store Name</th>
+                        <th className="py-2.5 px-4 text-right">Invoice Amount</th>
+                      </tr>
+                    </thead>
+                    <SkeletonTable rows={5} cols={4} />
+                  </table>
+                </div>
+                <div className="bg-white dark:bg-dashboard-card rounded-xl border border-dashboard-border shadow-sm p-5 flex flex-col gap-3">
+                  <Skeleton className="h-3.5 w-40 mb-1" />
+                  <Skeleton className="h-9 w-full rounded-lg" />
+                  <Skeleton className="h-9 w-full rounded-lg" />
+                  <Skeleton className="h-9 w-full rounded-lg mt-auto" />
+                </div>
+              </div>
+
+              {/* Active shipments ledger skeleton */}
+              <div className="bg-white dark:bg-dashboard-card rounded-xl border border-dashboard-border shadow-sm flex flex-col min-h-[300px]">
+                <div className="p-4 border-b border-dashboard-border bg-slate-50 dark:bg-dashboard-inset rounded-t-xl">
+                  <h3 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                    Active Shipments Ledger
+                  </h3>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="text-slate-400 font-bold border-b border-dashboard-border bg-slate-50/50 dark:bg-dashboard-inset">
+                        <th className="py-3 px-6">Shipment Context</th>
+                        <th className="py-3 px-6">Driver & Vehicle</th>
+                        <th className="py-3 px-6">Commercial Link</th>
+                        <th className="py-3 px-6">Milestone Status</th>
+                        <th className="py-3 px-6">Payment status</th>
+                        <th className="py-3 px-6 text-center">Actions</th>
+                      </tr>
+                    </thead>
+                    <SkeletonTable rows={5} cols={6} />
+                  </table>
+                </div>
+              </div>
             </div>
           )}
 

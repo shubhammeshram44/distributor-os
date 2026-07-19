@@ -16,6 +16,12 @@ logger = logging.getLogger("uvicorn.error")
 
 FREQUENCY_CAP_DAYS = 3
 
+# Customers with this many or more open unpaid/partially-paid invoices get a
+# single consolidated reminder instead of the tiered per-invoice one, with its
+# own (longer) frequency cap — see run_payment_reminder_sweep.
+CONSOLIDATED_REMINDER_THRESHOLD = 5
+CONSOLIDATED_FREQUENCY_CAP_DAYS = 7
+
 async def run_payment_reminder_sweep(db: Session) -> dict:
     summary = {
         "tenants_processed": 0,
@@ -115,6 +121,66 @@ async def run_payment_reminder_sweep(db: Session) -> dict:
                     pref_key = "payment_reminder_upcoming" if tier == "upcoming" else "payment_reminder_overdue"
                     if not prefs.get(pref_key, True) and not prefs.get("payment_reminder", True):
                         logger.info("Skipping reminder for customer %s: %s disabled in preferences", customer.name, pref_key)
+                        continue
+
+                    # High-frequency customers (many open invoices) get ONE
+                    # consolidated reminder instead of a per-invoice tiered one —
+                    # per-invoice reminders train them to ignore WhatsApp nudges
+                    # entirely once they place several orders a week.
+                    if invoice_count >= CONSOLIDATED_REMINDER_THRESHOLD and tier != "upcoming":
+                        last_consolidated_log = (
+                            db.query(WhatsappMessageLog)
+                            .filter(
+                                WhatsappMessageLog.customer_id == customer.id,
+                                WhatsappMessageLog.event == "consolidated_payment_reminder",
+                                WhatsappMessageLog.status == "sent"
+                            )
+                            .order_by(WhatsappMessageLog.created_at.desc())
+                            .first()
+                        )
+                        if last_consolidated_log:
+                            cutoff = datetime.utcnow() - timedelta(days=CONSOLIDATED_FREQUENCY_CAP_DAYS)
+                            if last_consolidated_log.created_at >= cutoff:
+                                summary["skipped_recent"] += 1
+                                logger.info(
+                                    "Skipping consolidated reminder for customer %s: recently sent on %s",
+                                    customer.name, last_consolidated_log.created_at
+                                )
+                                continue
+
+                        outstanding_link = None
+                        try:
+                            from app.services.payment_session_service import get_or_create_payment_session
+                            oldest_invoice = sorted(invoices, key=lambda x: x.created_at)[0]
+                            order = db.get(Order, oldest_invoice.order_id)
+                            if order:
+                                outstanding_session = get_or_create_payment_session(
+                                    db=db,
+                                    invoice=oldest_invoice,
+                                    customer=customer,
+                                    order_id=order.id,
+                                    tenant_id=tenant.id,
+                                    custom_amount=total_outstanding
+                                )
+                                db.commit()
+                                outstanding_link = outstanding_session.payment_link_short_url or outstanding_session.payment_link_url
+                        except Exception as link_ex:
+                            logger.warning("Could not create consolidated outstanding link for customer %s: %s", customer.name, str(link_ex))
+
+                        success = await notification_service.notify_consolidated_payment_reminder(
+                            tenant=tenant,
+                            customer=customer,
+                            total_outstanding=total_outstanding,
+                            invoice_count=invoice_count,
+                            db=db,
+                            outstanding_link=outstanding_link
+                        )
+                        if success:
+                            summary["reminders_sent"] += 1
+                            logger.info("Consolidated payment reminder sent for customer %s (%d invoices)", customer.name, invoice_count)
+                        else:
+                            summary["errors"] += 1
+                            logger.error("Failed to send consolidated payment reminder for customer %s", customer.name)
                         continue
 
                     # 4. FREQUENCY CAP check

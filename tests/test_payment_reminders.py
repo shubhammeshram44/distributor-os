@@ -208,3 +208,111 @@ async def test_run_payment_reminder_sweep_scenarios(db_session: Session):
         called_args = [call.kwargs for call in mock_notify.call_args_list]
         called_tiers = [arg["tier"] for arg in called_args]
         assert set(called_tiers) == {"upcoming", "just_overdue", "moderately_overdue", "severely_overdue"}
+
+
+@pytest.mark.asyncio
+async def test_consolidated_reminder_for_high_invoice_count_customer(db_session: Session):
+    """A customer with 5+ overdue unpaid invoices should get ONE consolidated
+    reminder instead of the tiered per-invoice one, with its own frequency cap
+    (independent of the regular payment_reminder dedup lane)."""
+    tenant = DistributorTenant(
+        id=uuid.uuid4(),
+        name="Consolidated Tenant",
+        notification_prefs={"payment_reminder": True},
+        whatsapp_phone_id="dist-consolidated00",
+    )
+    db_session.add(tenant)
+    db_session.commit()
+
+    customer = Customer(
+        id=uuid.uuid4(),
+        tenant_id=tenant.id,
+        retailer_name="High Frequency Kirana",
+        payment_terms="Net 30",
+        whatsapp_notifications_enabled=True,
+        phone_number="+919999999999"
+    )
+    db_session.add(customer)
+    db_session.flush()
+
+    today = datetime.utcnow()
+    for i in range(6):
+        order = Order(
+            id=uuid.uuid4(),
+            tenant_id=tenant.id,
+            internal_order_id=f"ORD-CONSOLIDATED-{i}",
+            source="Portal",
+            customer_id=customer.id,
+            status="Confirmed"
+        )
+        db_session.add(order)
+        db_session.flush()
+        db_session.add(Invoice(
+            id=uuid.uuid4(),
+            tenant_id=tenant.id,
+            order_id=order.id,
+            customer_id=customer.id,
+            gstin="29AAAAA1111A1Z1",
+            total_amount=1000.0,
+            amount_paid=0.0,
+            payment_status="UNPAID",
+            created_at=today - timedelta(days=40),  # well overdue on Net 30
+        ))
+    db_session.commit()
+
+    # Mock only the HTTP boundary (like the real Evolution API call) so the
+    # real notify_consolidated_payment_reminder method runs end-to-end. Note:
+    # its message-log write uses its own fresh SessionLocal() (see
+    # notification_service._send_and_log), which is a different DB connection
+    # than this test's db_session fixture — so we can assert on what was sent
+    # over HTTP, but not query db_session for the resulting log row. The
+    # frequency-cap re-check below is exercised by inserting the equivalent
+    # log row directly into db_session instead.
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post, patch(
+        "app.services.notification_service.NotificationService.notify_payment_reminder",
+        new_callable=AsyncMock,
+    ) as mock_tiered, patch(
+        "app.services.payment_session_service.get_or_create_payment_session"
+    ) as mock_session:
+        mock_post.return_value.status_code = 200
+        mock_session.return_value.payment_link_short_url = "https://pay.example/consolidated"
+        mock_session.return_value.payment_link_url = "https://pay.example/consolidated"
+
+        summary = await run_payment_reminder_sweep(db_session)
+
+        assert summary["reminders_sent"] == 1
+        assert summary["errors"] == 0
+        assert not mock_tiered.called
+        assert mock_post.called
+        sent_text = mock_post.call_args.kwargs["json"]["text"]
+        assert "6 unpaid invoices" in sent_text
+        assert "6,000" in sent_text
+
+    # Simulate the WhatsappMessageLog row the real _send_and_log call would
+    # have written (in production, against the same DB) to exercise the
+    # consolidated event's own 7-day frequency cap on the next sweep.
+    db_session.add(WhatsappMessageLog(
+        id=uuid.uuid4(),
+        tenant_id=tenant.id,
+        customer_id=customer.id,
+        order_id=None,
+        event="consolidated_payment_reminder",
+        to_phone="919999999999",
+        message_body="Consolidated reminder",
+        status="sent",
+        created_at=today,
+    ))
+    db_session.commit()
+
+    # A second sweep run immediately after should be skipped by the
+    # consolidated event's own 7-day frequency cap.
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post_2, patch(
+        "app.services.payment_session_service.get_or_create_payment_session"
+    ) as mock_session_2:
+        mock_session_2.return_value.payment_link_short_url = "https://pay.example/consolidated"
+
+        summary_2 = await run_payment_reminder_sweep(db_session)
+
+        assert summary_2["reminders_sent"] == 0
+        assert summary_2["skipped_recent"] == 1
+        assert not mock_post_2.called

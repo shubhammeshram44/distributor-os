@@ -351,9 +351,14 @@ def get_me(
     db: Session = Depends(get_db),
 ):
     """Retrieves session profile data from the active JWT."""
-    token = access_token
-    if not token and authorization and authorization.startswith("Bearer "):
+    # Prefer the Authorization header over the cookie — see resolve_tenant_id
+    # in tenant_service.py for the full rationale (stale cookies must never
+    # shadow a freshly issued, valid session token).
+    token = None
+    if authorization and authorization.startswith("Bearer "):
         token = authorization.split(" ")[1]
+    if not token:
+        token = access_token
 
     if not token:
         raise HTTPException(
@@ -399,10 +404,17 @@ def logout(response: Response):
     """
     Clears the secure HttpOnly session access cookie across cross-origin domains.
     """
+    # Must mirror the exact attributes used when the cookie was set (see
+    # firebase-login/signup above). Browsers silently REFUSE to set/overwrite
+    # a `Secure`-flagged cookie over a plain HTTP response — if this always
+    # sent secure=True while local dev sets the cookie with secure=False, the
+    # deletion is a no-op in dev and the old (still technically valid) cookie
+    # lingers in the browser, later shadowing a fresh, valid session token.
+    _is_prod = os.getenv("ENVIRONMENT", "development") == "production"
     response.delete_cookie(
         key="access_token",
         httponly=True,
-        secure=True,
-        samesite="none",
+        secure=_is_prod,
+        samesite="none" if _is_prod else "lax",
     )
     return {"status": "success", "message": "Session logged out successfully"}

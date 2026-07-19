@@ -2,7 +2,7 @@
 
 import React from "react";
 import { ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
-import { AlertTriangle, ArrowRight } from "lucide-react";
+import { AlertTriangle, ArrowRight, CheckCircle2 } from "lucide-react";
 import { DonutSegment } from "@/hooks/useDashboardData";
 import Link from "next/link";
 
@@ -104,15 +104,22 @@ export default function CollectionsDonut({ data, viewReportHref, overdue60Count 
       </div>
 
       {/* Warnings Card */}
-      <div className="mt-3 p-2.5 bg-amber-50/70 dark:bg-amber-500/[0.08] border border-amber-200 dark:border-amber-500/20 rounded-xl flex items-center justify-between text-[11px] gap-2">
-        <div className="flex items-center gap-2 text-amber-800 dark:text-amber-300">
-          <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
-          <span className="font-semibold">{overdue60Count ?? 0} customers have outstanding balances &gt; 60 days</span>
+      {overdue60Count && overdue60Count > 0 ? (
+        <div className="mt-3 p-2.5 bg-amber-50/70 dark:bg-amber-500/[0.08] border border-amber-200 dark:border-amber-500/20 rounded-xl flex items-center justify-between text-[11px] gap-2">
+          <div className="flex items-center gap-2 text-amber-800 dark:text-amber-300">
+            <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+            <span className="font-semibold">{overdue60Count} customers have outstanding balances &gt; 60 days</span>
+          </div>
+          <Link href="/dashboard/customers?filter=overdue_60" className="text-brand-blue hover:text-brand-blueHover font-bold shrink-0 hover:underline">
+            View customers
+          </Link>
         </div>
-        <Link href="/dashboard/customers?filter=overdue_60" className="text-brand-blue hover:text-brand-blueHover font-bold shrink-0 hover:underline">
-          View customers
-        </Link>
-      </div>
+      ) : (
+        <div className="mt-3 p-2.5 bg-emerald-50/70 dark:bg-emerald-500/[0.08] border border-emerald-200 dark:border-emerald-500/20 rounded-xl flex items-center gap-2 text-[11px]">
+          <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+          <span className="font-semibold text-emerald-800 dark:text-emerald-300">No customers overdue beyond 60 days</span>
+        </div>
+      )}
     </div>
   );
 }

@@ -259,6 +259,44 @@ def process_order_self_learning(db: Session, order_id: uuid.UUID, tenant_id: uui
         logger.error("Self-learning sub-transaction failed: %s", str(e))
 
 
+@router.get("/last-for-customer", status_code=status.HTTP_200_OK)
+def get_last_order_for_customer(
+    tenant_id: uuid.UUID,
+    customer_id: uuid.UUID,
+    db: Session = Depends(get_db)
+):
+    """
+    Returns the most recent order for a customer, formatted as a free-text
+    order summary in the same style the Gemini/regex order parser expects
+    (e.g. "50 Lux soap, 30 Rin") — powers the "Repeat last order" quick-picker
+    in the manual order entry modal.
+    """
+    tenant_context.set(tenant_id)
+
+    last_order = (
+        db.query(Order)
+        .filter(Order.tenant_id == tenant_id, Order.customer_id == customer_id)
+        .order_by(Order.created_at.desc())
+        .first()
+    )
+    if not last_order:
+        return {"has_previous_order": False, "order_text": None}
+
+    items = db.query(OrderLineItem).filter(OrderLineItem.order_id == last_order.id).all()
+    parts = []
+    for item in items:
+        product = db.get(Product, item.product_id) if item.product_id else None
+        label = product.brand if product else (item.product_name or item.sku_code or "item")
+        qty = item.allocated_quantity if item.allocated_quantity is not None else item.quantity
+        parts.append(f"{qty} {label}")
+
+    return {
+        "has_previous_order": bool(parts),
+        "order_text": ", ".join(parts) if parts else None,
+        "internal_order_id": last_order.internal_order_id,
+    }
+
+
 class StatusUpdatePayload(BaseModel):
     to_status: str
 
@@ -279,7 +317,7 @@ def cancel_order(
     tenant_context.set(order.tenant_id)
     current = order.current_status
 
-    if current not in ("Draft", "Pending", "Confirmed", "Needs Review"):
+    if current not in ("Draft", "Pending", "Confirmed", "Needs Review", "Partially Confirmed", "Awaiting Stock"):
         raise HTTPException(
             status_code=400,
             detail=f"Cannot cancel order with status '{current}'. Only Draft/Confirmed orders can be cancelled."
@@ -288,23 +326,31 @@ def cancel_order(
     try:
         items = db.query(OrderLineItem).filter(OrderLineItem.order_id == order_id).all()
 
-        # If Confirmed, reverse inventory and customer balance
-        if current == "Confirmed":
+        # If any commercially-confirmed state (Confirmed / Partially Confirmed /
+        # Awaiting Stock), reverse inventory and customer balance — all three
+        # states already debited the customer ledger and committed inventory
+        # during confirm_order(), regardless of how much was actually allocated.
+        if current in ("Confirmed", "Partially Confirmed", "Awaiting Stock"):
             customer = db.get(Customer, order.customer_id)
             order_total = sum(float(i.quantity * i.unit_price) for i in items)
 
-            # Restore inventory
+            # Restore inventory — only the units actually allocated were ever
+            # deducted from quantity_on_hand, so restore that amount (not the
+            # full requested quantity, which would over-restore stock on a
+            # partially-allocated order). Fetched and mutated via the ORM
+            # (rather than a raw SQL clamp) since a portable 2-arg "greatest"
+            # expression doesn't exist across SQLite (tests) and Postgres (prod).
             for item in items:
-                db.execute(
-                    sa_update(Inventory)
-                    .where(
-                        and_(
-                            Inventory.tenant_id == order.tenant_id,
-                            Inventory.sku_id == item.product_id
-                        )
-                    )
-                    .values(quantity_on_hand=Inventory.quantity_on_hand + item.quantity)
-                )
+                restored_qty = item.allocated_quantity if item.allocated_quantity is not None else item.quantity
+                if restored_qty <= 0:
+                    continue
+                inv_record = db.query(Inventory).filter(
+                    Inventory.tenant_id == order.tenant_id,
+                    Inventory.sku_id == item.product_id
+                ).first()
+                if inv_record:
+                    inv_record.quantity_on_hand = (inv_record.quantity_on_hand or 0) + restored_qty
+                    inv_record.quantity_committed = max(0, (inv_record.quantity_committed or 0) - restored_qty)
 
             # Reverse customer outstanding balance via ledger service.
             # Use invoice.total_amount (actual billed amount at confirmation),
@@ -341,6 +387,38 @@ def cancel_order(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Cancellation failed: {str(e)}")
+
+
+@router.get("/pending-allocations", status_code=status.HTTP_200_OK)
+def get_pending_allocations(
+    tenant_id: uuid.UUID,
+    db: Session = Depends(get_db),
+):
+    """
+    Lists open STOCK_SHORTAGE demand gaps, oldest first, so a distributor can
+    see what's waiting on restock and approve fulfillment once stock arrives.
+    """
+    tenant_context.set(tenant_id)
+    from app.services.allocation_queue_service import list_pending_allocations
+    return {"items": list_pending_allocations(db, tenant_id)}
+
+
+@router.post("/pending-allocations/{demand_gap_id}/approve", status_code=status.HTTP_200_OK)
+def approve_pending_allocation_endpoint(
+    demand_gap_id: uuid.UUID,
+    tenant_id: uuid.UUID,
+    db: Session = Depends(get_db),
+):
+    """
+    Approves as much of an open demand gap as current stock allows. Safe to
+    call again later if stock only partially covers the gap.
+    """
+    tenant_context.set(tenant_id)
+    from app.services.allocation_queue_service import approve_pending_allocation
+    try:
+        return approve_pending_allocation(db, tenant_id, demand_gap_id)
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
 
 
 import csv as csv_module
@@ -444,6 +522,8 @@ def update_order_status(
         "Draft": {"Confirmed"},
         "NEEDS_REVIEW": set(),  # Must resolve via triage first
         "Confirmed": {"Dispatched"},
+        "Partially Confirmed": {"Dispatched"},  # can dispatch whatever was allocated
+        "Awaiting Stock": set(),  # nothing allocated yet — resolve via pending-allocations queue first
         "Dispatched": {"Delivered"},
         "Delivered": set(),
     }
@@ -478,7 +558,7 @@ def update_order_status(
         return {
             "status": "success",
             "order_id": str(order.id),
-            "new_status": payload.to_status
+            "new_status": order.current_status
         }
 
     except HTTPException:
@@ -688,8 +768,13 @@ def generate_invoice_pdf_bytes(order: Order, db: Session) -> bytes:
     # Check if this should be formatted as a GST tax invoice
     is_gst = order.invoice_type != "RETAIL_INVOICE"
 
+    # Fetch the persisted invoice row (created at confirm time) so the PDF's
+    # invoice number and CGST/SGST split always match what's stored in the DB,
+    # rather than being recomputed independently at render time.
+    invoice_row = db.query(Invoice).filter(Invoice.order_id == order.id).first()
+
     # Header section (Tenant & Invoice ID/Date)
-    invoice_id = f"INV-{order.internal_order_id}"
+    invoice_id = invoice_row.invoice_number if invoice_row and invoice_row.invoice_number else f"INV-{order.internal_order_id}"
     order_date = order.created_at.strftime("%Y-%m-%d")
     
     header_left = f"<b>{tenant_name}</b><br/>B2B Distributor Services<br/>Email: billing@{tenant_name.lower().replace(' ', '').replace('.', '')}.com"
@@ -750,13 +835,19 @@ def generate_invoice_pdf_bytes(order: Order, db: Session) -> bytes:
     grid_header = [
         Paragraph("<b>SKU ID</b>", body_bold),
         Paragraph("<b>Item Name</b>", body_bold),
+    ]
+    if is_gst:
+        grid_header.append(Paragraph("<b>HSN</b>", body_bold))
+    grid_header += [
         Paragraph("<b>Quantity</b>", body_bold),
         Paragraph("<b>Wholesale Price</b>", body_bold),
         Paragraph("<b>Line Total</b>", body_bold)
     ]
     grid_data = [grid_header]
-    
+
     subtotal = 0.0
+    total_cgst = 0.0
+    total_sgst = 0.0
     for item in items:
         product = db.get(Product, item.product_id)
         sku = product.sku_id if product else item.sku_code or "UNKNOWN"
@@ -765,16 +856,31 @@ def generate_invoice_pdf_bytes(order: Order, db: Session) -> bytes:
         price = float(item.unit_price)
         total = qty * price
         subtotal += total
-        
-        grid_data.append([
+
+        if is_gst:
+            # Per-product GST rate (was previously hardcoded at 18% for every
+            # line item regardless of the product's actual rate).
+            line_gst_rate = float(product.gst_rate) if product and product.gst_rate is not None else 18.0
+            line_gst = total * (line_gst_rate / 100.0)
+            total_cgst += line_gst / 2.0
+            total_sgst += line_gst / 2.0
+
+        row = [
             Paragraph(sku, body_style),
             Paragraph(item_name, body_style),
+        ]
+        if is_gst:
+            hsn_display = product.hsn_code if product and product.hsn_code else "\u2014"
+            row.append(Paragraph(hsn_display, body_style))
+        row += [
             Paragraph(str(qty), body_style),
             Paragraph(f"₹ {price:,.2f}", body_style),
             Paragraph(f"₹ {total:,.2f}", body_style)
-        ])
+        ]
+        grid_data.append(row)
 
-    grid_table = Table(grid_data, colWidths=[80, 220, 50, 95, 95])
+    col_widths = [70, 160, 55, 45, 90, 90] if is_gst else [80, 220, 50, 95, 95]
+    grid_table = Table(grid_data, colWidths=col_widths)
     grid_table.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,0), light_bg),
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
@@ -788,11 +894,20 @@ def generate_invoice_pdf_bytes(order: Order, db: Session) -> bytes:
 
     # Tax Summary Block (Conditionally exclude GST)
     if is_gst:
-        gst_rate = 0.18
-        gst = subtotal * gst_rate
-        grand_total = subtotal + gst
+        # Prefer the persisted invoice's CGST/SGST split (authoritative, set
+        # at confirm time) so the PDF always matches what's stored in the DB.
+        # Fall back to the live per-line recompute above for legacy invoices
+        # created before these columns existed (cgst_amount/sgst_amount NULL).
+        if invoice_row is not None and invoice_row.cgst_amount is not None and invoice_row.sgst_amount is not None:
+            cgst = float(invoice_row.cgst_amount)
+            sgst = float(invoice_row.sgst_amount)
+        else:
+            cgst = round(total_cgst, 2)
+            sgst = round(total_sgst, 2)
+        grand_total = subtotal + cgst + sgst
     else:
-        gst = 0.0
+        cgst = 0.0
+        sgst = 0.0
         grand_total = subtotal
 
     summary_left = "<b>Declaration:</b><br/>We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct."
@@ -801,7 +916,10 @@ def generate_invoice_pdf_bytes(order: Order, db: Session) -> bytes:
     ]
     if is_gst:
         summary_right_data.append(
-            [Paragraph("GST (18%):", body_style), Paragraph(f"₹ {gst:,.2f}", ParagraphStyle('RightAlign', parent=body_style, alignment=2))]
+            [Paragraph("CGST:", body_style), Paragraph(f"₹ {cgst:,.2f}", ParagraphStyle('RightAlign', parent=body_style, alignment=2))]
+        )
+        summary_right_data.append(
+            [Paragraph("SGST:", body_style), Paragraph(f"₹ {sgst:,.2f}", ParagraphStyle('RightAlign', parent=body_style, alignment=2))]
         )
     summary_right_data.append(
         [Paragraph("<b>Total Payable:</b>", body_bold), Paragraph(f"<b>₹ {grand_total:,.2f}</b>", ParagraphStyle('RightAlignBold', parent=body_bold, alignment=2))]
@@ -848,8 +966,9 @@ def get_order_invoice(
     # Set tenant isolation context
     tenant_context.set(order.tenant_id)
 
-    # 2. Restrict to Confirmed orders
-    if order.current_status != "Confirmed":
+    # 2. Restrict to commercially-confirmed orders (Confirmed / Partially
+    # Confirmed / Awaiting Stock all have an invoice created at confirm time)
+    if order.current_status not in ("Confirmed", "Partially Confirmed", "Awaiting Stock"):
         raise HTTPException(
             status_code=400,
             detail="Invoices can only be generated for Confirmed orders"
@@ -1003,7 +1122,7 @@ def process_bulk_invoices(job_id: str, order_ids: list[str], tenant_id: uuid.UUI
                     if not order:
                         raise ValueError("Order not found")
                     
-                    if order.current_status != "Confirmed":
+                    if order.current_status not in ("Confirmed", "Partially Confirmed", "Awaiting Stock"):
                         raise ValueError("Order is not Confirmed")
 
                     pdf_bytes = generate_invoice_pdf_bytes(order, db)
@@ -1301,7 +1420,7 @@ def create_order(
         "status": "success",
         "order_id": str(new_order.id),
         "internal_order_id": generated_order_id,
-        "new_status": payload.status
+        "new_status": new_order.current_status
     }
 
 
@@ -1325,10 +1444,10 @@ def patch_order(
     from app.models.user import User
 
     token = None
-    if access_token:
-        token = access_token
-    elif authorization and authorization.startswith("Bearer "):
+    if authorization and authorization.startswith("Bearer "):
         token = authorization.split(" ")[1]
+    elif access_token:
+        token = access_token
 
     current_user = None
     if token:
@@ -1497,7 +1616,7 @@ def confirm_order_post(order_id: uuid.UUID, db: Session = Depends(get_db)):
 
 
 
-    return {"status": "success", "order_id": str(order.id), "new_status": "Confirmed"}
+    return {"status": "success", "order_id": str(order.id), "new_status": order.current_status}
 
 
 # ---------------------------------------------------------------------------
@@ -1546,7 +1665,7 @@ def batch_confirm_order(
     tenant_context.set(order.tenant_id)
 
     current_status = order.current_status
-    if current_status == "Confirmed":
+    if current_status in ("Confirmed", "Partially Confirmed", "Awaiting Stock"):
         raise HTTPException(
             status_code=409,
             detail="Order is already confirmed.",
@@ -1731,7 +1850,7 @@ def batch_confirm_order(
         return {
             "status": "success",
             "order_id": str(order.id),
-            "new_status": "Confirmed",
+            "new_status": order.current_status,
             "changes_applied": len(payload.resolved_items),
         }
 
@@ -1752,7 +1871,7 @@ class DispatchPayload(BaseModel):
     vehicle_number: str
 
 @router.post("/{order_id}/dispatch", status_code=200)
-def dispatch_order_post(order_id: uuid.UUID, payload: DispatchPayload, db: Session = Depends(get_db)):
+def dispatch_order_post(order_id: uuid.UUID, payload: DispatchPayload, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     order = db.get(Order, order_id)
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
@@ -1783,6 +1902,23 @@ def dispatch_order_post(order_id: uuid.UUID, payload: DispatchPayload, db: Sessi
         shipment.carrier = payload.delivery_partner
         shipment.tracking_id = payload.vehicle_number
 
+    # Release committed inventory on dispatch: the allocated units have now
+    # physically left the warehouse, so they're no longer "committed" (reserved
+    # but on-hand) — quantity_on_hand was already decremented at confirm time
+    # and must NOT change again here. Previously `quantity_committed` was never
+    # released at dispatch, silently inflating it forever (open tech debt).
+    items = db.query(OrderLineItem).filter(OrderLineItem.order_id == order_id).all()
+    for item in items:
+        released_qty = item.allocated_quantity if item.allocated_quantity is not None else item.quantity
+        if released_qty <= 0:
+            continue
+        inv_record = db.query(Inventory).filter(
+            Inventory.tenant_id == order.tenant_id,
+            Inventory.sku_id == item.product_id
+        ).first()
+        if inv_record:
+            inv_record.quantity_committed = max(0, (inv_record.quantity_committed or 0) - released_qty)
+
     # Check if OrderStateLedger model exists
     has_ledger = False
     try:
@@ -1806,47 +1942,52 @@ def dispatch_order_post(order_id: uuid.UUID, payload: DispatchPayload, db: Sessi
         
     db.commit()
 
-    # Fire order_dispatched notification (non-blocking)
-    try:
-        if customer:
-            # Eagerly load relationships so they are in-memory before background task starts
-            for item in order.line_items:
-                if item.product:
-                    _ = item.product.brand
+    # Fire order_dispatched notification via a real background task (runs after the
+    # response is sent — the previous asyncio.get_running_loop()/asyncio.run() fallback
+    # always took the asyncio.run() branch on this sync endpoint, since there is no
+    # running event loop in FastAPI's threadpool worker, which meant it blocked the
+    # HTTP response for the full WhatsApp API round-trip, up to a 10s timeout).
+    if customer:
+        engine_bind = db.get_bind()
 
+        def _fire_dispatched_notification_task(tenant_id: str, customer_id: str, order_id_str: str, engine):
             import asyncio
+            from sqlalchemy.orm import sessionmaker
             from app.services.notification_service import NotificationService
             import os
 
-            tenant_obj = db.get(DistributorTenant, order.tenant_id)
-
-            async def fire_notifications(tenant_val, customer_val, order_val):
-                try:
-                    notification_service = NotificationService(
-                        evolution_base_url=os.getenv("EVOLUTION_API_URL", "http://34.158.60.42:8080"),
-                        api_key=os.getenv("EVOLUTION_API_KEY", "distributorbotkey2026")
-                    )
-                    await notification_service.notify(
-                        event="order_dispatched",
-                        tenant=tenant_val,
-                        customer=customer_val,
-                        order=order_val,
-                        db=db
-                    )
-                except Exception as inner_ex:
-                    logger.warning("Notification fire failed silently: %s", str(inner_ex))
-
+            SessionLocalTask = sessionmaker(bind=engine)
+            db_task = SessionLocalTask()
             try:
-                loop = asyncio.get_running_loop()
-            except RuntimeError:
-                loop = None
+                tenant_val = db_task.get(DistributorTenant, tenant_id)
+                customer_val = db_task.get(Customer, customer_id)
+                order_val = db_task.get(Order, order_id_str)
+                if not (tenant_val and customer_val and order_val):
+                    return
 
-            if loop and loop.is_running():
-                loop.create_task(fire_notifications(tenant_obj, customer, order))
-            else:
-                asyncio.run(fire_notifications(tenant_obj, customer, order))
-    except Exception as e:
-        logger.warning("Notification fire setup failed silently: %s", str(e))
+                notification_service = NotificationService(
+                    evolution_base_url=os.getenv("EVOLUTION_API_URL", "http://34.158.60.42:8080"),
+                    api_key=os.getenv("EVOLUTION_API_KEY", "distributorbotkey2026")
+                )
+                asyncio.run(notification_service.notify(
+                    event="order_dispatched",
+                    tenant=tenant_val,
+                    customer=customer_val,
+                    order=order_val,
+                    db=db_task
+                ))
+            except Exception as inner_ex:
+                logger.warning("Notification fire failed silently: %s", str(inner_ex))
+            finally:
+                db_task.close()
+
+        background_tasks.add_task(
+            _fire_dispatched_notification_task,
+            str(order.tenant_id),
+            str(customer.id),
+            str(order.id),
+            engine_bind
+        )
 
     return {"status": "success", "order_id": str(order_id)}
 
@@ -1862,6 +2003,7 @@ class DeliveryEventRequest(BaseModel):
 def record_delivery_event(
     order_id: uuid.UUID,
     payload: DeliveryEventRequest,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
     # 1. Fetch order by order_id and tenant_id
@@ -1904,47 +2046,51 @@ def record_delivery_event(
     db.commit()
     db.refresh(order)
 
-    # 6. Fire order_delivered notification via NotificationService (non-blocking)
-    try:
-        customer = db.get(Customer, order.customer_id)
-        if customer:
-            for item in order.line_items:
-                if item.product:
-                    _ = item.product.brand
+    # 6. Fire order_delivered notification via a real background task (runs after the
+    # response is sent — see dispatch_order_post above for why the previous
+    # asyncio.get_running_loop()/asyncio.run() fallback blocked the HTTP response).
+    customer = db.get(Customer, order.customer_id)
+    if customer:
+        engine_bind = db.get_bind()
 
+        def _fire_delivered_notification_task(tenant_id: str, customer_id: str, order_id_str: str, engine):
             import asyncio
+            from sqlalchemy.orm import sessionmaker
             from app.services.notification_service import NotificationService
             import os
 
-            tenant_obj = db.get(DistributorTenant, order.tenant_id)
-
-            async def fire_notifications(tenant_val, customer_val, order_val):
-                try:
-                    notification_service = NotificationService(
-                        evolution_base_url=os.getenv("EVOLUTION_API_URL", "http://34.158.60.42:8080"),
-                        api_key=os.getenv("EVOLUTION_API_KEY", "distributorbotkey2026")
-                    )
-                    await notification_service.notify(
-                        event="order_delivered",
-                        tenant=tenant_val,
-                        customer=customer_val,
-                        order=order_val,
-                        db=db
-                    )
-                except Exception as inner_ex:
-                    logger.warning("Notification fire failed silently: %s", str(inner_ex))
-
+            SessionLocalTask = sessionmaker(bind=engine)
+            db_task = SessionLocalTask()
             try:
-                loop = asyncio.get_running_loop()
-            except RuntimeError:
-                loop = None
+                tenant_val = db_task.get(DistributorTenant, tenant_id)
+                customer_val = db_task.get(Customer, customer_id)
+                order_val = db_task.get(Order, order_id_str)
+                if not (tenant_val and customer_val and order_val):
+                    return
 
-            if loop and loop.is_running():
-                loop.create_task(fire_notifications(tenant_obj, customer, order))
-            else:
-                asyncio.run(fire_notifications(tenant_obj, customer, order))
-    except Exception as e:
-        logger.warning("Notification fire setup failed silently: %s", str(e))
+                notification_service = NotificationService(
+                    evolution_base_url=os.getenv("EVOLUTION_API_URL", "http://34.158.60.42:8080"),
+                    api_key=os.getenv("EVOLUTION_API_KEY", "distributorbotkey2026")
+                )
+                asyncio.run(notification_service.notify(
+                    event="order_delivered",
+                    tenant=tenant_val,
+                    customer=customer_val,
+                    order=order_val,
+                    db=db_task
+                ))
+            except Exception as inner_ex:
+                logger.warning("Notification fire failed silently: %s", str(inner_ex))
+            finally:
+                db_task.close()
+
+        background_tasks.add_task(
+            _fire_delivered_notification_task,
+            str(order.tenant_id),
+            str(customer.id),
+            str(order.id),
+            engine_bind
+        )
 
     # 7. Return updated order details
     return {

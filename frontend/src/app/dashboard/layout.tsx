@@ -90,8 +90,47 @@ export default function DashboardLayout({
 
   if (authState !== "authenticated") {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 dark:bg-dashboard-inset">
-        <div className="h-10 w-10 animate-spin rounded-full border-4 border-blue-200 dark:border-blue-500/20 border-t-blue-600" />
+      <div className="flex bg-dashboard-bg min-h-screen" aria-busy="true" aria-live="polite">
+        {/* Sidebar shell skeleton — mirrors Sidebar.tsx's brand header + 10 nav rows,
+            so session verification doesn't flash an empty page before the real
+            app chrome mounts. */}
+        <aside className="hidden md:flex w-64 bg-brand-dark flex-col h-screen fixed left-0 top-0 border-r border-brand-darkHover">
+          <div className="h-16 flex items-center px-6 gap-2 border-b border-brand-darkHover">
+            <div className="w-8 h-8 rounded bg-brand-blue flex items-center justify-center font-bold text-lg text-white">
+              D
+            </div>
+            <span className="font-semibold text-lg tracking-wider text-white">DistributorOS</span>
+          </div>
+          <nav className="flex-1 px-4 py-6 space-y-1.5">
+            {Array.from({ length: 10 }).map((_, i) => (
+              <div key={i} className="h-9 rounded-lg bg-white/5 animate-pulse" style={{ animationDelay: `${i * 40}ms` }} />
+            ))}
+          </nav>
+        </aside>
+
+        {/* Main workspace shell skeleton */}
+        <div className="flex-1 md:pl-64 flex flex-col h-screen overflow-hidden">
+          <div className="h-16 border-b border-dashboard-border bg-white dark:bg-dashboard-card flex items-center justify-between px-6 shrink-0">
+            <div className="h-9 w-72 rounded-lg bg-slate-100 dark:bg-white/5 animate-pulse" />
+            <div className="flex items-center gap-3">
+              <div className="h-8 w-8 rounded-full bg-slate-100 dark:bg-white/5 animate-pulse" />
+              <div className="h-8 w-8 rounded-full bg-slate-100 dark:bg-white/5 animate-pulse" />
+              <div className="h-9 w-9 rounded-full bg-slate-100 dark:bg-white/5 animate-pulse" />
+            </div>
+          </div>
+          <main className="flex-1 p-6 space-y-6 overflow-hidden">
+            <div className="space-y-2">
+              <div className="h-5 w-56 rounded bg-slate-100 dark:bg-white/5 animate-pulse" />
+              <div className="h-3 w-72 rounded bg-slate-100 dark:bg-white/5 animate-pulse" />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="h-32 rounded-xl border border-dashboard-border bg-white dark:bg-dashboard-card animate-pulse" />
+              ))}
+            </div>
+            <div className="h-64 rounded-xl border border-dashboard-border bg-white dark:bg-dashboard-card animate-pulse" />
+          </main>
+        </div>
       </div>
     );
   }

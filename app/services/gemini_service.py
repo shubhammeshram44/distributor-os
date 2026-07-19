@@ -3,6 +3,7 @@ import json
 import time
 import logging
 import typing
+from datetime import date, datetime, timedelta
 from typing import List, Optional
 from pydantic import BaseModel
 
@@ -29,6 +30,14 @@ class AntigravityParsedOrder(BaseModel):
 class ParsedOrder(BaseModel):
     items: List[ParsedOrderItem]
     extracted_invoice_preference: typing.Literal["GST_TAX_INVOICE", "RETAIL_INVOICE", "UNSPECIFIED"]
+
+
+class PaymentPromiseExtraction(BaseModel):
+    is_payment_promise: bool
+    # ISO format (YYYY-MM-DD) resolved against the supplied reference date, or None
+    # when no promise / no discernible date was found.
+    promised_date: Optional[str] = None
+    promised_amount: Optional[float] = None
 
 # ---------------------------------------------------------------------------
 # Core Service
@@ -115,6 +124,118 @@ class GeminiService:
 
         # Fallback executed if API is disabled, out of retries, or experiences a hard fault
         return self._fallback_regex_parser(text)
+
+    def extract_payment_promise(self, text: str, reference_date: Optional[datetime] = None) -> PaymentPromiseExtraction:
+        """
+        Extracts a payment promise (e.g. "I'll pay by Friday", "will clear
+        the bill tomorrow", "paying 5000 next week") from a free-text inbound
+        WhatsApp reply. `reference_date` anchors relative dates like
+        "tomorrow"/"Friday" (defaults to now). Never raises — falls back to a
+        narrow regex parser on any AI failure, same resilience pattern as
+        parse_order_text.
+        """
+        ref = reference_date or datetime.utcnow()
+
+        if not text.strip():
+            return PaymentPromiseExtraction(is_payment_promise=False)
+
+        if self.enabled:
+            prompt = (
+                "You are analysing an inbound WhatsApp reply from a retailer to their FMCG "
+                "distributor, written in English, Hindi, or Hinglish. Determine whether this "
+                "message contains a promise to pay an outstanding bill (e.g. 'I'll pay by Friday', "
+                "'paisa kal de dunga', 'will clear next week', 'paying 5000 on Monday'). "
+                f"Today's date is {ref.date().isoformat()} ({ref.strftime('%A')}). "
+                "If it is a payment promise, resolve any relative date reference (e.g. 'Friday', "
+                "'tomorrow', 'next week') into an absolute ISO date (YYYY-MM-DD) using today's date "
+                "as the anchor, and extract a promised amount in rupees if one is explicitly mentioned "
+                "(otherwise leave it null). If the message is not a payment promise at all (e.g. it's "
+                "a new order, a general question, or irrelevant chit-chat), set is_payment_promise to "
+                "false and leave the other fields null. Return the data strictly as JSON matching the schema."
+            )
+
+            generation_config = {
+                "response_mime_type": "application/json",
+                "response_schema": PaymentPromiseExtraction,
+            }
+
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    response = self.model.generate_content(
+                        contents=[prompt, f"Message: {text}"],
+                        generation_config=generation_config
+                    )
+                    parsed_json = json.loads(response.text)
+                    return PaymentPromiseExtraction(**parsed_json)
+
+                except (google_exceptions.InternalServerError,
+                        google_exceptions.ServiceUnavailable,
+                        google_exceptions.TooManyRequests) as transient_err:
+                    logger.warning(f"Google Cloud Transient Error on promise extraction (Attempt {attempt + 1}/{max_retries}): {transient_err}")
+                    if attempt == max_retries - 1:
+                        logger.error("Max retries reached for Gemini promise extraction. Falling back to regex parser.")
+                        break
+                    time.sleep(2 ** attempt)
+
+                except json.JSONDecodeError as json_err:
+                    logger.error(f"Gemini returned malformed JSON for promise extraction: {json_err}. Falling back.")
+                    break
+
+                except Exception as fatal_err:
+                    logger.error(f"Fatal Gemini API error during promise extraction: {fatal_err}. Falling back to regex parser immediately.")
+                    break
+
+        return self._fallback_regex_promise_parser(text, ref)
+
+    def _fallback_regex_promise_parser(self, text: str, ref: datetime) -> PaymentPromiseExtraction:
+        """
+        Narrow, conservative regex fallback for payment-promise detection.
+        Only fires for a small set of unambiguous "pay" + relative-date
+        phrases — intentionally does not try to handle every phrasing Gemini
+        would catch; false negatives here just mean no promise gets logged,
+        which is safe (no incorrect data is ever persisted).
+        """
+        lowered = text.lower()
+
+        pay_keywords = ["pay", "paisa", "payment", "clear", "settle", "bill de", "paise"]
+        if not any(kw in lowered for kw in pay_keywords):
+            return PaymentPromiseExtraction(is_payment_promise=False)
+
+        weekday_names = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+        promised_date: Optional[date] = None
+
+        if "tomorrow" in lowered or "kal" in lowered:
+            promised_date = (ref + timedelta(days=1)).date()
+        elif "today" in lowered or "aaj" in lowered:
+            promised_date = ref.date()
+        elif "next week" in lowered:
+            promised_date = (ref + timedelta(days=7)).date()
+        else:
+            for idx, day_name in enumerate(weekday_names):
+                if day_name in lowered:
+                    days_ahead = (idx - ref.weekday()) % 7
+                    days_ahead = days_ahead or 7  # if today is that weekday, assume next occurrence
+                    promised_date = (ref + timedelta(days=days_ahead)).date()
+                    break
+
+        if promised_date is None:
+            # A "pay" keyword with no resolvable date is too ambiguous to log as a promise.
+            return PaymentPromiseExtraction(is_payment_promise=False)
+
+        amount_match = re.search(r"(?:rs\.?|₹|inr)\s?([\d,]+(?:\.\d+)?)", lowered)
+        promised_amount = None
+        if amount_match:
+            try:
+                promised_amount = float(amount_match.group(1).replace(",", ""))
+            except ValueError:
+                promised_amount = None
+
+        return PaymentPromiseExtraction(
+            is_payment_promise=True,
+            promised_date=promised_date.isoformat(),
+            promised_amount=promised_amount,
+        )
 
     def _fallback_regex_parser(self, text: str) -> AntigravityParsedOrder:
         """

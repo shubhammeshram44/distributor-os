@@ -459,6 +459,23 @@ class IngestionService:
                     "Skipping DB write. text='%s'",
                     clean_text,
                 )
+                # Best-effort: a non-order reply from a KNOWN customer might be a
+                # payment promise ("I'll pay by Friday") — worth capturing even
+                # though we're not creating an order for this message. Never
+                # affects the "ignored" response either way.
+                try:
+                    if sender_phone:
+                        phone_variants = get_phone_number_variants(sender_phone)
+                        promise_customer = (
+                            db.query(Customer).join(CustomerAlias)
+                            .filter(CustomerAlias.alias_value.in_(phone_variants)).first()
+                            or db.query(Customer).filter(Customer.phone_number.in_(phone_variants)).first()
+                        )
+                        if promise_customer:
+                            from app.services.payment_promise_service import detect_and_record_promise
+                            detect_and_record_promise(db, tenant_id, promise_customer, clean_text)
+                except Exception as promise_exc:
+                    logger.warning("IngestionService: Layer 4 – Payment promise detection failed silently: %s", str(promise_exc))
                 return {"status": "ignored", "reason": "non_order_intent"}
         else:
             logger.debug(
@@ -810,6 +827,19 @@ class IngestionService:
                             db=db,
                             override_to_phone=tenant_val.whatsapp_order_phone  # send to distributor's own number
                         )
+                        # Order needs review: at least one line item couldn't be auto-matched.
+                        # Fire a distinct, more urgent alert so this order isn't silently missed —
+                        # per PRODUCT_STATUS.md this is the biggest week-1 churn risk.
+                        has_unmatched_items = any(item.product_id is None for item in order_val.line_items)
+                        if has_unmatched_items:
+                            await notification_service.notify(
+                                event="order_needs_review_alert",
+                                tenant=tenant_val,
+                                customer=customer_val,
+                                order=order_val,
+                                db=db,
+                                override_to_phone=tenant_val.whatsapp_order_phone
+                            )
                     else:
                         logger.warning("Distributor alert skipped: whatsapp_order_phone not configured for tenant %s", str(tenant_val.id))
                 except Exception as inner_ex:

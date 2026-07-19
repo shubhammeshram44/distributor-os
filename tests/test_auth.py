@@ -294,3 +294,61 @@ def test_logout_success():
     # Verify cookie deletion instruction
     cookie_header = response.headers.get("set-cookie", "")
     assert 'access_token=""' in cookie_header or 'access_token=;' in cookie_header
+
+
+def test_logout_cookie_deletion_matches_dev_set_cookie_attributes():
+    """
+    Regression test: in non-production (ENVIRONMENT unset/"development"),
+    the login/signup cookie is set WITHOUT the `Secure` attribute (since the
+    app runs over plain HTTP locally). Browsers silently refuse to set or
+    overwrite a `Secure`-flagged cookie on a non-HTTPS response, so if
+    /auth/logout unconditionally sent `Secure`, its delete_cookie() call
+    would be a no-op in local dev — the original session cookie would keep
+    living in the browser (with its own multi-hour Max-Age) even after
+    "logging out", later shadowing a fresh, valid login. The deletion must
+    use the same Secure/SameSite attributes as the original login cookie.
+    """
+    response = client.post("/api/v1/auth/logout")
+    assert response.status_code == 200
+    cookie_header = response.headers.get("set-cookie", "")
+    # Must NOT be flagged Secure in dev, or the browser will ignore the delete entirely.
+    assert "secure" not in cookie_header.lower()
+    assert "samesite=lax" in cookie_header.lower()
+
+
+def test_me_prefers_authorization_header_over_stale_cookie(db_session):
+    """
+    Regression test for the "already logged in, but a fresh tab asks me to
+    log in again" bug: a stale/invalid `access_token` cookie must never
+    shadow a valid, freshly-issued Authorization Bearer token. The frontend's
+    session of record lives in localStorage (sent as the header); the cookie
+    is an implicit, browser-managed side channel the frontend can't inspect
+    and has historically gone stale independently (see the logout fix above).
+    """
+    tenant = DistributorTenant(name="Header Precedence Tenant")
+    db_session.add(tenant)
+    db_session.flush()
+
+    user = User(
+        tenant_id=tenant.id,
+        full_name="Header Precedence User",
+        phone_number="+919876500000",
+        email_or_phone="+919876500000",
+        role="SUPER_ADMIN",
+        is_active=True,
+    )
+    db_session.add(user)
+    db_session.commit()
+
+    valid_token = sign_jwt({"user_id": str(user.id), "tenant_id": str(tenant.id), "role": "SUPER_ADMIN"})
+
+    local_client = TestClient(app)
+    # Simulate a stale/garbage cookie left over in the browser alongside a
+    # perfectly valid, current Bearer token supplied via the header.
+    local_client.cookies.set("access_token", "garbage-stale-cookie-value")
+    response = local_client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {valid_token}"},
+    )
+    assert response.status_code == 200
+    assert response.json()["id"] == str(user.id)
