@@ -492,12 +492,12 @@ export default function IntegrationsPageV2() {
         <DashboardHeader onTenantChange={handleTenantChange} />
         
         {loading ? (
-          <div className="flex flex-col items-center justify-center flex-1 py-20 space-y-4">
+          <div className="flex flex-col items-center justify-center flex-1 py-20 mt-16 space-y-4">
             <Loader2 className="w-10 h-10 text-emerald-600 dark:text-emerald-400 animate-spin" />
             <p className="text-sm font-semibold text-slate-400">Loading configurations...</p>
           </div>
         ) : (
-          <div className="p-8 max-w-5xl w-full mx-auto space-y-8">
+          <div className="p-8 mt-16 max-w-5xl w-full mx-auto space-y-8">
             
             {/* Page header */}
             <div className="mb-4">

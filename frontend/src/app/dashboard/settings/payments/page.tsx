@@ -178,7 +178,7 @@ export default function PaymentsPage() {
       <div className="flex-1 flex flex-col md:pl-64 min-h-screen">
         <DashboardHeader onTenantChange={handleTenantChange} />
         
-        <main className="flex-1 p-6 space-y-6 max-w-4xl w-full mx-auto">
+        <main className="flex-1 mt-16 p-6 space-y-6 max-w-4xl w-full mx-auto">
           <div>
             <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100 tracking-tight flex items-center gap-2">
               <CreditCard className="w-5 h-5 text-brand-blue" />
