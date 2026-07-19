@@ -427,7 +427,7 @@ export default function DashboardPage() {
                     </div>
                     <div className="flex items-center gap-2">
                       <a
-                        href="/dashboard/settings/integrations"
+                        href="/dashboard/settings/integrations-v2"
                         className="px-3 py-1.5 bg-red-600 text-white text-xs font-semibold rounded-lg hover:bg-red-700"
                       >
                         Reconnect Now →

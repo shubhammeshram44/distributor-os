@@ -25,7 +25,7 @@ interface OnboardingChecklistProps {
 const STEP_LINKS: Record<string, string> = {
   add_product: "/dashboard/products",
   add_customer: "/dashboard/customers",
-  connect_whatsapp: "/dashboard/settings/integrations",
+  connect_whatsapp: "/dashboard/settings/integrations-v2",
   connect_razorpay: "/dashboard/settings/payments",
   first_order: "/dashboard/orders",
 };
