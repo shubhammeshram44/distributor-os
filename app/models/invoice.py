@@ -19,3 +19,12 @@ class Invoice(Base, TenantMixin):
     payment_status: Mapped[str] = mapped_column(String(50), default="UNPAID", nullable=False)
     amount_paid: Mapped[float] = mapped_column(Numeric(10, 2), default=0.0, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+    # GST compliance columns
+    cgst_amount: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True, default=None)
+    sgst_amount: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True, default=None)
+    # Sequential financial-year invoice number, e.g. "INV/2026-27/001".
+    # Nullable for legacy rows created before this field existed. Unique per
+    # tenant (enforced by a DB-level composite unique index; see the
+    # 710e0718f19f migration).
+    invoice_number: Mapped[str | None] = mapped_column(String(50), nullable=True, default=None)

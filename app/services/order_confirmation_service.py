@@ -14,7 +14,7 @@ from app.models.product import Product
 logger = logging.getLogger("uvicorn.error")
 
 
-def confirm_order(db: Session, order: Order, updated_by: str) -> Invoice:
+def confirm_order(db: Session, order: Order, updated_by: str) -> Invoice | None:
     """
     Consolidated order confirmation logic.
     Steps:
@@ -23,7 +23,8 @@ def confirm_order(db: Session, order: Order, updated_by: str) -> Invoice:
     3. Compute billing total from allocated quantities
     4. Check credit limit against billing total
     5. Create invoice, ledger entry, state transition
-    Returns the created Invoice.
+    Returns the created Invoice, or None if the order's billing total is 0
+    (fully out-of-stock at confirm time — no invoice is created in that case).
     """
 
     # ── 1. Fetch customer ──────────────────────────────────────────────────────
@@ -192,22 +193,37 @@ def confirm_order(db: Session, order: Order, updated_by: str) -> Invoice:
     )
 
     # ── 8. Create Invoice ──────────────────────────────────────────────────────
-    invoice = Invoice(
-        tenant_id=order.tenant_id,
-        order_id=order.id,
-        gstin=customer.gstin if customer.gstin else "PENDING",
-        total_amount=billing_total,
-        # No real IRP (Invoice Registration Portal) integration exists yet —
-        # these must NOT claim a government e-invoice was actually cleared/generated.
-        irn_status="NOT_APPLICABLE",
-        qr_code_status="NOT_APPLICABLE",
-        customer_id=order.customer_id,
-        payment_status="UNPAID",
-        amount_paid=0.0,
-        created_at=datetime.utcnow()
-    )
-    db.add(invoice)
-    db.flush()
+    # Zero-value invoices (fully out-of-stock at confirm time — 0 units
+    # allocated) previously polluted the payment reminder sweep and customer
+    # outstanding balance. Skip creating an invoice entirely in that case;
+    # one will be created later once the order actually has a billable amount
+    # (e.g. via the allocation-queue approval flow in a separate workstream).
+    invoice = None
+    if billing_total > 0:
+        from app.services.invoice_gst_utils import compute_cgst_sgst, generate_invoice_number
+
+        cgst_amount, sgst_amount = compute_cgst_sgst(items, _products_by_id)
+        invoice_created_at = datetime.utcnow()
+
+        invoice = Invoice(
+            tenant_id=order.tenant_id,
+            order_id=order.id,
+            gstin=customer.gstin if customer.gstin else "PENDING",
+            total_amount=billing_total,
+            # No real IRP (Invoice Registration Portal) integration exists yet —
+            # these must NOT claim a government e-invoice was actually cleared/generated.
+            irn_status="NOT_APPLICABLE",
+            qr_code_status="NOT_APPLICABLE",
+            customer_id=order.customer_id,
+            payment_status="UNPAID",
+            amount_paid=0.0,
+            created_at=invoice_created_at,
+            cgst_amount=cgst_amount,
+            sgst_amount=sgst_amount,
+            invoice_number=generate_invoice_number(db, order.tenant_id, invoice_created_at),
+        )
+        db.add(invoice)
+        db.flush()
 
     # ── 9. Reconcile any existing customer credits against new invoice ──────────
 
