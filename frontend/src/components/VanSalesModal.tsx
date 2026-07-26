@@ -470,16 +470,31 @@ export default function VanSalesModal({ isOpen, onClose, activeTenantId }: VanSa
                         {/* Sticky bottom panel */}
                         <div className="px-5 py-4 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900">
                             {/* Toggle already_delivered */}
-                            <div className="flex items-center justify-between mb-4 p-3 bg-slate-50 dark:bg-slate-800/30 rounded-xl">
+                            <div className={`flex items-center justify-between p-4 rounded-xl border-2 transition-all ${
+                                alreadyDelivered 
+                                    ? "bg-emerald-50 border-emerald-400" 
+                                    : "bg-slate-50 border-slate-200"
+                            }`}>
                                 <div>
-                                    <p className="text-xs font-semibold text-slate-750 dark:text-slate-300">Mark Already Delivered</p>
-                                    <p className="text-[10px] text-slate-400">Skips logistics/dispatch pipeline</p>
+                                    <p className={`text-sm font-bold ${alreadyDelivered ? "text-emerald-700" : "text-slate-700"}`}>
+                                        {alreadyDelivered ? "✅ Goods Already Delivered" : "📦 Mark as Already Delivered"}
+                                    </p>
+                                    <p className="text-xs text-slate-400 mt-0.5">
+                                        {alreadyDelivered 
+                                            ? "Order will be marked as Delivered immediately" 
+                                            : "Toggle ON if goods are already at retailer's shop"}
+                                    </p>
                                 </div>
                                 <button
                                     onClick={() => setAlreadyDelivered(!alreadyDelivered)}
-                                    className={`w-11 h-6 rounded-full transition-all relative ${alreadyDelivered ? "bg-emerald-500" : "bg-slate-350 dark:bg-slate-700"}`}
+                                    className={`relative w-14 h-7 rounded-full transition-all flex-shrink-0 ml-4 ${
+                                        alreadyDelivered ? "bg-emerald-500" : "bg-slate-300"
+                                    }`}
                                 >
-                                    <div className={`w-5 h-5 bg-white rounded-full shadow absolute top-0.5 transition-transform ${alreadyDelivered ? "translate-x-5.5" : "translate-x-0.5"}`} />
+                                    <div 
+                                        className="absolute top-1 w-5 h-5 bg-white rounded-full shadow-md transition-transform"
+                                        style={{ transform: alreadyDelivered ? "translateX(32px)" : "translateX(4px)" }}
+                                    />
                                 </button>
                             </div>
 
