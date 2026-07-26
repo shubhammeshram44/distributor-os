@@ -2524,7 +2524,14 @@ def create_instant_transaction(
                     tenant_id=resolved_tenant_id
                 )
                 if session:
-                    payment_link_url = session.short_url or session.razorpay_payment_link_url
+                    payment_link_url = (
+                        getattr(session, 'payment_link_short_url', None) or
+                        getattr(session, 'payment_link_url', None) or
+                        getattr(session, 'short_url', None) or
+                        getattr(session, 'razorpay_short_url', None) or
+                        getattr(session, 'razorpay_payment_link_url', None) or
+                        getattr(session, 'link_url', None)
+                    )
 
         # ── STEP 8: COMMIT EVERYTHING ATOMICALLY ──────────────────────────────
         db.commit()
