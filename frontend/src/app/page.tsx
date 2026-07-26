@@ -38,7 +38,7 @@ const PILLARS = [
 ];
 
 const STEPS = [
-  { icon: '💬', title: 'Orders on WhatsApp', body: 'Retailers send orders as they always do.' },
+  { icon: '💬', title: 'Orders from any channel', body: 'WhatsApp, field agents, phone calls — however your retailers order.' },
   { icon: '🤖', title: 'AI Reads & Understands', body: 'Our AI understands, validates and creates clean orders.' },
   { icon: '✅', title: 'You Review & Confirm', body: 'Review once a day and confirm all orders.' },
   { icon: '📄', title: 'Invoices & Dispatch', body: 'Invoices are generated. Goods are dispatched.' },
