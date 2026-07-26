@@ -11,6 +11,7 @@ import { ToastContainer, useToast } from "@/components/ui/Toast";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import PlaceOrderModal from "@/components/PlaceOrderModal";
 import PendingAllocationsCard from "@/components/PendingAllocationsCard";
+import VanSalesModal from "@/components/VanSalesModal";
 import { useDebounce, fetchWithTimeout } from "@/lib/debounce";
 import {
   Search,
@@ -109,6 +110,7 @@ export default function OrdersPage() {
   const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const [isPlaceOrderOpen, setIsPlaceOrderOpen] = useState(false);
+  const [isVanSalesOpen, setIsVanSalesOpen] = useState(false);
 
   const { toasts, toast: toastQueue, removeToast } = useToast();
 
@@ -693,10 +695,17 @@ export default function OrdersPage() {
 
               <button
                 onClick={() => setIsPlaceOrderOpen(true)}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-lg flex items-center gap-2 transition-all cursor-pointer shadow-sm"
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-lg flex items-center gap-2 transition-all cursor-pointer shadow-sm animate-fade-in"
               >
                 <ShoppingCart className="w-4 h-4" />
                 + New Order
+              </button>
+
+              <button
+                onClick={() => setIsVanSalesOpen(true)}
+                className="px-4 py-2 bg-brand-blue hover:bg-brand-blueHover text-white text-sm font-semibold rounded-lg flex items-center gap-2 transition-all cursor-pointer shadow-sm animate-fade-in"
+              >
+                🚚 Van Sale
               </button>
 
               <button
@@ -1521,6 +1530,17 @@ export default function OrdersPage() {
         onClose={() => setIsPlaceOrderOpen(false)}
         onSuccess={() => {
           setIsPlaceOrderOpen(false);
+          if (activeTenantId) {
+            fetchOrders(activeTenantId);
+          }
+        }}
+      />
+
+      <VanSalesModal
+        activeTenantId={activeTenantId}
+        isOpen={isVanSalesOpen}
+        onClose={() => {
+          setIsVanSalesOpen(false);
           if (activeTenantId) {
             fetchOrders(activeTenantId);
           }

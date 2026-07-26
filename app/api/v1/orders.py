@@ -2280,3 +2280,330 @@ def get_order_risk_assessment(
     }
 
 
+class InstantTransactionPayload(BaseModel):
+    """
+    Van sales instant transaction — creates order, confirms, optionally
+    marks delivered, and processes payment atomically.
+    """
+    idempotency_key: str  # UUID from frontend, prevents duplicate submissions
+    customer_id: uuid.UUID | None = None  # None if creating new customer inline
+    
+    # Inline customer creation (used when customer_id is None)
+    new_customer_name: str | None = None
+    new_customer_phone: str | None = None
+    
+    # Order line items
+    items: list[dict]  # [{"product_id": "uuid", "quantity": 5}]
+    
+    # Delivery
+    already_delivered: bool = False  # If True, skip dispatch and mark as Delivered immediately
+    
+    # Payment
+    payment_method: str  # "upi" | "cash" | "credit"
+    payment_amount: float | None = None  # Required for cash. For credit, amount = order total.
+    payment_reference: str | None = None  # UPI transaction ref if available
+
+
+@router.post("/instant-transaction", status_code=status.HTTP_201_CREATED)
+def create_instant_transaction(
+    payload: InstantTransactionPayload,
+    tenant_id: uuid.UUID | None = None,
+    access_token: str | None = Cookie(None),
+    authorization: str | None = Header(None),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+    db: Session = Depends(get_db)
+):
+    """
+    Van sales instant transaction endpoint.
+    
+    Creates an order, confirms it (allocates inventory), optionally marks as
+    delivered, and processes payment — all in a single atomic DB transaction.
+    
+    Idempotency: if the same idempotency_key is submitted twice, returns the
+    original transaction result without creating a duplicate.
+    
+    Payment paths:
+    - cash: calls process_payment() with method="CASH"
+    - credit: no payment recorded, amount added to outstanding_balance via ledger DEBIT
+    - upi: generates Razorpay payment link, returns URL for QR display
+    
+    Status flow:
+    - already_delivered=False: Order → Confirmed → (salesman dispatches later)
+    - already_delivered=True: Order → Confirmed → Delivered (skips dispatch step)
+    """
+    from app.services.tenant_service import resolve_tenant_id
+    from app.services.order_confirmation_service import confirm_order, check_credit_limit
+    from app.services.payment_service import process_payment
+    from app.models.order import Order, OrderLineItem
+    from app.models.customer import Customer
+    from app.models.product import Product
+    from app.models.inventory import Inventory
+    from sqlalchemy.exc import IntegrityError
+    
+    resolved_tenant_id = resolve_tenant_id(tenant_id, access_token, authorization)
+
+    # ── IDEMPOTENCY CHECK ────────────────────────────────────────────────────
+    # Check if this idempotency_key was already processed
+    existing = db.query(Order).filter(
+        Order.tenant_id == resolved_tenant_id,
+        Order.idempotency_key == payload.idempotency_key
+    ).first()
+    
+    if existing:
+        return {
+            "status": "duplicate",
+            "message": "Transaction already processed",
+            "order_id": str(existing.id),
+            "internal_order_id": existing.internal_order_id
+        }
+
+    try:
+        # ── STEP 1: RESOLVE OR CREATE CUSTOMER ───────────────────────────────
+        if payload.customer_id:
+            customer = db.get(Customer, payload.customer_id)
+            if not customer or str(customer.tenant_id) != str(resolved_tenant_id):
+                raise HTTPException(status_code=404, detail="Customer not found")
+        else:
+            # Inline customer creation
+            if not payload.new_customer_name:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Either customer_id or new_customer_name is required"
+                )
+            customer = Customer(
+                id=uuid.uuid4(),
+                tenant_id=resolved_tenant_id,
+                retailer_name=payload.new_customer_name,
+                phone_number=payload.new_customer_phone,
+                credit_limit=0.0,  # ₹0 credit by default for new inline customers
+                outstanding_balance=0.0,
+                payment_terms="Net 0"
+            )
+            db.add(customer)
+            db.flush()
+
+        # ── STEP 2: VALIDATE ITEMS ────────────────────────────────────────────
+        if not payload.items:
+            raise HTTPException(status_code=400, detail="At least one item is required")
+
+        line_items = []
+        order_total = 0.0
+
+        for item_data in payload.items:
+            product_id = uuid.UUID(item_data["product_id"])
+            quantity = int(item_data["quantity"])
+            
+            if quantity <= 0:
+                continue
+                
+            product = db.get(Product, product_id)
+            if not product or str(product.tenant_id) != str(resolved_tenant_id):
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Product {product_id} not found"
+                )
+            
+            unit_price = float(product.base_price or 0)
+            line_items.append({
+                "product": product,
+                "quantity": quantity,
+                "unit_price": unit_price
+            })
+            order_total += quantity * unit_price
+
+        if not line_items:
+            raise HTTPException(status_code=400, detail="No valid items in order")
+
+        # ── STEP 3: CREDIT LIMIT CHECK ────────────────────────────────────────
+        if payload.payment_method == "credit":
+            # Call shared helper check_credit_limit to determine if it exceeds credit limit
+            combined_total = check_credit_limit(db, customer, order_total)
+            if combined_total > float(customer.credit_limit):
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Credit limit exceeded. Combined balance: ₹{combined_total:,.2f}, Limit: ₹{float(customer.credit_limit):,.2f}"
+                )
+
+        # ── STEP 4: CREATE ORDER ──────────────────────────────────────────────
+        # Generate internal order ID
+        from datetime import datetime
+        import random, string
+        date_part = datetime.utcnow().strftime("%y%m")
+        rand_part = ''.join(random.choices(string.ascii_uppercase + string.digits, k=4))
+        internal_order_id = f"VAN-{date_part}-{rand_part}"
+
+        order = Order(
+            id=uuid.uuid4(),
+            tenant_id=resolved_tenant_id,
+            customer_id=customer.id,
+            source="VanSales",
+            status="Draft",
+            internal_order_id=internal_order_id,
+            idempotency_key=payload.idempotency_key,
+            raw_source_text=f"Van sale — {payload.payment_method}"
+        )
+        db.add(order)
+        db.flush()
+
+        # Add line items
+        for li in line_items:
+            order_item = OrderLineItem(
+                id=uuid.uuid4(),
+                order_id=order.id,
+                product_id=li["product"].id,
+                quantity=li["quantity"],
+                unit_price=li["unit_price"],
+                tenant_id=resolved_tenant_id
+            )
+            db.add(order_item)
+        
+        db.flush()
+
+        # ── STEP 5: CONFIRM ORDER (allocate inventory + create invoice) ────────
+        # Bypassing the credit limit check in confirm_order because we already did it in STEP 3
+        # and we don't want confirm_order to execute its own commit/DemandGap handling.
+        invoice = confirm_order(db=db, order=order, updated_by="van_sales", bypass_credit_limit=True)
+
+        # ── STEP 6: MARK DELIVERED IF ALREADY_DELIVERED ───────────────────────
+        if payload.already_delivered:
+            # Release committed inventory on direct delivery, exactly as done in dispatch
+            items = db.query(OrderLineItem).filter(OrderLineItem.order_id == order.id).all()
+            for item in items:
+                released_qty = item.allocated_quantity if item.allocated_quantity is not None else item.quantity
+                if released_qty <= 0:
+                    continue
+                inv_record = db.query(Inventory).filter(
+                    Inventory.tenant_id == resolved_tenant_id,
+                    Inventory.sku_id == item.product_id
+                ).first()
+                if inv_record:
+                    inv_record.quantity_committed = max(0, (inv_record.quantity_committed or 0) - released_qty)
+
+            # Record transition to Delivered in OrderStateLedger
+            db.add(OrderStateLedger(
+                tenant_id=resolved_tenant_id,
+                order_id=order.id,
+                from_status=order.status,
+                to_status="Delivered",
+                updated_by="van_sales"
+            ))
+            order.status = "Delivered"
+            db.flush()
+
+        # ── STEP 7: PROCESS PAYMENT ───────────────────────────────────────────
+        payment_link_url = None
+
+        if payload.payment_method == "cash":
+            amount_to_record = payload.payment_amount or order_total
+            process_payment(
+                db=db,
+                tenant_id=resolved_tenant_id,
+                customer_id=customer.id,
+                amount=amount_to_record,
+                method="CASH",
+                reference_number=payload.payment_reference or f"CASH-{internal_order_id}",
+                preferred_invoice_id=invoice.id if invoice else None,
+                commit=False
+            )
+
+        elif payload.payment_method == "credit":
+            # Credit — no payment recorded now
+            # Outstanding balance already increased by confirm_order via record_transaction(DEBIT)
+            pass
+
+        elif payload.payment_method == "upi":
+            # Generate Razorpay payment link in background
+            # Return link URL for QR display on frontend
+            if invoice and float(invoice.total_amount) > 0:
+                from app.services.payment_session_service import get_or_create_payment_session
+                session = get_or_create_payment_session(
+                    db=db,
+                    invoice=invoice,
+                    customer=customer,
+                    order_id=order.id,
+                    tenant_id=resolved_tenant_id
+                )
+                if session:
+                    payment_link_url = session.short_url or session.razorpay_payment_link_url
+
+        # ── STEP 8: COMMIT EVERYTHING ATOMICALLY ──────────────────────────────
+        db.commit()
+
+        # ── STEP 9: POST-COMMIT SIDE EFFECTS (background) ────────────────────
+        # Send WhatsApp notification to retailer
+        def _notify():
+            import os
+            from app.database import SessionLocal
+            from app.models.tenant import DistributorTenant
+            import httpx
+            
+            _db = SessionLocal()
+            try:
+                _tenant = _db.get(DistributorTenant, resolved_tenant_id)
+                _customer = _db.get(Customer, customer.id)
+                if _tenant and _customer and _tenant.whatsapp_phone_id and _customer.phone_number:
+                    phone = _customer.phone_number.replace("+", "")
+                    total = order_total
+                    msg = (
+                        f"Hi {_customer.retailer_name},\n\n"
+                        f"Order {internal_order_id} recorded ✓\n"
+                        f"Amount: ₹{total:,.0f}\n"
+                    )
+                    if payment_link_url:
+                        msg += f"\nPay here: {payment_link_url}"
+                    elif payload.payment_method == "cash":
+                        msg += f"\nPayment: Cash received ✓"
+                    elif payload.payment_method == "credit":
+                        msg += f"\nAdded to credit account"
+                    
+                    url = f"{os.getenv('EVOLUTION_API_URL')}/message/sendText/{_tenant.whatsapp_phone_id}"
+                    headers = {"apikey": os.getenv("EVOLUTION_API_KEY", "")}
+                    httpx.post(url, json={"number": phone, "text": msg}, headers=headers, timeout=10.0)
+            except Exception as e:
+                pass
+            finally:
+                _db.close()
+
+        background_tasks.add_task(_notify)
+
+        return {
+            "status": "success",
+            "order_id": str(order.id),
+            "internal_order_id": internal_order_id,
+            "customer_id": str(customer.id),
+            "customer_name": customer.retailer_name,
+            "order_total": order_total,
+            "payment_method": payload.payment_method,
+            "payment_link_url": payment_link_url,
+            "already_delivered": payload.already_delivered,
+            "invoice_id": str(invoice.id) if invoice else None
+        }
+
+    except IntegrityError as e:
+        db.rollback()
+        # This IntegrityError check is critical to catch concurrent network retries
+        # that violate the database uq_orders_idempotency_key constraint.
+        err_msg = str(e)
+        if "idempotency_key" in err_msg:
+            existing = db.query(Order).filter(
+                Order.tenant_id == resolved_tenant_id,
+                Order.idempotency_key == payload.idempotency_key
+            ).first()
+            if existing:
+                return {
+                    "status": "duplicate",
+                    "message": "Transaction already processed",
+                    "order_id": str(existing.id),
+                    "internal_order_id": existing.internal_order_id
+                }
+        raise HTTPException(status_code=400, detail=f"Database integrity error: {err_msg}")
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error("Instant transaction failed: %s", str(e), exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Transaction failed: {str(e)}")
+
+
+

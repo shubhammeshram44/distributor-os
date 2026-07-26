@@ -1437,3 +1437,320 @@ def test_demand_gap_rollup_endpoint_defaults_to_7_days(db_session, client):
     assert data["total_revenue_at_risk"] == 0.0
     assert data["distinct_customers_affected"] == 0
     assert data["by_reason"] == []
+
+
+def test_instant_order_atomicity_rollback(db_session, client):
+    """
+    If any step of the instant transaction endpoint fails (e.g. process_payment throws an error),
+    the entire transaction must roll back cleanly: no Order, OrderLineItem, Invoice, or Ledger
+    records should persist.
+    """
+    import unittest.mock as mock
+    from app.models.invoice import Invoice
+    from app.models.ledger import CustomerLedger
+
+    tenant = DistributorTenant(name="Atomicity Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+    tenant_context.set(tenant.id)
+
+    p = Product(sku_id="PROD-ATOM", brand="HUL", category="Soap", pack_size="1 unit", base_price=100.0)
+    db_session.add(p)
+    db_session.flush()
+
+    inv = Inventory(tenant_id=tenant.id, sku_id=p.id, location="WH1", quantity_on_hand=50, low_stock_threshold=5)
+    db_session.add(inv)
+    db_session.flush()
+
+    cust = Customer(
+        retailer_name="Atom Shop", gstin="07AAAAA1111A1Z1", tax_group="GST", payment_terms="COD",
+        credit_limit=5000.0, outstanding_balance=0.0
+    )
+    db_session.add(cust)
+    db_session.commit()
+
+    payload = {
+        "idempotency_key": str(uuid.uuid4()),
+        "customer_id": str(cust.id),
+        "items": [{"product_id": str(p.id), "quantity": 10}],
+        "already_delivered": True,
+        "payment_method": "cash",
+        "payment_amount": 1000.0
+    }
+
+    with mock.patch("app.services.payment_service.process_payment", side_effect=ValueError("Mocked process_payment failure")):
+        resp = client.post(f"/api/v1/orders/instant-transaction?tenant_id={tenant.id}", json=payload)
+        assert resp.status_code == 500
+        assert "Mocked process_payment failure" in resp.json()["detail"]
+
+    # Verify no database records were written
+    db_session.expire_all()
+    orders = db_session.query(Order).filter_by(tenant_id=tenant.id).all()
+    assert len(orders) == 0
+
+    invoices = db_session.query(Invoice).filter_by(tenant_id=tenant.id).all()
+    assert len(invoices) == 0
+
+    ledger_entries = db_session.query(CustomerLedger).filter_by(tenant_id=tenant.id).all()
+    assert len(ledger_entries) == 0
+
+    inv_db = db_session.query(Inventory).filter_by(sku_id=p.id, tenant_id=tenant.id).one()
+    # Inventory remains unchanged
+    assert inv_db.quantity_on_hand == 50
+    assert inv_db.quantity_committed == 0
+
+
+def test_instant_order_credit_limit_boundaries(db_session, client):
+    """
+    Verifies that credit limit checks are enforced at exact boundaries:
+    - Order total exactly equal to available credit succeeds.
+    - Order total exactly 1 Rupee over available credit fails with 422.
+    """
+    from app.models.ledger import CustomerLedger
+
+    tenant = DistributorTenant(name="Credit Boundary Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+    tenant_context.set(tenant.id)
+
+    p = Product(sku_id="PROD-CRED-BOUND", brand="HUL", category="Soap", pack_size="1 unit", base_price=1.0)
+    db_session.add(p)
+    db_session.flush()
+
+    inv = Inventory(tenant_id=tenant.id, sku_id=p.id, location="WH1", quantity_on_hand=50000, low_stock_threshold=5)
+    db_session.add(inv)
+    db_session.flush()
+
+    cust = Customer(
+        retailer_name="Credit Boundary Shop", gstin="07AAAAA1111A1Z1", tax_group="GST", payment_terms="Net 30",
+        credit_limit=5000.0, outstanding_balance=2000.0
+    )
+    db_session.add(cust)
+    db_session.commit()
+
+    # Pre-occupy ₹2000 of credit by creating a Confirmed order
+    order_pre = Order(
+        tenant_id=tenant.id,
+        customer_id=cust.id,
+        source="Portal",
+        status="Confirmed",
+        internal_order_id="ORD-CRED-BOUND-PRE"
+    )
+    db_session.add(order_pre)
+    db_session.flush()
+    db_session.add(OrderLineItem(order_id=order_pre.id, product_id=p.id, quantity=2000, unit_price=1.0))
+    db_session.commit()
+
+    # Case A: Order total exactly equal to remaining credit (3000 units of ₹1 = ₹3000) -> Should succeed
+    payload_ok = {
+        "idempotency_key": str(uuid.uuid4()),
+        "customer_id": str(cust.id),
+        "items": [{"product_id": str(p.id), "quantity": 3000}],
+        "already_delivered": False,
+        "payment_method": "credit"
+    }
+    resp = client.post(f"/api/v1/orders/instant-transaction?tenant_id={tenant.id}", json=payload_ok)
+    assert resp.status_code == 201
+    assert resp.json()["status"] == "success"
+
+    # Reset tables to test the failure cleanly
+    db_session.query(OrderLineItem).filter_by(tenant_id=tenant.id).delete()
+    db_session.query(Order).filter_by(tenant_id=tenant.id).delete()
+    db_session.query(CustomerLedger).filter_by(tenant_id=tenant.id).delete()
+
+    # Recreate the ₹2000 confirmed order
+    order_pre2 = Order(
+        tenant_id=tenant.id,
+        customer_id=cust.id,
+        source="Portal",
+        status="Confirmed",
+        internal_order_id="ORD-CRED-BOUND-PRE2"
+    )
+    db_session.add(order_pre2)
+    db_session.flush()
+    db_session.add(OrderLineItem(order_id=order_pre2.id, product_id=p.id, quantity=2000, unit_price=1.0))
+
+    inv_db = db_session.query(Inventory).filter_by(sku_id=p.id, tenant_id=tenant.id).one()
+    inv_db.quantity_on_hand = 50000
+    inv_db.quantity_committed = 0
+    cust_db = db_session.get(Customer, cust.id)
+    cust_db.outstanding_balance = 2000.0
+    db_session.commit()
+
+    # Case B: Order total exactly 1 Rupee over remaining credit (3001 units of ₹1 = ₹3001) -> Should fail with 422
+    payload_fail = {
+        "idempotency_key": str(uuid.uuid4()),
+        "customer_id": str(cust.id),
+        "items": [{"product_id": str(p.id), "quantity": 3001}],
+        "already_delivered": False,
+        "payment_method": "credit"
+    }
+    resp_fail = client.post(f"/api/v1/orders/instant-transaction?tenant_id={tenant.id}", json=payload_fail)
+    assert resp_fail.status_code == 422
+    assert "Credit limit exceeded" in resp_fail.json()["detail"]
+
+
+def test_instant_order_cash_consistency(db_session, client):
+    """
+    Verifies that creating an instant delivered order with CASH payment produces identical
+    ledger entries, outstanding balances, and invoice statuses as creating a standard order,
+    confirming it, and then paying for it via the manual Collections voucher endpoint.
+    """
+    from app.models.invoice import Invoice
+    from app.models.ledger import CustomerLedger
+
+    tenant = DistributorTenant(name="Cash Consistency Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+    tenant_context.set(tenant.id)
+
+    p = Product(sku_id="PROD-CONSIST", brand="HUL", category="Soap", pack_size="1 unit", base_price=150.0)
+    db_session.add(p)
+    db_session.flush()
+
+    inv = Inventory(tenant_id=tenant.id, sku_id=p.id, location="WH1", quantity_on_hand=100, low_stock_threshold=5)
+    db_session.add(inv)
+    db_session.flush()
+
+    cust_a = Customer(
+        retailer_name="Retailer A", gstin="07AAAAA1111A1Z1", tax_group="GST", payment_terms="COD",
+        credit_limit=10000.0, outstanding_balance=0.0
+    )
+    cust_b = Customer(
+        retailer_name="Retailer B", gstin="07AAAAA1111A1Z1", tax_group="GST", payment_terms="COD",
+        credit_limit=10000.0, outstanding_balance=0.0
+    )
+    db_session.add_all([cust_a, cust_b])
+    db_session.commit()
+
+    # Flow A: Instant Transaction with CASH payment
+    payload_a = {
+        "idempotency_key": str(uuid.uuid4()),
+        "customer_id": str(cust_a.id),
+        "items": [{"product_id": str(p.id), "quantity": 10}],
+        "already_delivered": True,
+        "payment_method": "cash",
+        "payment_amount": 1500.0
+    }
+    resp_a = client.post(f"/api/v1/orders/instant-transaction?tenant_id={tenant.id}", json=payload_a)
+    assert resp_a.status_code == 201
+
+    # Flow B: Standard Order -> Confirm -> Manual Collection Voucher
+    order_b = Order(
+        tenant_id=tenant.id,
+        internal_order_id="ORD-CONSIST-B",
+        source="Portal",
+        customer_id=cust_b.id
+    )
+    db_session.add(order_b)
+    db_session.flush()
+    db_session.add(OrderLineItem(order_id=order_b.id, product_id=p.id, quantity=10, unit_price=150.0))
+    db_session.add(OrderStateLedger(order_id=order_b.id, from_status=None, to_status="Draft", updated_by="operator"))
+    db_session.commit()
+
+    # Confirm order (debits ledger and creates invoice)
+    confirm_resp = client.put(f"/api/v1/orders/{order_b.id}/status", json={"to_status": "Confirmed"})
+    assert confirm_resp.status_code == 200
+
+    # Record cash payment via collection-voucher endpoint
+    voucher_payload = {
+        "customer_id": str(cust_b.id),
+        "amount": 1500.0,
+        "method": "CASH",
+        "reference_number": f"CASH-{order_b.internal_order_id}"
+    }
+    voucher_resp = client.post(f"/api/v1/payments/collection-voucher?tenant_id={tenant.id}", json=voucher_payload)
+    assert voucher_resp.status_code == 201
+
+    # Expire and refresh to pull the latest db states
+    db_session.expire_all()
+    cust_a_db = db_session.get(Customer, cust_a.id)
+    cust_b_db = db_session.get(Customer, cust_b.id)
+
+    # 1. Outstanding balances must be identical
+    assert float(cust_a_db.outstanding_balance) == float(cust_b_db.outstanding_balance)
+
+    # 2. Number of ledger entries and their net values must match
+    ledger_a = db_session.query(CustomerLedger).filter_by(customer_id=cust_a.id).order_by(CustomerLedger.created_at.asc()).all()
+    ledger_b = db_session.query(CustomerLedger).filter_by(customer_id=cust_b.id).order_by(CustomerLedger.created_at.asc()).all()
+    assert len(ledger_a) == len(ledger_b)
+    assert ledger_a[0].type == "DEBIT" and ledger_a[0].amount == 1500.0
+    assert ledger_a[1].type == "CREDIT" and ledger_a[1].amount == 1500.0
+    assert ledger_b[0].type == "DEBIT" and ledger_b[0].amount == 1500.0
+    assert ledger_b[1].type == "CREDIT" and ledger_b[1].amount == 1500.0
+
+    # 3. Invoice statuses must match (both PAID)
+    invoice_a = db_session.query(Invoice).filter_by(customer_id=cust_a.id).one()
+    invoice_b = db_session.query(Invoice).filter_by(customer_id=cust_b.id).one()
+    assert invoice_a.payment_status == "PAID"
+    assert invoice_b.payment_status == "PAID"
+
+
+def test_instant_order_idempotency_replay(db_session, client):
+    """
+    Submitting the same instant transaction with the same idempotency_key twice
+    must return the original order details without creating any duplicates or repeating updates.
+    """
+    from app.models.invoice import Invoice
+    from app.models.ledger import CustomerLedger
+
+    tenant = DistributorTenant(name="Idempotency Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+    tenant_context.set(tenant.id)
+
+    p = Product(sku_id="PROD-IDEMP", brand="HUL", category="Soap", pack_size="1 unit", base_price=200.0)
+    db_session.add(p)
+    db_session.flush()
+
+    inv = Inventory(tenant_id=tenant.id, sku_id=p.id, location="WH1", quantity_on_hand=100, low_stock_threshold=5)
+    db_session.add(inv)
+    db_session.flush()
+
+    cust = Customer(
+        retailer_name="Idempotent Retailer", gstin="07AAAAA1111A1Z1", tax_group="GST", payment_terms="COD",
+        credit_limit=10000.0, outstanding_balance=0.0
+    )
+    db_session.add(cust)
+    db_session.commit()
+
+    payload = {
+        "idempotency_key": str(uuid.uuid4()),
+        "customer_id": str(cust.id),
+        "items": [{"product_id": str(p.id), "quantity": 5}],
+        "already_delivered": True,
+        "payment_method": "cash",
+        "payment_amount": 1000.0
+    }
+
+    # First request
+    resp1 = client.post(f"/api/v1/orders/instant-transaction?tenant_id={tenant.id}", json=payload)
+    assert resp1.status_code == 201
+    data1 = resp1.json()
+    assert data1["status"] == "success"
+    order_id1 = data1["order_id"]
+
+    # Second request with the same idempotency key
+    resp2 = client.post(f"/api/v1/orders/instant-transaction?tenant_id={tenant.id}", json=payload)
+    assert resp2.status_code == 200 or resp2.status_code == 201
+    data2 = resp2.json()
+    assert data2["status"] == "duplicate"
+    assert data2["order_id"] == order_id1
+
+    # Verify no duplicate entries were written
+    db_session.expire_all()
+    orders = db_session.query(Order).filter_by(tenant_id=tenant.id).all()
+    assert len(orders) == 1
+
+    invoices = db_session.query(Invoice).filter_by(tenant_id=tenant.id).all()
+    assert len(invoices) == 1
+
+    ledger_entries = db_session.query(CustomerLedger).filter_by(customer_id=cust.id).all()
+    # Should have 1 DEBIT and 1 CREDIT entry only
+    assert len(ledger_entries) == 2
+
+    inv_db = db_session.query(Inventory).filter_by(sku_id=p.id, tenant_id=tenant.id).one()
+    # quantity_on_hand should have reduced by 5, and committed remains 0
+    assert inv_db.quantity_on_hand == 95
+    assert inv_db.quantity_committed == 0
+

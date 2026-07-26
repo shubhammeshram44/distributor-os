@@ -341,3 +341,67 @@ def update_customer_notification_prefs(
         "customer_id": str(customer.id),
         "whatsapp_notifications_enabled": customer.whatsapp_notifications_enabled
     }
+
+
+@router.get("/{customer_id}/recent-products", status_code=status.HTTP_200_OK)
+def get_customer_recent_products(
+    customer_id: uuid.UUID,
+    tenant_id: uuid.UUID,
+    db: Session = Depends(get_db)
+):
+    """
+    Returns a unique list of products ordered by the customer in their last 5 orders.
+    """
+    tenant_context.set(tenant_id)
+
+    customer = db.get(Customer, customer_id)
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+
+    # Get last 5 orders
+    from app.models.order import Order, OrderLineItem
+    from app.models.product import Product
+
+    last_orders = (
+        db.query(Order)
+        .filter(Order.customer_id == customer_id, Order.tenant_id == tenant_id)
+        .order_by(Order.created_at.desc())
+        .limit(5)
+        .all()
+    )
+
+    if not last_orders:
+        return []
+
+    order_ids = [order.id for order in last_orders]
+
+    # Get line items for these orders
+    line_items = (
+        db.query(OrderLineItem)
+        .filter(OrderLineItem.order_id.in_(order_ids), OrderLineItem.tenant_id == tenant_id)
+        .all()
+    )
+
+    product_ids = list({li.product_id for li in line_items})
+    if not product_ids:
+        return []
+
+    # Get unique products
+    products = (
+        db.query(Product)
+        .filter(Product.id.in_(product_ids), Product.tenant_id == tenant_id)
+        .all()
+    )
+
+    return [
+        {
+            "id": str(p.id),
+            "brand": p.brand,
+            "category": p.category,
+            "pack_size": p.pack_size,
+            "base_price": float(p.base_price or 0.0),
+            "sku_id": p.sku_id
+        }
+        for p in products
+    ]
+

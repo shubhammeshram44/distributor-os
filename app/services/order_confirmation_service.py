@@ -14,7 +14,40 @@ from app.models.product import Product
 logger = logging.getLogger("uvicorn.error")
 
 
-def confirm_order(db: Session, order: Order, updated_by: str) -> Invoice | None:
+def check_credit_limit(db: Session, customer: Customer, order_total: float, exclude_order_id: uuid.UUID | None = None) -> float:
+    """
+    Computes the total combined outstanding balance for a customer.
+    Checks only orders in Confirmed, Partially Confirmed, or Awaiting Stock state.
+    """
+    from sqlalchemy import select as sa_select, func, and_, or_, case
+    from app.models.order import Order, OrderLineItem
+
+    # Matches the original Python `li.allocated_quantity or li.quantity` semantics:
+    # falls back to `quantity` when allocated_quantity is NULL *or* 0.
+    _effective_qty = case(
+        (or_(OrderLineItem.allocated_quantity.is_(None), OrderLineItem.allocated_quantity == 0), OrderLineItem.quantity),
+        else_=OrderLineItem.allocated_quantity
+    )
+    
+    query = (
+        sa_select(func.sum(_effective_qty * OrderLineItem.unit_price))
+        .join(Order, OrderLineItem.order_id == Order.id)
+        .where(
+            and_(
+                Order.customer_id == customer.id,
+                Order.tenant_id == customer.tenant_id,
+                Order.status.in_(["Confirmed", "Partially Confirmed", "Awaiting Stock"])
+            )
+        )
+    )
+    if exclude_order_id:
+        query = query.where(Order.id != exclude_order_id)
+        
+    confirmed_outstanding = float(db.execute(query).scalar() or 0.0)
+    return confirmed_outstanding + order_total
+
+
+def confirm_order(db: Session, order: Order, updated_by: str, bypass_credit_limit: bool = False) -> Invoice | None:
     """
     Consolidated order confirmation logic.
     Steps:
@@ -128,55 +161,30 @@ def confirm_order(db: Session, order: Order, updated_by: str) -> Invoice | None:
     )
 
     # ── 5. Credit limit check against billing total ────────────────────────────
-    # Single aggregate query instead of loading every other Confirmed order + its
-    # line_items in Python (each of which lazy-loaded the line_items relationship
-    # per order — an O(orders) fan-out). `current_status` is a plain property over
-    # `Order.status` (see Order.current_status), so we filter on that column
-    # directly rather than re-deriving it.
-    from sqlalchemy import select as sa_select, func, and_, or_, case
-
-    # Matches the original Python `li.allocated_quantity or li.quantity` semantics:
-    # falls back to `quantity` when allocated_quantity is NULL *or* 0.
-    _effective_qty = case(
-        (or_(OrderLineItem.allocated_quantity.is_(None), OrderLineItem.allocated_quantity == 0), OrderLineItem.quantity),
-        else_=OrderLineItem.allocated_quantity
-    )
-    confirmed_outstanding = float(db.execute(
-        sa_select(func.sum(_effective_qty * OrderLineItem.unit_price))
-        .join(Order, OrderLineItem.order_id == Order.id)
-        .where(
-            and_(
-                Order.customer_id == order.customer_id,
-                Order.tenant_id == order.tenant_id,
-                Order.id != order.id,
-                Order.status.in_(["Confirmed", "Partially Confirmed", "Awaiting Stock"])
+    if not bypass_credit_limit:
+        combined = check_credit_limit(db, customer, billing_total, exclude_order_id=order.id)
+        if combined > float(customer.credit_limit):
+            db.add(DemandGap(
+                id=uuid.uuid4(),
+                tenant_id=order.tenant_id,
+                order_id=order.id,
+                customer_id=order.customer_id,
+                product_id=None,
+                reason_code="CREDIT_LIMIT",
+                status="OPEN",
+                resolved_at=None,
+                requested_qty=None,
+                allocated_qty=None,
+                gap_qty=None,
+                unit_price=None,
+                revenue_at_risk=billing_total,
+                created_at=datetime.utcnow(),
+            ))
+            db.commit()
+            raise HTTPException(
+                status_code=400,
+                detail=f"Credit limit exceeded. Combined balance: ₹{combined:,.2f}, Limit: ₹{float(customer.credit_limit):,.2f}"
             )
-        )
-    ).scalar() or 0.0)
-
-    combined = confirmed_outstanding + billing_total
-    if combined > float(customer.credit_limit):
-        db.add(DemandGap(
-            id=uuid.uuid4(),
-            tenant_id=order.tenant_id,
-            order_id=order.id,
-            customer_id=order.customer_id,
-            product_id=None,
-            reason_code="CREDIT_LIMIT",
-            status="OPEN",
-            resolved_at=None,
-            requested_qty=None,
-            allocated_qty=None,
-            gap_qty=None,
-            unit_price=None,
-            revenue_at_risk=billing_total,
-            created_at=datetime.utcnow(),
-        ))
-        db.commit()
-        raise HTTPException(
-            status_code=400,
-            detail=f"Credit limit exceeded. Combined balance: ₹{combined:,.2f}, Limit: ₹{float(customer.credit_limit):,.2f}"
-        )
 
     # ── 6. Record DEBIT transaction via ledger service ─────────────────────────
     # This atomically writes the ledger entry AND recomputes outstanding_balance
