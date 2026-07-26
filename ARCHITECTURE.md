@@ -235,3 +235,65 @@ erDiagram
 - **No Order Rejection Inventory Hook:** Cancelling a confirmed order does not automatically run `restore_inventory_for_order()`, requiring manual stock adjustments to revert the committed inventory count.
 - **Evolution API Network Retries:** Evolution API webhooks are dispatched asynchronously; network delays on Render sleep states may lead to ingestion delays or message deduplication retries.
 - **Zero-value invoices:** Orders confirmed with 0 allocated units still create invoices with `total_amount = 0.00`. These are excluded from payment reminder sweeps via `total_amount > 0` filter but remain in the DB.
+
+---
+
+## WhatsApp Connection Architecture (July 2026 — Definitive)
+
+### Instance Naming Rule
+```
+instance_name = f"dist-{str(tenant_id)[:8]}"
+```
+- Always derived server-side in `evolution.py`
+- Never accepted from frontend
+- Globally unique per tenant
+- Used as the ONLY lookup key for tenant identification in webhooks
+
+### Webhook Tenant Lookup (STRICT — never change this)
+```python
+# Step 1: Lookup by whatsapp_phone_id
+tenant = db.query(DistributorTenant).filter(
+    DistributorTenant.whatsapp_phone_id == instance_name
+).first()
+
+# Step 2: Fallback by short tenant ID in instance name
+if not tenant:
+    id_match = re.search(r"([0-9a-f]{8})$", instance_name)
+    if id_match:
+        tenant = db.query(DistributorTenant).filter(
+            cast(DistributorTenant.id, String).like(f"{id_match.group(1)}%")
+        ).first()
+
+# Step 3: If not found — STOP. Never use phone to find tenant.
+if not tenant:
+    logger.warning("No tenant found for instance %s — ignoring", instance_name)
+    return
+```
+
+### Phone Number Rule
+- Phone number is NEVER used to find a tenant
+- Phone number is ONLY used to UPDATE the tenant's `whatsapp_order_phone` after the tenant is found by instance name
+- Phone update is blocked ONLY if the new phone belongs to a different tenant
+
+### Connection State Machine
+```
+unknown → connecting → connected
+connected → disconnected (on state:close webhook)
+disconnected → connecting → connected (on reconnect)
+```
+
+### Financial Transaction Architecture (LedgerService)
+```
+All financial mutations → record_transaction()
+record_transaction() → writes ledger entry → recomputes outstanding_balance
+outstanding_balance = SUM(DEBIT) - SUM(CREDIT) from customer_ledgers
+Never update outstanding_balance directly
+```
+
+### Dashboard Architecture
+```
+Top: Alerts (WhatsApp banner, onboarding)
+Intelligence: Business Health Score + Decision Focus
+Snapshot: Credit Risk + Orders Intelligence + Collections + Inventory + Demand Gap
+Performance: Moved to Sales Analytics page
+```

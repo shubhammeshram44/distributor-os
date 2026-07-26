@@ -328,3 +328,94 @@ Delivery event endpoint already accepts `source: shiprocket / dunzo / porter`. N
 | FIFO with preferred invoice | Supports both per-invoice and bulk payment scenarios |
 | Separate operational/financial notifications | Distributor can silence payment chasing for VIP customers without affecting delivery alerts |
 | `pending_review` canonical status (not `NEEDS_REVIEW`) | Standardized during audit; `NEEDS_REVIEW` rows in DB should be migrated |
+
+---
+
+## Latest Builds (July 19-25, 2026)
+
+### WhatsApp Connection — Architectural Fixes
+- **Strict instance-name-only tenant lookup** — `connection.update` webhook now ONLY finds tenant by `whatsapp_phone_id == instance_name` or short-ID regex fallback. Phone number NEVER used to find a tenant — only to update. Eliminates cross-tenant contamination permanently.
+- **Phone mismatch protection fixed** — Now only blocks if new phone belongs to a DIFFERENT tenant. Legitimate reconnects with new numbers work correctly.
+- **Stale phone UI fix** — Frontend re-fetches tenant data immediately after QR scan confirmed connected. No page refresh needed.
+- **`dist-None` prevention** — Provision endpoint returns 401 immediately if tenant resolution fails. Instance name always derived server-side as `dist-{tenant_id[:8]}`.
+- **Disconnected state in UI** — New `disconnected` state separate from `idle`. Shows red banner with "Reconnect WhatsApp" button and last connected number. Different from fresh `idle` state (never connected).
+
+### GST-Compliant Invoices (CTO — commit 7480ec4)
+- CGST/SGST split on invoices (9%+9% for intra-state, 18% IGST for inter-state)
+- Per-product GST rates (not hardcoded 18%)
+- HSN codes on products and invoices
+- Sequential invoice numbering
+
+### Order Lifecycle Integrity (CTO — commit c65c86f)
+- Needs-review WhatsApp alert to distributor when order goes to `pending_review`
+- Fulfillment states: `Confirmed`, `Partially Confirmed`, `Awaiting Stock`
+- Inventory release on order cancel
+
+### Collections Automation (CTO — commit a074709)
+- Consolidated payment reminders
+- Cash flow forecast endpoint
+- Promise-to-pay parsing from WhatsApp replies
+
+### Promise-to-Pay Tracking (CTO — commit 0fbdcc6)
+- Gemini parses "I'll pay by Friday" from retailer WhatsApp replies
+- Logs promise with follow-up date
+- Tracks fulfilment rate per customer
+
+### Intelligent Stock Allocation (CTO — commit cd41872)
+- When inventory < demand from multiple customers
+- Ranks by customer score (payment history, order frequency)
+- One-click approve allocation
+
+### Dashboard Updates
+- Top Products revenue widget added
+- Metric cards row removed from main dashboard
+- Messages tab gated behind feature flag (disabled by default)
+- Decision Focus card as primary dashboard widget
+- Business Health Score with 5 weighted signals
+
+### Integrations Page V2
+- Productboard-style card layout (All / Communication / Payments tabs)
+- Connected/Disconnected/Coming Soon status badges
+- Request Integration form (mailto)
+- V1 deprecated, V2 now default
+- Coming Soon: Tally Prime, Shiprocket, Marg ERP, GST Portal
+
+### Marketing Page
+- Privacy Policy at `/privacy` ✅
+- Terms of Service at `/terms` ✅
+- Calendly demo link: `https://calendly.com/consultme44/distributor-os-free-demo`
+- Font: Figtree
+- Broader positioning: "Distributors" not "FMCG Distributors"
+
+---
+
+## Updated Architecture Decisions
+
+| Decision | Rationale |
+|---|---|
+| Instance name = `dist-{tenant_id[:8]}` — DEFINITIVE | Server-side only, never from frontend. Prevents `dist-None` and cross-tenant issues |
+| Phone number = UPDATE only, never LOOKUP | The only correct architecture. Phone belongs to a person, not a tenant |
+| `connection.update` webhook = strict instance-name lookup | Cross-tenant contamination impossible if instance name is always correct |
+| LedgerService single entry point | `record_transaction()` always recomputes `outstanding_balance` from full ledger |
+| Integrations V2 = default | V1 deprecated. V2 is Productboard-style, scales to future integrations |
+| Dashboard = operational only | Performance metrics moved to Sales Analytics page |
+
+---
+
+## Updated Known Issues & Tech Debt
+
+| Issue | Status |
+|---|---|
+| WhatsApp cross-tenant contamination | ✅ Fixed — strict instance-name lookup |
+| Phone not updating after reconnect | ✅ Fixed — mismatch protection loosened |
+| Stale phone in UI after reconnect | ✅ Fixed — re-fetch after connection |
+| GST rate hardcoded at 18% | ✅ Fixed by CTO — per-product rates |
+| No CGST/SGST split on invoice | ✅ Fixed by CTO |
+| No HSN codes | ✅ Fixed by CTO |
+| Order needs-review alert missing | ✅ Fixed by CTO |
+| `quantity_committed` not released | Decided: ignore — redundant field |
+| `datetime.utcnow()` deprecated | Still open — 40+ instances |
+| Evolution API GCP VM HTTP-only | Still open — no Nginx/SSL |
+| Gemini called for all messages | Still open — no pre-filter |
+| Dashboard 8+ parallel API calls | Still open — consolidation planned |
+| Order confirmation still ~8s | Still open — CTO profiling |
