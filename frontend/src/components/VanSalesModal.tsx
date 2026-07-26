@@ -380,9 +380,9 @@ export default function VanSalesModal({ isOpen, onClose, activeTenantId }: VanSa
                                 <p className="font-bold text-slate-800 dark:text-white text-sm">
                                     {selectedCustomer?.retailer_name || newCustomerName}
                                 </p>
-                                {selectedCustomer?.outstanding_balance > 0 && (
+                                {((selectedCustomer?.outstanding_balance ?? 0) > 0) && (
                                     <p className="text-xs text-red-500 dark:text-red-400 font-medium">
-                                        ₹{selectedCustomer.outstanding_balance.toLocaleString("en-IN")} outstanding
+                                        ₹{(selectedCustomer?.outstanding_balance ?? 0).toLocaleString("en-IN")} outstanding
                                     </p>
                                 )}
                             </div>
@@ -521,11 +521,11 @@ export default function VanSalesModal({ isOpen, onClose, activeTenantId }: VanSa
                                     <span className="text-slate-500 dark:text-slate-400">Order Amount</span>
                                     <span className="font-semibold text-slate-800 dark:text-white">₹{orderTotal.toLocaleString("en-IN")}</span>
                                 </div>
-                                {selectedCustomer?.outstanding_balance > 0 && (
+                                {((selectedCustomer?.outstanding_balance ?? 0) > 0) && (
                                     <div className="flex justify-between text-xs mb-1.5">
                                         <span className="text-slate-500 dark:text-slate-400">Previous Outstanding</span>
                                         <span className="font-semibold text-red-655 dark:text-red-400">
-                                            ₹{selectedCustomer.outstanding_balance.toLocaleString("en-IN")}
+                                            ₹{(selectedCustomer?.outstanding_balance ?? 0).toLocaleString("en-IN")}
                                         </span>
                                     </div>
                                 )}
@@ -598,17 +598,17 @@ export default function VanSalesModal({ isOpen, onClose, activeTenantId }: VanSa
                                             <p className="font-semibold text-slate-800 dark:text-white text-xs">On Credit</p>
                                             <p className="text-[10px] text-slate-455 dark:text-slate-400">
                                                 {selectedCustomer
-                                                    ? `Available Credit: ₹${(selectedCustomer.credit_limit - selectedCustomer.outstanding_balance).toLocaleString("en-IN")}`
+                                                    ? `Available Credit: ₹${((selectedCustomer.credit_limit ?? 0) - (selectedCustomer.outstanding_balance ?? 0)).toLocaleString("en-IN")}`
                                                     : "Add to outstanding account"}
                                             </p>
                                         </div>
                                         {paymentMethod === "credit" && <Check className="ml-auto w-4.5 h-4.5 text-emerald-600 dark:text-emerald-400" />}
                                     </div>
                                     {paymentMethod === "credit" && selectedCustomer &&
-                                        orderTotal > (selectedCustomer.credit_limit - selectedCustomer.outstanding_balance) && (
+                                        orderTotal > ((selectedCustomer.credit_limit ?? 0) - (selectedCustomer.outstanding_balance ?? 0)) && (
                                         <div className="mt-2.5 p-2 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800/40 rounded-lg">
                                             <p className="text-[10px] text-red-600 dark:text-red-400 font-medium">
-                                                ⚠️ Exceeds credit limit by ₹{(orderTotal - (selectedCustomer.credit_limit - selectedCustomer.outstanding_balance)).toLocaleString("en-IN")}
+                                                ⚠️ Exceeds credit limit by ₹{(orderTotal - ((selectedCustomer.credit_limit ?? 0) - (selectedCustomer.outstanding_balance ?? 0))).toLocaleString("en-IN")}
                                             </p>
                                         </div>
                                     )}
