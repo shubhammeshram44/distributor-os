@@ -1,68 +1,61 @@
+"use client";
 import { useState, useEffect } from "react";
 
-const PERMISSIONS_CACHE_KEY = "user_permissions";
+const PERMISSIONS_KEY = "user_permissions";
+const ROLE_KEY = "user_role";
 
 export function usePermissions() {
-    const [permissions, setPermissions] = useState<string[]>(() => {
-        if (typeof window !== "undefined") {
-            try {
-                const cached = localStorage.getItem(PERMISSIONS_CACHE_KEY);
-                return cached ? JSON.parse(cached) : [];
-            } catch {
-                return [];
-            }
-        }
-        return [];
-    });
-
-    const [isLoading, setIsLoading] = useState(() => {
-        if (typeof window !== "undefined") {
-            try {
-                const cached = localStorage.getItem(PERMISSIONS_CACHE_KEY);
-                return cached ? false : true;
-            } catch {
-                return true;
-            }
-        }
-        return true;
-    });
-
-    const fetchPermissions = async () => {
-        try {
-            const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-            const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
-            const res = await fetch(`${apiBase}/api/v1/users/permissions`, {
-                headers: token ? { Authorization: `Bearer ${token}` } : {}
-            });
-            if (res.ok) {
-                const data = await res.json();
-                setPermissions(data.permissions);
-                if (typeof window !== "undefined") {
-                    localStorage.setItem(PERMISSIONS_CACHE_KEY, JSON.stringify(data.permissions));
-                }
-            }
-        } catch (e) {
-            console.error("Failed to fetch permissions", e);
-        } finally {
-            setIsLoading(false);
-        }
-    };
+    const [permissions, setPermissions] = useState<string[]>([]);
+    const [role, setRole] = useState<string>("");
+    const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
+        const fetchPermissions = async () => {
+            try {
+                const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+                const token = localStorage.getItem("access_token");
+
+                if (!token) {
+                    setIsLoading(false);
+                    return;
+                }
+
+                const res = await fetch(`${apiBase}/api/v1/users/permissions`, {
+                    headers: { "Authorization": `Bearer ${token}` }
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    const perms = data.permissions || [];
+                    const userRole = data.role || "";
+
+                    setPermissions(perms);
+                    setRole(userRole);
+                    localStorage.setItem(PERMISSIONS_KEY, JSON.stringify(perms));
+                    localStorage.setItem(ROLE_KEY, userRole);
+                }
+            } catch (e) {
+                console.error("Failed to fetch permissions:", e);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
         fetchPermissions();
     }, []);
 
     const has = (permission: string): boolean => {
+        if (isLoading) return true;  // show everything while loading
+        if (role === "SUPER_ADMIN") return true;  // SUPER_ADMIN sees everything
         return permissions.includes(permission);
     };
 
     const clearPermissions = () => {
-        if (typeof window !== "undefined") {
-            localStorage.removeItem(PERMISSIONS_CACHE_KEY);
-        }
+        localStorage.removeItem(PERMISSIONS_KEY);
+        localStorage.removeItem(ROLE_KEY);
         setPermissions([]);
-        setIsLoading(true);
+        setRole("");
     };
 
-    return { permissions, has, isLoading, fetchPermissions, clearPermissions };
+    return { permissions, role, has, isLoading, clearPermissions };
 }
