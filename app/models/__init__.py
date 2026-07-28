@@ -15,6 +15,7 @@ from app.models.whatsapp_message_log import WhatsappMessageLog
 from app.models.demand_gap import DemandGap
 from app.models.payment_session import PaymentSession
 from app.models.payment_promise import PaymentPromise
+from app.models.permission import Permission, RolePermission
 
 __all__ = [
     "Base",
@@ -43,6 +44,8 @@ __all__ = [
     "DemandGap",
     "PaymentSession",
     "PaymentPromise",
+    "Permission",
+    "RolePermission",
 ]
 
 

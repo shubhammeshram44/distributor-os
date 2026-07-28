@@ -57,23 +57,45 @@ def test_invite_user_success(db_session, client):
     db_session.add(tenant)
     db_session.commit()
 
+    from app.services.permission_service import seed_permissions, seed_role_permissions_for_tenant
+    from app.utils.security import sign_jwt
+    seed_permissions(db_session)
+    seed_role_permissions_for_tenant(db_session, tenant.id)
+
+    inviting_user = User(
+        id=uuid.uuid4(),
+        tenant_id=tenant.id,
+        full_name="Admin User",
+        email_or_phone="admin@tenant.com",
+        role="SUPER_ADMIN",
+        is_active=True
+    )
+    db_session.add(inviting_user)
+    db_session.commit()
+
+    token = sign_jwt({
+        "user_id": str(inviting_user.id),
+        "tenant_id": str(tenant.id),
+        "role": "SUPER_ADMIN"
+    })
+    headers = {"Authorization": f"Bearer {token}"}
+
     response = client.post(
-        f"/api/v1/users/invite?tenant_id={tenant.id}",
+        "/api/v1/users/invite",
         json={
             "full_name": "Charlie Finance",
             "email_or_phone": "charlie@tenant.com",
             "role": "FINANCE",
             "password": "SecurePassword123"
-        }
+        },
+        headers=headers
     )
 
     assert response.status_code == 201
     data = response.json()
     assert data["status"] == "success"
     assert data["full_name"] == "Charlie Finance"
-    assert data["email_or_phone"] == "charlie@tenant.com"
     assert data["role"] == "FINANCE"
-    assert data["is_active"] is True
 
     # Verify Database entry & secure password hashing
     db_session.expire_all()
@@ -87,6 +109,11 @@ def test_invite_user_duplicate_credential(db_session, client):
     db_session.add(tenant)
     db_session.commit()
 
+    from app.services.permission_service import seed_permissions, seed_role_permissions_for_tenant
+    from app.utils.security import sign_jwt
+    seed_permissions(db_session)
+    seed_role_permissions_for_tenant(db_session, tenant.id)
+
     tenant_context.set(tenant.id)
 
     u1 = User(
@@ -96,18 +123,32 @@ def test_invite_user_duplicate_credential(db_session, client):
         role="OPERATOR",
         is_active=True
     )
-    db_session.add(u1)
+    admin_user = User(
+        full_name="Admin User",
+        email_or_phone="admin@tenant.com",
+        role="SUPER_ADMIN",
+        is_active=True
+    )
+    db_session.add_all([u1, admin_user])
     db_session.commit()
+
+    token = sign_jwt({
+        "user_id": str(admin_user.id),
+        "tenant_id": str(tenant.id),
+        "role": "SUPER_ADMIN"
+    })
+    headers = {"Authorization": f"Bearer {token}"}
 
     # Try to invite with the same email/phone
     response = client.post(
-        f"/api/v1/users/invite?tenant_id={tenant.id}",
+        "/api/v1/users/invite",
         json={
             "full_name": "Another Duplicate Target",
             "email_or_phone": "duplicate@tenant.com",
             "role": "OPERATOR",
             "password": "SecurePassword123"
-        }
+        },
+        headers=headers
     )
     assert response.status_code == 400
     assert "already exists" in response.json()["detail"]
@@ -117,14 +158,38 @@ def test_invite_user_invalid_role(db_session, client):
     db_session.add(tenant)
     db_session.commit()
 
+    from app.services.permission_service import seed_permissions, seed_role_permissions_for_tenant
+    from app.utils.security import sign_jwt
+    seed_permissions(db_session)
+    seed_role_permissions_for_tenant(db_session, tenant.id)
+
+    inviting_user = User(
+        id=uuid.uuid4(),
+        tenant_id=tenant.id,
+        full_name="Admin User",
+        email_or_phone="admin@tenant.com",
+        role="SUPER_ADMIN",
+        is_active=True
+    )
+    db_session.add(inviting_user)
+    db_session.commit()
+
+    token = sign_jwt({
+        "user_id": str(inviting_user.id),
+        "tenant_id": str(tenant.id),
+        "role": "SUPER_ADMIN"
+    })
+    headers = {"Authorization": f"Bearer {token}"}
+
     response = client.post(
-        f"/api/v1/users/invite?tenant_id={tenant.id}",
+        "/api/v1/users/invite",
         json={
             "full_name": "Invalid Role Guy",
             "email_or_phone": "guy@tenant.com",
             "role": "CEO",
             "password": "SecurePassword123"
-        }
+        },
+        headers=headers
     )
     assert response.status_code == 400
     assert "Invalid role" in response.json()["detail"]

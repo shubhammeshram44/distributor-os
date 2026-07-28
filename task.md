@@ -14,7 +14,8 @@
 - [x] Update `PaymentGateway` to accept keys, remove env fallbacks, and auto-detect mode
 - [x] Move webhook signature verification in `app/api/v1/payments.py` to a standalone hmac-based function
 - [x] Update `payment_session_service.py` to retrieve tenant credentials and decrypt secret
-- [x] Update frontend settings navigation in `frontend/src/components/Sidebar.tsx`
+- [x] Create frontend hook `frontend/src/hooks/usePermissions.ts` with loading state
+- [x] Modify frontend `frontend/src/components/Sidebar.tsx` to use the hook safely
 - [x] Build new Settings → Payments page `frontend/src/app/dashboard/settings/payments/page.tsx`
 - [x] Set up default test env variable `ENCRYPTION_KEY` in `tests/conftest.py`
 - [x] Add unit tests for invalid keys and blocked payment sessions in `tests/test_razorpay_connection.py`

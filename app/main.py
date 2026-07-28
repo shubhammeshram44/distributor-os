@@ -56,6 +56,39 @@ async def scheduled_reminder_sweep():
 
 @app.on_event("startup")
 def startup_event():
+    # Seed master permissions list synchronously
+    from app.database import SessionLocal
+    from app.services.permission_service import seed_permissions
+    db = SessionLocal()
+    try:
+        seed_permissions(db)
+    finally:
+        db.close()
+
+    # Run existing tenants seeding in a non-blocking background thread
+    def seed_existing_tenants_background():
+        import logging
+        import time
+        logger = logging.getLogger("uvicorn.error")
+        logger.info("Starting background seeding of default role permissions for existing tenants...")
+        from app.database import SessionLocal
+        from app.models.tenant import DistributorTenant
+        from app.services.permission_service import seed_role_permissions_for_tenant
+        
+        _db = SessionLocal()
+        try:
+            tenants = _db.query(DistributorTenant).all()
+            for tenant in tenants:
+                seed_role_permissions_for_tenant(_db, tenant.id)
+            logger.info("Background seeding of default role permissions completed.")
+        except Exception as e:
+            logger.error(f"Error during background seeding of role permissions: {e}")
+        finally:
+            _db.close()
+
+    import threading
+    threading.Thread(target=seed_existing_tenants_background, daemon=True).start()
+
     if os.getenv("SEED_DEMO_DATA", "false").lower() == "true":
         from app.database import SessionLocal
         from app.services.demo_service import ensure_demo_data

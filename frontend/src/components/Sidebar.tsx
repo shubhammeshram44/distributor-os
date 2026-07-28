@@ -24,6 +24,7 @@ import {
   X
 } from "lucide-react";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
+import { usePermissions } from "@/hooks/usePermissions";
 
 
 interface SidebarProps {
@@ -77,41 +78,44 @@ export default function Sidebar({ activeTab, setActiveTab, tenantName }: Sidebar
     }
   };
 
+  const { has, isLoading } = usePermissions();
+
   const menuItems: {
     name: string;
     icon?: any;
     href?: string;
     type?: string;
     badge?: string;
+    show?: boolean;
   }[] = [
-      { name: "Dashboard", icon: LayoutDashboard, href: "/dashboard" },
+      { name: "Dashboard", icon: LayoutDashboard, href: "/dashboard", show: true },
       // Messages tab is still WIP — kept behind a feature flag (disabled by default)
       // until the chat experience is ready for real customers.
       ...(FEATURE_FLAGS.messages
-        ? [{ name: "Messages", icon: MessageSquare, href: "/dashboard/messages" }]
+        ? [{ name: "Messages", icon: MessageSquare, href: "/dashboard/messages", show: true }]
         : []),
-      { name: "Orders", icon: ShoppingCart, href: "/dashboard/orders" },
-      { name: "Inventory", icon: Box, href: "/dashboard/inventory" },
-      { name: "Products", icon: Layers, href: "/dashboard/products" },
-      { name: "Customers", icon: Users, href: "/dashboard/customers" },
-      { name: "Shipments", icon: Truck, href: "/dashboard/shipments" },
-      { name: "Collections", icon: CreditCard, href: "/dashboard/collections" },
-      { name: "Sales Analytics", icon: BarChart3, href: "/dashboard/sales-analytics" },
-      { name: "Reports", icon: FileText, href: "/dashboard/reports" },
-      { type: "category", name: "Settings" },
-      { name: "Team Settings", icon: Settings, href: "/dashboard/settings/team" },
+      { name: "Orders", icon: ShoppingCart, href: "/dashboard/orders", show: isLoading ? true : has("orders.view") },
+      { name: "Inventory", icon: Box, href: "/dashboard/inventory", show: isLoading ? true : has("inventory.view") },
+      { name: "Products", icon: Layers, href: "/dashboard/products", show: isLoading ? true : has("products.view") },
+      { name: "Customers", icon: Users, href: "/dashboard/customers", show: isLoading ? true : has("customers.view") },
+      { name: "Shipments", icon: Truck, href: "/dashboard/shipments", show: isLoading ? true : has("shipments.view") },
+      { name: "Collections", icon: CreditCard, href: "/dashboard/collections", show: isLoading ? true : has("collections.view") },
+      { name: "Sales Analytics", icon: BarChart3, href: "/dashboard/sales-analytics", show: isLoading ? true : has("reports.view") },
+      { name: "Reports", icon: FileText, href: "/dashboard/reports", show: isLoading ? true : has("reports.view") },
+      { type: "category", name: "Settings", show: isLoading ? true : (has("settings.view") || has("integrations.view")) },
+      { name: "Team Settings", icon: Settings, href: "/dashboard/settings/team", show: isLoading ? true : has("settings.view") },
       // Legacy Integrations page is deprecated (superseded by Integrations V2 below).
       // Kept in the codebase and reachable by direct URL, just hidden from the
       // nav by default — flip FEATURE_FLAGS.integrationsV1 to bring it back.
       ...(FEATURE_FLAGS.integrationsV1
-        ? [{ name: "Integrations (Legacy)", icon: Link2, href: "/dashboard/settings/integrations" }]
+        ? [{ name: "Integrations (Legacy)", icon: Link2, href: "/dashboard/settings/integrations", show: isLoading ? true : has("integrations.view") }]
         : []),
       // This was "Integrations V2 (Test)" — now the sole/primary Integrations
       // page, so it's labeled plainly. Route is unchanged.
-      { name: "Integrations", icon: Link2, href: "/dashboard/settings/integrations-v2" },
-      { name: "Notifications", icon: Bell, href: "/dashboard/settings/notifications" },
-      { name: "Payments", icon: CreditCard, href: "/dashboard/settings/payments" },
-      { name: "Automations", icon: Zap, badge: "Soon" }
+      { name: "Integrations", icon: Link2, href: "/dashboard/settings/integrations-v2", show: isLoading ? true : has("integrations.view") },
+      { name: "Notifications", icon: Bell, href: "/dashboard/settings/notifications", show: true },
+      { name: "Payments", icon: CreditCard, href: "/dashboard/settings/payments", show: isLoading ? true : has("settings.view") },
+      { name: "Automations", icon: Zap, badge: "Soon", show: true }
     ];
 
 
@@ -164,7 +168,7 @@ export default function Sidebar({ activeTab, setActiveTab, tenantName }: Sidebar
         </div>
 
         <nav className={`flex-1 ${isCollapsed ? 'md:px-2' : ''} px-4 py-6 space-y-1.5 overflow-y-auto`}>
-          {menuItems.map((item) => {
+          {menuItems.filter(item => item.show !== false).map((item) => {
             if (item.type === "category") {
               if (effectiveCollapsed) return <div key={item.name} className="h-px bg-brand-darkHover my-4" />;
               return (
