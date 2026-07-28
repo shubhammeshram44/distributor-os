@@ -10,7 +10,6 @@ class User(Base, TenantMixin):
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
     phone_number: Mapped[str | None] = mapped_column(String(50), nullable=True)
     email_or_phone: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
-    email: Mapped[str | None] = mapped_column(String(255), nullable=True, default=None)
     hashed_password: Mapped[str | None] = mapped_column(String(255), nullable=True)
     role: Mapped[str] = mapped_column(String(50), nullable=False) # "SUPER_ADMIN", "FINANCE", "OPERATOR", "DRIVER"
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False)

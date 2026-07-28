@@ -7,7 +7,6 @@ from app.database import get_db, tenant_context
 from app.models.user import User
 from app.models.tenant import DistributorTenant
 from app.utils.security import hash_password, verify_jwt
-from app.utils.rbac import get_current_user_with_permission
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
@@ -57,41 +56,27 @@ class UserInvitePayload(BaseModel):
 @router.post("/invite", status_code=status.HTTP_201_CREATED)
 def invite_user(
     payload: UserInvitePayload,
-    access_token: str | None = Cookie(None),
-    authorization: str | None = Header(None),
-    db: Session = Depends(get_db),
-    _: User = Depends(get_current_user_with_permission("users.invite"))
+    tenant_id: uuid.UUID,
+    db: Session = Depends(get_db)
 ):
-    """
-    Invites a new user to the tenant.
-    Requires authentication + users.invite permission.
-    Tenant is derived from the authenticated user's JWT — never from query param.
-    """
-    from app.utils.security import verify_jwt
+    tenant_context.set(tenant_id)
     
-    token = None
-    if authorization and authorization.lower().startswith("bearer "):
-        token = authorization.split(" ")[1]
-    if not token:
-        token = access_token
-
-    payload_jwt = verify_jwt(token)
-    tenant_id = uuid.UUID(payload_jwt["tenant_id"])
-
     valid_roles = {"SUPER_ADMIN", "FINANCE", "OPERATOR", "DRIVER"}
     role_upper = payload.role.upper()
     if role_upper not in valid_roles:
-        raise HTTPException(status_code=400, detail=f"Invalid role")
-
-    existing = db.query(User).filter(
-        User.email_or_phone == payload.email_or_phone,
-        User.tenant_id == tenant_id
-    ).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="User already exists")
-
-    from app.services.permission_service import seed_role_permissions_for_tenant
-    
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid role. Must be one of {valid_roles}"
+        )
+        
+    # Check duplicate
+    existing_user = db.query(User).filter(User.email_or_phone == payload.email_or_phone).first()
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"User with identifier '{payload.email_or_phone}' already exists."
+        )
+        
     new_user = User(
         id=uuid.uuid4(),
         tenant_id=tenant_id,
@@ -101,58 +86,22 @@ def invite_user(
         role=role_upper,
         is_active=True
     )
-
+    
+    # Populate phone_number column if the credential locator matches phone patterns
     if payload.email_or_phone.startswith("+") or payload.email_or_phone.replace("-", "").isdigit():
         new_user.phone_number = payload.email_or_phone
-
+        
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
-
+    
     return {
         "status": "success",
         "id": str(new_user.id),
         "full_name": new_user.full_name,
-        "role": new_user.role
-    }
-
-
-@router.get("/permissions")
-def get_my_permissions(
-    access_token: str | None = Cookie(None),
-    authorization: str | None = Header(None),
-    db: Session = Depends(get_db)
-):
-    """
-    Returns list of permission keys the current user has.
-    Frontend uses this to show/hide features.
-    Called once on login and cached in localStorage.
-    """
-    from app.utils.security import verify_jwt
-    from app.services.permission_service import get_user_permissions
-
-    token = None
-    if authorization and authorization.lower().startswith("bearer "):
-        token = authorization.split(" ")[1]
-    if not token:
-        token = access_token
-
-    if not token:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-
-    payload = verify_jwt(token)
-    if not payload:
-        raise HTTPException(status_code=401, detail="Invalid token")
-
-    user = db.get(User, uuid.UUID(payload["user_id"]))
-    if not user:
-        raise HTTPException(status_code=401, detail="User not found")
-
-    permissions = get_user_permissions(db, user.tenant_id, user.role)
-
-    return {
-        "role": user.role,
-        "permissions": permissions
+        "email_or_phone": new_user.email_or_phone,
+        "role": new_user.role,
+        "is_active": new_user.is_active
     }
 
 class UserUpdatePayload(BaseModel):
