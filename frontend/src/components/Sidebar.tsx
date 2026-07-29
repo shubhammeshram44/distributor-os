@@ -85,20 +85,27 @@ export default function Sidebar({ activeTab, setActiveTab, tenantName }: Sidebar
     badge?: string;
   }[] = [
       { name: "Dashboard", icon: LayoutDashboard, href: "/dashboard" },
+      
+      { type: "category", name: "OPERATIONS" },
       // Messages tab is still WIP — kept behind a feature flag (disabled by default)
       // until the chat experience is ready for real customers.
       ...(FEATURE_FLAGS.messages
         ? [{ name: "Messages", icon: MessageSquare, href: "/dashboard/messages" }]
         : []),
       { name: "Orders", icon: ShoppingCart, href: "/dashboard/orders" },
+      { name: "Shipments", icon: Truck, href: "/dashboard/shipments" },
+      { name: "Collections", icon: CreditCard, href: "/dashboard/collections" },
+      
+      { type: "category", name: "MASTER DATA" },
       { name: "Inventory", icon: Box, href: "/dashboard/inventory" },
       { name: "Products", icon: Layers, href: "/dashboard/products" },
       { name: "Customers", icon: Users, href: "/dashboard/customers" },
-      { name: "Shipments", icon: Truck, href: "/dashboard/shipments" },
-      { name: "Collections", icon: CreditCard, href: "/dashboard/collections" },
+      
+      { type: "category", name: "INSIGHTS" },
       { name: "Sales Analytics", icon: BarChart3, href: "/dashboard/sales-analytics" },
       { name: "Reports", icon: FileText, href: "/dashboard/reports" },
-      { type: "category", name: "Settings" },
+      
+      { type: "category", name: "SETTINGS" },
       { name: "Team Settings", icon: Settings, href: "/dashboard/settings/team" },
       // Legacy Integrations page is deprecated (superseded by Integrations V2 below).
       // Kept in the codebase and reachable by direct URL, just hidden from the
@@ -168,8 +175,10 @@ export default function Sidebar({ activeTab, setActiveTab, tenantName }: Sidebar
             if (item.type === "category") {
               if (effectiveCollapsed) return <div key={item.name} className="h-px bg-brand-darkHover my-4" />;
               return (
-                <div key={item.name} className="px-4 pt-4 pb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                  {item.name}
+                <div key={item.name} className="pt-3 mt-3 border-t border-brand-darkHover">
+                  <div className="px-4 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                    {item.name}
+                  </div>
                 </div>
               );
             }
