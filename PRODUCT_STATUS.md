@@ -419,3 +419,115 @@ Delivery event endpoint already accepts `source: shiprocket / dunzo / porter`. N
 | Gemini called for all messages | Still open — no pre-filter |
 | Dashboard 8+ parallel API calls | Still open — consolidation planned |
 | Order confirmation still ~8s | Still open — CTO profiling |
+
+---
+
+## Latest Builds (July 26-29, 2026)
+
+### Van Sales — Instant Transaction (Phase 1) ✅
+Field salesmen can create orders, deliver goods, and collect payment on-site in under 30 seconds.
+
+**Features built:**
+- 3-screen mobile-optimized modal (Select Customer → Build Order → Collect Payment → Success)
+- Voice input via Web Speech API (Hindi + English `hi-IN`)
+- Recently ordered items shown first for quick reorder
+- "Already Delivered" toggle — skips dispatch, marks as `Delivered` immediately
+- Three payment paths: Cash, UPI (Razorpay link), Credit
+- Inline customer creation with ₹0 credit limit default
+- Idempotency key (UUID) with DB-level unique constraint — prevents duplicate transactions
+- Atomic DB transaction — rollback everything if any step fails
+- Credit limit check before order creation
+- WhatsApp notification to retailer after transaction
+- Orders appear as `VAN-XXXX-XXXX` in orders list
+- "🚚 Van Sale" button on Orders page header
+
+**New endpoint:** `POST /api/v1/orders/instant-transaction`
+**New component:** `frontend/src/components/VanSalesModal.tsx`
+**New endpoint:** `GET /api/v1/customers/{id}/recent-products`
+**DB change:** `idempotency_key` column on `orders` table
+
+**4 tests added:**
+- Atomicity/rollback
+- Credit limit boundary
+- Cash vs Collections consistency  
+- Idempotency replay
+
+---
+
+### RBAC Phase 1 — Dynamic Permissions Architecture (REVERTED — in progress)
+Built on `feature/rbac-permissions` branch. Reverted from main due to sidebar rendering bug.
+
+**What was built (on feature branch):**
+- `permissions` table — master list of all permission keys
+- `role_permissions` table — per-tenant role→permission mapping
+- `permission_service.py` — seed, check, get permissions
+- `rbac.py` — FastAPI dependency `get_current_user_with_permission()`
+- `usePermissions.ts` — frontend hook with isLoading state
+- `GET /api/v1/users/permissions` endpoint
+- Sidebar integration with permission-based show/hide
+
+**Bug:** `usePermissions` hook not storing permissions correctly in localStorage — sidebar shows only 3 items instead of all items for SUPER_ADMIN.
+
+**Status:** Fix in progress on `feature/rbac-permissions`. Do NOT merge to main until tested locally.
+
+**Tech Debt:** Orphaned tables `permissions`, `role_permissions` and `users.email` column exist in production Neon DB without migration files. When re-implementing RBAC, use `IF NOT EXISTS` in migrations.
+
+---
+
+### Order Header Cleanup (Pending)
+Orders page header has 6 buttons — too cluttered.
+Proposed: Group Export CSV, Export Tally, Download Invoices, Refresh into "⋮ More" dropdown.
+Keep only: `[⋮ More ▼]` `[🚚 Van Sale]` `[+ New Order]`
+
+---
+
+### WhatsApp Connection — Final Fixes ✅
+- Strict instance-name-only tenant lookup — cross-tenant contamination eliminated
+- Phone mismatch protection loosened — only blocks if phone belongs to another tenant
+- Stale phone UI fixed — re-fetches tenant data after QR scan
+- `dist-None` prevention — 401 returned if tenant resolution fails
+- Disconnected state in UI — red banner, "Reconnect WhatsApp" button
+
+---
+
+## Updated Tech Debt
+
+| Issue | Status |
+|---|---|
+| RBAC sidebar bug | Open — on feature/rbac-permissions branch |
+| Orphaned DB tables (permissions, role_permissions, users.email) | Open — use IF NOT EXISTS when re-implementing |
+| Order confirmation still ~8s | Open — CTO profiling |
+| `datetime.utcnow()` deprecated 40+ instances | Open |
+| Evolution API GCP VM HTTP-only (no SSL) | Open |
+| Gemini pre-filter for non-orders | Open |
+| Van Sales UPI QR code shown inline | Open — roadmap |
+| Order header too many buttons | Open |
+| Tally auto-sync agent | Open — roadmap |
+| `quantity_committed` cleanup | Decided: ignore |
+
+---
+
+## Development Standards (Established)
+
+### RBAC Rule — Every Feature Needs a Permission Key
+```
+Every new feature prompt must include:
+RBAC: Add permission key "[module].[action]" to permission_service.py
+SUPER_ADMIN: True, OPERATOR: [T/F], FINANCE: [T/F], DRIVER: [T/F]
+Frontend: use has("[module].[action]") to show/hide
+```
+
+### Branch Strategy
+- All new features on `feature/xxx` branch
+- Test locally before merging to main
+- Verify for multiple roles before merge
+- Revert command: `git revert HEAD && git push origin main`
+
+### Merge Checklist
+```
+1. py -m pytest tests/ -x -q passes ✅
+2. npm run build passes ✅
+3. Tested on localhost:3000 ✅
+4. Verified for 2+ roles ✅
+5. THEN merge to main
+```

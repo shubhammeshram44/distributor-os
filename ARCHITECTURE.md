@@ -297,3 +297,78 @@ Intelligence: Business Health Score + Decision Focus
 Snapshot: Credit Risk + Orders Intelligence + Collections + Inventory + Demand Gap
 Performance: Moved to Sales Analytics page
 ```
+
+## Van Sales Architecture
+
+### Instant Transaction Flow
+```
+Salesman opens Van Sale modal
+       ↓
+Selects customer (or creates inline)
+       ↓
+Adds items via search/voice
+       ↓
+Toggles "Already Delivered" if goods unloaded
+       ↓
+Selects payment: Cash / UPI / Credit
+       ↓
+POST /api/v1/orders/instant-transaction
+       ↓
+Single atomic DB transaction:
+  - Create order + line items
+  - confirm_order() → allocate inventory + create invoice
+  - If already_delivered → set status = Delivered
+  - process_payment() with commit=False (cash)
+  - db.commit() — single commit point
+       ↓
+Background: WhatsApp notification to retailer
+```
+
+### Idempotency
+- Frontend generates UUID per transaction session
+- DB unique constraint on `orders.idempotency_key`
+- Duplicate submission returns original result, no duplicate created
+
+### Credit Check Order
+1. Check credit limit BEFORE confirm_order()
+2. Pass bypass_credit_limit=True to confirm_order()
+3. Single credit check, no double validation
+
+## RBAC Architecture (Phase 1 — In Progress)
+
+### Permission Storage
+- `permissions` table — master list, seeded once globally
+- `role_permissions` table — per-tenant role→permission mapping
+- Seeded with defaults on tenant creation and app startup
+
+### Permission Check Flow
+```
+API request arrives
+       ↓
+get_current_user_with_permission("permission.key")
+       ↓
+Verify JWT → load user → check role
+       ↓
+SUPER_ADMIN → always True (no DB query)
+Other roles → query role_permissions table
+       ↓
+False → 403 Forbidden
+True → proceed
+```
+
+### Frontend Permission Flow
+```
+User logs in
+       ↓
+GET /api/v1/users/permissions
+       ↓
+Store in localStorage as "user_permissions"
+       ↓
+usePermissions() hook reads from localStorage
+       ↓
+has("permission.key") → show/hide UI elements
+```
+
+### Status: REVERTED from main — bug in usePermissions hook
+Fix in progress on feature/rbac-permissions branch.
+
