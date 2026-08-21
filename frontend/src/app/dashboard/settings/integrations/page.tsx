@@ -30,7 +30,10 @@ export default function IntegrationsPage() {
   const [showPhoneId, setShowPhoneId] = useState(false);
   const [showToken, setShowToken] = useState(false);
 
-  const [loading, setLoading] = useState(true);
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [whatsappConfigLoading, setWhatsappConfigLoading] = useState(true);
+  const [whatsappStatusLoading, setWhatsappStatusLoading] = useState(false);
+  const statusCheckInFlight = useRef<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   // Evolution API provisioning states
@@ -275,26 +278,99 @@ export default function IntegrationsPage() {
     }, 4000);
   };
 
+  const fetchLiveStatus = async (instanceId: string, signal?: AbortSignal, force = false) => {
+    if (!force && statusCheckInFlight.current === instanceId) {
+      return;
+    }
+    statusCheckInFlight.current = instanceId;
+    setWhatsappStatusLoading(true);
+    setEvolutionError("");
+    try {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const statusResp = await fetch(
+        `${apiBase}/api/v1/evolution/status?instance_name=${instanceId}&tenant_id=${activeTenantId}`,
+        { signal }
+      );
+      if (statusResp.ok) {
+        const statusData = await statusResp.json();
+        if (statusData.connected === true || statusData.status === "open") {
+          setProvisioningStatus("connected");
+          if (statusData.owner_phone) {
+            setWhatsappOrderPhone(statusData.owner_phone);
+          } else if (statusData.ownerJid) {
+            const derived = statusData.ownerJid.replace("@s.whatsapp.net", "");
+            setWhatsappOrderPhone(derived);
+          }
+        } else {
+          setProvisioningStatus("disconnected");
+        }
+      } else {
+        setProvisioningStatus("error");
+        setEvolutionError("Unable to verify current WhatsApp status.");
+      }
+    } catch (err: any) {
+      if (err.name !== "AbortError") {
+        console.error("Error fetching connection status:", err);
+        setProvisioningStatus("error");
+        setEvolutionError("Unable to verify current WhatsApp status.");
+      }
+    } finally {
+      setWhatsappStatusLoading(false);
+      if (statusCheckInFlight.current === instanceId) {
+        statusCheckInFlight.current = null;
+      }
+    }
+  };
+
   // Sync tenant from localStorage on load
   useEffect(() => {
     const stored = localStorage.getItem("tenant_id");
     if (stored) {
       setActiveTenantId(stored);
     } else {
-      setLoading(false);
+      setProfileLoading(false);
+      setWhatsappConfigLoading(false);
     }
   }, []);
 
-  // Fetch integration settings from backend when activeTenantId resolves
+  // Fetch integration settings and profile concurrently when activeTenantId resolves
   useEffect(() => {
     if (!activeTenantId) return;
 
+    const controller = new AbortController();
+    const { signal } = controller;
+
+    const fetchProfile = async () => {
+      setProfileLoading(true);
+      try {
+        const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+        const resp = await fetch(`${apiBase}/api/v1/tenant/profile?tenant_id=${activeTenantId}`, {
+          credentials: "include",
+          signal
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          setBusinessName(data.tenant?.name || "");
+          setBusinessCategory(data.tenant?.category || "");
+          setBusinessGstin(data.tenant?.gstin || "");
+        }
+      } catch (err: any) {
+        if (err.name !== "AbortError") {
+          console.error("Failed to load business profile:", err);
+        }
+      } finally {
+        setProfileLoading(false);
+      }
+    };
+
     const fetchSettings = async () => {
-      setLoading(true);
+      setWhatsappConfigLoading(true);
+      setWhatsappStatusLoading(false);
       try {
         const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
         const resp = await fetch(`${apiBase}/api/v1/tenant/integrations/whatsapp?tenant_id=${activeTenantId}`, {
-          credentials: "include"
+          credentials: "include",
+          signal
         });
         if (resp.ok) {
           const data = await resp.json();
@@ -303,87 +379,33 @@ export default function IntegrationsPage() {
           setWhatsappOrderPhone(data.whatsapp_order_phone || "");
           if (data.whatsapp_phone_id) {
             setInstanceName(data.whatsapp_phone_id);
-            // Verify connection status
-            try {
-              const statusResp = await fetch(
-                `${apiBase}/api/v1/evolution/status?instance_name=${data.whatsapp_phone_id}&tenant_id=${activeTenantId}`
-              );
-              if (statusResp.ok) {
-                const statusData = await statusResp.json();
-                if (statusData.connected === true || statusData.status === "open") {
-                  setProvisioningStatus("connected");
-                  if (statusData.owner_phone) {
-                    setWhatsappOrderPhone(statusData.owner_phone);
-                  }
-                  // Re-fetch tenant data to get updated phone number
-                  try {
-                    const refreshResp = await fetch(
-                      `${apiBase}/api/v1/tenant/integrations/whatsapp?tenant_id=${activeTenantId}`
-                    );
-                    if (refreshResp.ok) {
-                      const refreshData = await refreshResp.json();
-                      if (refreshData.whatsapp_order_phone) {
-                        setWhatsappOrderPhone(refreshData.whatsapp_order_phone);
-                      }
-                      if (refreshData.whatsapp_phone_id) {
-                        setWhatsappPhoneId(refreshData.whatsapp_phone_id);
-                      }
-                    }
-                  } catch (e) {
-                    // silent fail
-                  }
-                } else {
-                  // Was previously connected (phone_id exists) but now disconnected
-                  setProvisioningStatus("disconnected");
-                }
-              } else {
-                // API call failed — assume disconnected if phone_id existed
-                setProvisioningStatus("disconnected");
-              }
-            } catch (err) {
-              console.error("Error fetching connection status on mount:", err);
-              setProvisioningStatus("idle");
-            }
+            // Verify connection status asynchronously
+            setProvisioningStatus("idle"); // Show checking status...
+            fetchLiveStatus(data.whatsapp_phone_id, signal);
           } else {
             setProvisioningStatus("idle");
           }
         } else {
           showToast("Failed to fetch WhatsApp integration details.", "error");
         }
-      } catch (err) {
-        console.error("Failed to load integrations:", err);
-        showToast("Error loading integrations from server.", "error");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchSettings();
-  }, [activeTenantId]);
-
-  // Fetch tenant business profile (name, category, GSTIN)
-  useEffect(() => {
-    if (!activeTenantId) return;
-
-    const fetchProfile = async () => {
-      try {
-        const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-        const resp = await fetch(`${apiBase}/api/v1/tenant/profile?tenant_id=${activeTenantId}`, {
-          credentials: "include"
-        });
-        if (resp.ok) {
-          const data = await resp.json();
-          setBusinessName(data.tenant?.name || "");
-          setBusinessCategory(data.tenant?.category || "");
-          setBusinessGstin(data.tenant?.gstin || "");
+      } catch (err: any) {
+        if (err.name !== "AbortError") {
+          console.error("Failed to load integrations:", err);
+          showToast("Error loading integrations from server.", "error");
         }
-      } catch (err) {
-        console.error("Failed to load business profile:", err);
+      } finally {
+        setWhatsappConfigLoading(false);
       }
     };
 
     fetchProfile();
+    fetchSettings();
+
+    return () => {
+      controller.abort();
+    };
   }, [activeTenantId]);
+
 
   const handleSaveBusinessProfile = async () => {
     const trimmedGstin = businessGstin.trim().toUpperCase();
@@ -529,22 +551,21 @@ export default function IntegrationsPage() {
               Connect external services, configure webhooks, and manage APIs.
             </p>
           </div>
-
-          {loading ? (
-            <div className="flex flex-col items-center justify-center py-20 space-y-4">
-              <Loader2 className="w-10 h-10 text-brand-blue animate-spin" />
-              <p className="text-sm font-semibold text-slate-400">Loading configurations...</p>
-            </div>
-          ) : (
-            <div className="space-y-6">
-              {/* Business Profile / GSTIN — required for a legally correct Tax Invoice */}
-              <div className="bg-white dark:bg-dashboard-card rounded-xl border border-slate-200 dark:border-white/10 shadow-sm overflow-hidden">
-                <div className="p-6 border-b border-slate-100 dark:border-white/5">
-                  <h3 className="font-extrabold text-slate-800 dark:text-slate-100 text-base">Business Profile</h3>
-                  <p className="text-xs text-slate-400 font-semibold mt-0.5">
-                    Shown on your customers&apos; Tax Invoices.
-                  </p>
+          <div className="space-y-6">
+            {/* Business Profile / GSTIN — required for a legally correct Tax Invoice */}
+            <div className="bg-white dark:bg-dashboard-card rounded-xl border border-slate-200 dark:border-white/10 shadow-sm overflow-hidden">
+              <div className="p-6 border-b border-slate-100 dark:border-white/5">
+                <h3 className="font-extrabold text-slate-800 dark:text-slate-100 text-base">Business Profile</h3>
+                <p className="text-xs text-slate-400 font-semibold mt-0.5">
+                  Shown on your customers&apos; Tax Invoices.
+                </p>
+              </div>
+              {profileLoading ? (
+                <div className="p-6 flex flex-col items-center justify-center space-y-2">
+                  <Loader2 className="w-6 h-6 text-brand-blue animate-spin" />
+                  <span className="text-xs text-slate-400">Loading business profile...</span>
                 </div>
+              ) : (
                 <div className="p-6 space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
@@ -586,7 +607,8 @@ export default function IntegrationsPage() {
                     </button>
                   </div>
                 </div>
-              </div>
+              )}
+            </div>
 
               {/* // LEGACY_META_CODE_START */}
               {/* 
@@ -723,7 +745,12 @@ export default function IntegrationsPage() {
                     </div>
                   </div>
                   <div>
-                    {provisioningStatus === "connected" ? (
+                    {whatsappStatusLoading ? (
+                      <span className="inline-flex items-center gap-1.5 bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20 px-3 py-1 rounded-full text-xs font-bold shadow-sm animate-pulse">
+                        <Loader2 className="w-4 h-4 animate-spin text-blue-600 dark:text-blue-400" />
+                        <span>Checking status…</span>
+                      </span>
+                    ) : provisioningStatus === "connected" ? (
                       <span className="inline-flex items-center gap-1.5 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20 px-3 py-1 rounded-full text-xs font-bold shadow-sm">
                         <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                         <span>Connected</span>
@@ -743,16 +770,44 @@ export default function IntegrationsPage() {
                         <XCircle className="w-4 h-4 text-red-600 dark:text-red-400" />
                         <span>Disconnected</span>
                       </span>
-                    ) : (
+                    ) : provisioningStatus === "error" ? (
                       <span className="inline-flex items-center gap-1.5 bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-500/20 px-3 py-1 rounded-full text-xs font-bold shadow-sm">
-                        <XCircle className="w-4 h-4 text-rose-600 dark:text-rose-400" />
+                        <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400" />
+                        <span>Unable to verify</span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 bg-slate-50 dark:bg-white/5 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-white/10 px-3 py-1 rounded-full text-xs font-bold shadow-sm">
+                        <XCircle className="w-4 h-4 text-slate-400" />
                         <span>Not Connected</span>
                       </span>
                     )}
                   </div>
                 </div>
 
-                <div className="p-6 space-y-6">
+                {whatsappConfigLoading ? (
+                  <div className="p-6 flex flex-col items-center justify-center space-y-2">
+                    <Loader2 className="w-6 h-6 text-brand-blue animate-spin" />
+                    <span className="text-xs text-slate-400">Loading WhatsApp configuration...</span>
+                  </div>
+                ) : (
+                  <div className="p-6 space-y-6">
+                    {provisioningStatus === "error" && (
+                      <div className="p-4 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 rounded-xl text-xs font-semibold text-rose-800 dark:text-rose-300 flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-2">
+                          <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
+                          <span>Unable to verify current WhatsApp status. Stored configuration preserved.</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => fetchLiveStatus(whatsappPhoneId, undefined, true)}
+                          disabled={whatsappStatusLoading}
+                          className="px-3 py-1.5 bg-rose-600 text-white rounded-lg text-xs font-bold hover:bg-rose-700 disabled:opacity-50 transition-all flex items-center gap-1.5 cursor-pointer"
+                        >
+                          {whatsappStatusLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                          <span>Retry status</span>
+                        </button>
+                      </div>
+                    )}
                   {provisioningStatus === "connected" ? (
                     <div className="space-y-4">
                       <div className="bg-slate-50 dark:bg-dashboard-inset border border-slate-200/60 dark:border-white/[0.08] rounded-xl p-4 flex flex-col gap-2">
@@ -903,9 +958,9 @@ export default function IntegrationsPage() {
                     </>
                   )}
                 </div>
-              </div>
+              )}
             </div>
-          )}
+          </div>
         </main>
       </div>
 
