@@ -12,10 +12,11 @@ class EvolutionGatewayService:
         self.base_url = os.getenv("EVOLUTION_API_URL", "https://evolution-api-latest-vma7.onrender.com").rstrip("/")
         self.api_key = os.getenv("EVOLUTION_API_KEY")
         self._client = client
-        # DEBUG: log exactly what the live container sees
+        # DEBUG: log exactly what the live container sees (masked for safety)
+        masked_key = f"{self.api_key[:3]}...{self.api_key[-3:]}" if self.api_key and len(self.api_key) > 6 else ("***" if self.api_key else "None")
         logger.info(
             "GatewayService init: base_url=%s api_key_present=%s api_key=%s len=%s",
-            self.base_url, bool(self.api_key), repr(self.api_key),
+            self.base_url, bool(self.api_key), masked_key,
             len(self.api_key) if self.api_key else 0
         )
 
@@ -86,7 +87,7 @@ class EvolutionGatewayService:
             if self._client is None:
                 await client.aclose()
 
-    async def generate_qr_code(self, instance_name: str) -> str:
+    async def generate_qr_code(self, instance_name: str, poll: bool = True) -> str:
         """
         Two-phase QR fetch:
 
@@ -109,7 +110,7 @@ class EvolutionGatewayService:
             logger.info("Phase 1 — triggering connect: GET %s", url)
             response = await client.get(url, headers=self._get_headers())
             logger.info("Phase 1 response: status=%d body=%s",
-                        response.status_code, response.text[:500])
+                         response.status_code, response.text[:500])
 
             if response.status_code != 200:
                 response.raise_for_status()
@@ -126,6 +127,10 @@ class EvolutionGatewayService:
             if base64_str:
                 logger.info("QR received in Phase 1 response.")
                 return base64_str
+
+            if not poll:
+                logger.info("Polling is disabled. Returning QR as None.")
+                return None
 
             # ── Phase 2: poll without re-triggering socket ────────────────────
             # Baileys opens a WebSocket to WhatsApp servers and fires the QR in a callback.
@@ -234,9 +239,9 @@ class EvolutionGatewayService:
         url = f"{self.base_url}/instance/connectionState/{instance_name}"
         client = self._get_client()
         try:
-            response = await client.get(url, headers=self._get_headers())
+            response = await client.get(url, headers=self._get_headers(), timeout=5.0)
             logger.info("Connection state: status=%d body=%s",
-                        response.status_code, response.text[:300])
+                         response.status_code, response.text[:300])
             if response.status_code != 200:
                 response.raise_for_status()
             data = response.json()
@@ -255,3 +260,167 @@ class EvolutionGatewayService:
         finally:
             if self._client is None:
                 await client.aclose()
+
+    async def get_connection_status_safe(self, instance_name: str) -> str:
+        """
+        GET /instance/connectionState/:instanceName
+        Uses a short 5.0s timeout and handles connection state lookup safely.
+        Returns one of: 'open', 'connecting', 'closed', '404' (if missing), or raises exception for unknown/error states.
+        """
+        try:
+            state = await self.get_connection_status(instance_name)
+            # Normalize state
+            if state == "open":
+                return "open"
+            elif state in ("connecting", "connecting_chat"):
+                return "connecting"
+            else:
+                return "closed"
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 404:
+                return "404"
+            raise
+        except Exception:
+            raise
+
+    async def safe_provision_instance(self, instance_name: str, tenant_id: Optional[uuid.UUID] = None, db: Optional[Session] = None) -> dict:
+        """
+        Idempotent and non-destructive provisioning flow.
+        """
+        import uuid
+        from sqlalchemy.orm import Session
+        from app.models.tenant import DistributorTenant
+        from fastapi import HTTPException
+        
+        # 1. Step 1: Safe Status Check
+        try:
+            status = await self.get_connection_status_safe(instance_name)
+        except Exception as exc:
+            correlation_id = str(uuid.uuid4())
+            logger.error(
+                "Evolution API unavailable [Correlation ID: %s] for instance %s on status check: %s",
+                correlation_id, instance_name, str(exc)
+            )
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "code": "EVOLUTION_UNAVAILABLE",
+                    "message": "WhatsApp service could not be reached. No connection changes were made.",
+                    "retriable": True,
+                    "correlation_id": correlation_id
+                }
+            )
+
+        # 2. Step 2: Handle States
+        if status == "open":
+            if db and tenant_id:
+                tenant = db.get(DistributorTenant, tenant_id)
+                if tenant:
+                    tenant.whatsapp_phone_id = instance_name
+                    tenant.whatsapp_connection_status = "connected"
+                    db.commit()
+            return {
+                "status": "already_connected",
+                "instance_name": instance_name,
+                "connection_status": "open",
+                "connected": True,
+                "qr_code": None
+            }
+
+        elif status in ("connecting", "closed"):
+            try:
+                qr_code = await self.generate_qr_code(instance_name, poll=False)
+            except Exception as exc:
+                correlation_id = str(uuid.uuid4())
+                logger.error(
+                    "Evolution API connection failed [Correlation ID: %s] for instance %s during connect: %s",
+                    correlation_id, instance_name, str(exc)
+                )
+                raise HTTPException(
+                    status_code=502,
+                    detail={
+                        "code": "EVOLUTION_CONNECTION_FAILED",
+                        "message": "Failed to establish connection with WhatsApp service. Please try again.",
+                        "retriable": True,
+                        "correlation_id": correlation_id
+                    }
+                )
+
+            if qr_code == "ALREADY_CONNECTED":
+                if db and tenant_id:
+                    tenant = db.get(DistributorTenant, tenant_id)
+                    if tenant:
+                        tenant.whatsapp_phone_id = instance_name
+                        tenant.whatsapp_connection_status = "connected"
+                        db.commit()
+                return {
+                    "status": "already_connected",
+                    "instance_name": instance_name,
+                    "connection_status": "open",
+                    "connected": True,
+                    "qr_code": None
+                }
+
+            if db and tenant_id:
+                tenant = db.get(DistributorTenant, tenant_id)
+                if tenant:
+                    tenant.whatsapp_phone_id = instance_name
+                    tenant.whatsapp_connection_status = "connecting"
+                    db.commit()
+
+            return {
+                "status": "connecting",
+                "instance_name": instance_name,
+                "connection_status": "connecting",
+                "connected": False,
+                "qr_code": qr_code,
+                "retry_after_seconds": 3
+            }
+
+        elif status == "404":
+            logger.info("Instance %s is missing (404). Creating fresh instance.", instance_name)
+            
+            try:
+                await self.initialize_instance(instance_name)
+            except Exception as exc:
+                correlation_id = str(uuid.uuid4())
+                logger.error(
+                    "Evolution API failed to initialize instance [Correlation ID: %s] for %s: %s",
+                    correlation_id, instance_name, str(exc)
+                )
+                raise HTTPException(
+                    status_code=502,
+                    detail={
+                        "code": "EVOLUTION_INITIALIZATION_FAILED",
+                        "message": "Failed to initialize WhatsApp instance. Please try again.",
+                        "retriable": True,
+                        "correlation_id": correlation_id
+                    }
+                )
+
+            try:
+                await self.configure_webhook(instance_name)
+            except Exception as wh_exc:
+                logger.warning("Webhook configuration failed for new instance %s: %s", instance_name, str(wh_exc))
+
+            try:
+                qr_code = await self.generate_qr_code(instance_name, poll=False)
+            except Exception as exc:
+                logger.warning("Failed to fetch initial QR for new instance %s: %s", instance_name, str(exc))
+                qr_code = None
+
+            if db and tenant_id:
+                tenant = db.get(DistributorTenant, tenant_id)
+                if tenant:
+                    tenant.whatsapp_phone_id = instance_name
+                    tenant.whatsapp_connection_status = "connecting"
+                    db.commit()
+
+            return {
+                "status": "connecting",
+                "instance_name": instance_name,
+                "connection_status": "connecting",
+                "connected": False,
+                "qr_code": qr_code,
+                "retry_after_seconds": 3
+            }

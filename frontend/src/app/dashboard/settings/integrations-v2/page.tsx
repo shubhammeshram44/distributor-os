@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Sidebar from "@/components/Sidebar";
 import DashboardHeader from "@/components/DashboardHeader";
 import {
@@ -41,6 +41,7 @@ export default function IntegrationsPageV2() {
   const [provisioningStatus, setProvisioningStatus] = useState<"idle" | "provisioning" | "connecting" | "connected" | "disconnected" | "error">("idle");
   const [qrCodeBase64, setQrCodeBase64] = useState("");
   const [evolutionError, setEvolutionError] = useState("");
+  const requestInFlight = useRef(false);
 
   // Business profile (GSTIN) state
   const [businessGstin, setBusinessGstin] = useState("");
@@ -141,8 +142,64 @@ export default function IntegrationsPageV2() {
     return () => clearInterval(interval);
   }, [provisioningStatus, instanceName, activeTenantId]);
 
+  const handleRefreshQr = async () => {
+    if (requestInFlight.current) return;
+    requestInFlight.current = true;
+    setEvolutionError("");
+
+    try {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const resp = await fetch(`${apiBase}/api/v1/evolution/qr?tenant_id=${activeTenantId}`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" }
+      });
+
+      let data: any = null;
+      const contentType = resp.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        try {
+          data = await resp.json();
+        } catch (e) {}
+      }
+
+      if (!resp.ok) {
+        if (resp.status === 404) {
+          requestInFlight.current = false;
+          handleProvisionEvolution();
+        } else {
+          let errorMsg = "Failed to refresh QR code.";
+          if (data && data.detail) {
+            errorMsg = typeof data.detail === "object" ? (data.detail.message || errorMsg) : data.detail;
+          }
+          setEvolutionError(errorMsg);
+        }
+        return;
+      }
+
+      const isOpened = data.connection_status === "open" || data.connected === true || data.qr_code === "ALREADY_CONNECTED";
+
+      if (isOpened) {
+        setProvisioningStatus("connected");
+        setQrCodeBase64("");
+        showToast("WhatsApp Instance is open and connected!", "success");
+      } else if (data.qr_code) {
+        setQrCodeBase64(data.qr_code.startsWith("data:") ? data.qr_code : `data:image/png;base64,${data.qr_code}`);
+        setProvisioningStatus("connecting");
+      } else {
+        setQrCodeBase64("");
+      }
+    } catch (err) {
+      console.error("QR refresh failed:", err);
+    } finally {
+      requestInFlight.current = false;
+    }
+  };
+
   const handleProvisionEvolution = async (e?: React.FormEvent) => {
     e?.preventDefault();
+
+    if (requestInFlight.current) return;
+    requestInFlight.current = true;
 
     setProvisioningStatus("provisioning");
     setEvolutionError("");
@@ -156,52 +213,84 @@ export default function IntegrationsPageV2() {
         body: JSON.stringify({})
       });
 
-      const data = await resp.json();
+      let data: any = null;
+      const contentType = resp.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        try {
+          data = await resp.json();
+        } catch (jsonErr) {
+          console.error("JSON parse error:", jsonErr);
+        }
+      }
 
-      if (resp.ok && data.status === "success") {
+      if (!resp.ok) {
+        setProvisioningStatus("error");
+        setQrCodeBase64("");
+        let errorMsg = "Failed to provision WhatsApp instance.";
+        if (data && data.detail) {
+          errorMsg = typeof data.detail === "object" ? (data.detail.message || errorMsg) : data.detail;
+        } else if (resp.status === 502 || resp.status === 504) {
+          errorMsg = "Evolution gateway is temporarily unavailable (502/504). Please try again later.";
+        } else if (resp.status === 503) {
+          errorMsg = "WhatsApp service is temporarily unavailable (503). No changes were made.";
+        } else if (resp.status === 401 || resp.status === 403) {
+          errorMsg = "Authentication or permission error on the gateway.";
+        } else {
+          errorMsg = `Server error (${resp.status}) during provisioning.`;
+        }
+        setEvolutionError(errorMsg);
+        showToast(errorMsg, "error");
+        return;
+      }
+
+      const okStatuses = ["success", "already_connected", "connecting"];
+      const statusValue = data?.status;
+
+      if (okStatuses.includes(statusValue)) {
         if (data.instance_name) {
           setInstanceName(data.instance_name);
         }
 
-        // Intercept for active open state or backend "ALREADY_CONNECTED" string
-        if (data.connection_status === "open" || data.qr_code === "ALREADY_CONNECTED") {
+        const isOpened = data.connection_status === "open" || data.connected === true || data.qr_code === "ALREADY_CONNECTED";
+
+        if (isOpened) {
           setProvisioningStatus("connected");
-          setQrCodeBase64(""); // Flush out any stale QR text strings
+          setQrCodeBase64("");
           showToast("WhatsApp Instance is already open and connected!", "success");
         } else if (data.qr_code) {
-          // Guard against raw non-base64 strings and structure the base64 URL properly
           setQrCodeBase64(data.qr_code.startsWith("data:") ? data.qr_code : `data:image/png;base64,${data.qr_code}`);
           setProvisioningStatus("connecting");
           showToast("QR code generated! Scan with your WhatsApp app.", "success");
         } else {
           setProvisioningStatus("connecting");
-          showToast("Instance provisioned, waiting for QR stream...", "success");
+          setQrCodeBase64("");
+          showToast("Instance is connecting. Waiting for QR code...", "success");
         }
       } else {
         setProvisioningStatus("error");
-        setEvolutionError(data.detail || "Failed to provision Evolution API instance.");
-        showToast(data.detail || "Failed to provision WhatsApp instance.", "error");
+        setQrCodeBase64("");
+        setEvolutionError("Invalid response status from server.");
+        showToast("Invalid response status.", "error");
       }
     } catch (err) {
       console.error("Provisioning failed:", err);
       setProvisioningStatus("error");
+      setQrCodeBase64("");
       setEvolutionError("Network connection failure during provisioning request.");
       showToast("Network connection error.", "error");
+    } finally {
+      requestInFlight.current = false;
     }
   };
 
-  // WhatsApp/Baileys QR codes are single-use and expire after ~45s — the Evolution
-  // API never pushes a fresh one on its own once /connect has returned the first
-  // frame. Previously the UI just kept showing that same (now-dead) QR image with
-  // the "Connect" button disabled until a hard 3-minute poll timeout kicked in,
-  // leaving users scanning an unusable code with no way to get a new one. Auto-
-  // refresh it periodically, and also expose a manual "Refresh QR code" action.
+  // WhatsApp/Baileys QR codes are single-use and expire after ~45s
+  // Auto-refresh it periodically via the fast, non-destructive handleRefreshQr.
   useEffect(() => {
     if (provisioningStatus !== "connecting" || !qrCodeBase64) return;
 
-    const QR_REFRESH_MS = 45000; // matches Baileys' real-world QR rotation window
+    const QR_REFRESH_MS = 45000;
     const timer = setTimeout(() => {
-      handleProvisionEvolution();
+      handleRefreshQr();
     }, QR_REFRESH_MS);
 
     return () => clearTimeout(timer);
