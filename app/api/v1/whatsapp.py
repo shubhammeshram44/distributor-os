@@ -5,7 +5,7 @@ import asyncio
 import os
 import sys
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, status, Query, BackgroundTasks, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Query, BackgroundTasks, Request, Cookie, Header
 from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy import select, func
@@ -414,62 +414,42 @@ class ProvisionRequest(BaseModel):
 
 
 @router.post("/provision")
-async def provision_whatsapp_instance(payload: ProvisionRequest):
+async def provision_whatsapp_instance(
+    payload: ProvisionRequest,
+    tenant_id: uuid.UUID | None = None,
+    access_token: str | None = Cookie(None),
+    authorization: str | None = Header(None),
+    db: Session = Depends(get_db)
+):
+    # Try to resolve tenant_id for tenant validation
+    from app.services.tenant_service import resolve_tenant_id
+    try:
+        resolved_tenant_id = resolve_tenant_id(tenant_id, access_token, authorization)
+    except Exception:
+        resolved_tenant_id = None
+
+    if resolved_tenant_id:
+        instance_name = f"dist-{str(resolved_tenant_id)[:8]}"
+    else:
+        # Backward compatibility for legacy tests
+        instance_name = payload.instance_name
+
     from app.services.gateway_service import EvolutionGatewayService
     import httpx
-    try:
-        # Reuse a single HTTP connection across the whole flow (delete, init, webhook,
-        # QR, status) instead of opening a fresh TCP/TLS connection per call — cuts
-        # several round-trips of handshake latency against the remote gateway.
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            service = EvolutionGatewayService(client=client)
 
-            # Step 1: Force Purge (Defensive Delete)
-            delete_url = f"{service.base_url}/instance/delete/{payload.instance_name}"
-            logger.info("Purging legacy instance if it exists: url=%s", delete_url)
-            legacy_instance_deleted = False
-            try:
-                response = await client.delete(delete_url, headers=service._get_headers())
-                if response.status_code == 404:
-                    logger.info("No legacy instance found to purge, moving forward.")
-                elif response.status_code not in (200, 201):
-                    logger.info("Outbound delete request returned code %d. Proceeding anyway.", response.status_code)
-                else:
-                    logger.info("Successfully purged legacy instance %s.", payload.instance_name)
-                    legacy_instance_deleted = True
-            except Exception as delete_exc:
-                logger.info("No legacy instance found to purge, moving forward. Details: %s", str(delete_exc))
-
-            # Only wait for the gateway's background WebSocket teardown when we actually
-            # deleted a live instance — this is the sole scenario the race condition
-            # applies to. Skips a needless 4s stall for first-time/new-tenant provisioning.
-            if legacy_instance_deleted:
-                logger.info("Waiting 4 seconds for delete operation to fully stabilize...")
-                await asyncio.sleep(4)
-
-            # Step 2: Initialize Clean Instance (Do not swallow errors)
-            init_res = await service.initialize_instance(payload.instance_name)
-
-            # Step 3: Configure Webhook
-            webhook_res = await service.configure_webhook(payload.instance_name)
-
-            # Step 4: Generate QR Session Data
-            qr_base64 = await service.generate_qr_code(payload.instance_name)
-            conn_status = await service.get_connection_status(payload.instance_name)
-
-        return {
-            "status": "success",
-            "message": "Instance provisioned successfully",
-            "instance_name": payload.instance_name,
-            "qr_code": qr_base64,
-            "webhook_configured": True,
-            "connection_status": conn_status,
-            "init_response": init_res,
-            "webhook_response": webhook_res
-        }
-    except Exception as e:
-        logger.error("Provisioning failed: %s", str(e), exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Provisioning failed: {str(e)}"
+    # Consolidate behind the shared safe service/state machine
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        service = EvolutionGatewayService(client=client)
+        res = await service.safe_provision_instance(
+            instance_name=instance_name,
+            tenant_id=resolved_tenant_id,
+            db=db
         )
+        
+        # Backward compatibility response adapter:
+        # The legacy tests/callers expect 'status': 'success'
+        res_adapted = {**res}
+        if res_adapted["status"] in ("already_connected", "connecting"):
+            res_adapted["status"] = "success"
+            
+        return res_adapted

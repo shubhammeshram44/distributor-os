@@ -24,7 +24,6 @@ async def provision_instance(
     db: Session = Depends(get_db)
 ):
     from app.services.tenant_service import resolve_tenant_id
-    from app.models.tenant import DistributorTenant
     
     # 1. Strict auth — never proceed without valid tenant
     try:
@@ -37,83 +36,101 @@ async def provision_instance(
     # 2. Always derive instance name from tenant ID — never accept from frontend
     instance_name = f"dist-{str(resolved_tenant_id)[:8]}"
     
-    # 3. Check current state before doing anything
-    service = EvolutionGatewayService()
-    
-    try:
-        existing_status = await service.get_connection_status(instance_name)
-        if existing_status == "open":
-            # Already connected — return current state, don't recreate
-            qr_base64 = None
-            return {
-                "status": "already_connected",
-                "message": "WhatsApp is already connected.",
-                "instance_name": instance_name,
-                "qr_code": None,
-                "connection_status": existing_status
-            }
-    except Exception:
-        pass  # Instance doesn't exist yet — proceed to create
-
-    # 4. Check DB for existing instance record
-    tenant = db.get(DistributorTenant, resolved_tenant_id)
-    
-    # 5. Delete any stale instance (with retry), reusing one HTTP connection for the
-    # whole flow (delete, init, webhook, QR, status) instead of opening a fresh
-    # TCP/TLS connection per call — cuts several round-trips of handshake latency.
+    from app.services.gateway_service import EvolutionGatewayService
     import httpx
+    
     async with httpx.AsyncClient(timeout=30.0) as client:
         service = EvolutionGatewayService(client=client)
+        res = await service.safe_provision_instance(
+            instance_name=instance_name,
+            tenant_id=resolved_tenant_id,
+            db=db
+        )
+        return res
 
-        legacy_instance_deleted = False
-        for attempt in range(2):
-            del_response = await client.delete(
-                f"{service.base_url}/instance/delete/{instance_name}",
-                headers=service._get_headers()
-            )
-            logger.info("Delete attempt %d: status=%d", attempt+1, del_response.status_code)
-            if del_response.status_code in (200, 201):
-                legacy_instance_deleted = True
-                break
-            if del_response.status_code == 404:
-                break
-            await asyncio.sleep(2)
 
-        # Only wait for the gateway's background teardown when we actually deleted a
-        # live instance — this is the sole scenario the race condition applies to.
-        # Skips a needless several-second stall for first-time/new-tenant provisioning.
-        if legacy_instance_deleted:
-            await asyncio.sleep(3)  # Wait for Evolution API to clear memory
+@router.get("/qr")
+async def get_qr_code(
+    tenant_id: uuid.UUID | None = None,
+    access_token: str | None = Cookie(None),
+    authorization: str | None = Header(None),
+    db: Session = Depends(get_db)
+):
+    from app.services.tenant_service import resolve_tenant_id
+    from app.models.tenant import DistributorTenant
+    try:
+        resolved_tenant_id = resolve_tenant_id(tenant_id, access_token, authorization)
+        if not resolved_tenant_id:
+            raise ValueError("No tenant resolved")
+    except Exception:
+        raise HTTPException(status_code=401, detail="Authentication required.")
 
-        # 6. Create fresh instance
-        init_res = await service.initialize_instance(instance_name)
-
-        # 7. Configure webhook
+    instance_name = f"dist-{str(resolved_tenant_id)[:8]}"
+    
+    from app.services.gateway_service import EvolutionGatewayService
+    import httpx
+    
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        service = EvolutionGatewayService(client=client)
         try:
-            await service.configure_webhook(instance_name)
-            webhook_ok = True
-        except Exception as wh_exc:
-            logger.warning("Webhook config failed: %s", str(wh_exc))
-            webhook_ok = False
-
-        # 8. Generate QR
-        qr_base64 = await service.generate_qr_code(instance_name)
-        conn_status = await service.get_connection_status(instance_name)
-
-    # 9. Update DB with correct instance name (clear phone until QR scanned)
-    if tenant:
-        tenant.whatsapp_phone_id = instance_name
-        tenant.whatsapp_connection_status = "connecting"
-        tenant.whatsapp_order_phone = None  # cleared until QR scanned with correct phone
-        db.commit()
-
-    return {
-        "status": "success",
-        "instance_name": instance_name,
-        "qr_code": qr_base64,
-        "webhook_configured": webhook_ok,
-        "connection_status": conn_status
-    }
+            # Check connection status first
+            status = await service.get_connection_status_safe(instance_name)
+            if status == "open":
+                # Sync DB status to connected
+                tenant = db.get(DistributorTenant, resolved_tenant_id)
+                if tenant:
+                    tenant.whatsapp_phone_id = instance_name
+                    tenant.whatsapp_connection_status = "connected"
+                    db.commit()
+                return {
+                    "status": "already_connected",
+                    "instance_name": instance_name,
+                    "connection_status": "open",
+                    "connected": True,
+                    "qr_code": None
+                }
+            elif status == "404":
+                raise HTTPException(
+                    status_code=404,
+                    detail="Instance not found. Please provision the instance first."
+                )
+                
+            # Fetch QR without polling
+            qr_code = await service.generate_qr_code(instance_name, poll=False)
+            if qr_code == "ALREADY_CONNECTED":
+                tenant = db.get(DistributorTenant, resolved_tenant_id)
+                if tenant:
+                    tenant.whatsapp_phone_id = instance_name
+                    tenant.whatsapp_connection_status = "connected"
+                    db.commit()
+                return {
+                    "status": "already_connected",
+                    "instance_name": instance_name,
+                    "connection_status": "open",
+                    "connected": True,
+                    "qr_code": None
+                }
+                
+            return {
+                "status": "connecting",
+                "instance_name": instance_name,
+                "connection_status": "connecting",
+                "connected": False,
+                "qr_code": qr_code,
+                "retry_after_seconds": 3
+            }
+        except HTTPException:
+            raise
+        except httpx.HTTPStatusError as exc:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Evolution API returned error: {exc.response.text}"
+            )
+        except Exception as exc:
+            raise HTTPException(
+                status_code=503,
+                detail="Evolution gateway is temporarily unavailable."
+            )
 
 @router.get("/status")
 async def get_instance_status(
@@ -179,7 +196,11 @@ async def disconnect_instance(
             response = await client.delete(url, headers=headers)
             
         if response.status_code not in (200, 201, 404):
-            logger.warning("Evolution API returned status %d when deleting instance.", response.status_code)
+            logger.error("Failed to delete instance on Evolution API: status=%d body=%s", response.status_code, response.text)
+            raise HTTPException(
+                status_code=502,
+                detail=f"Failed to delete instance on Evolution API (status {response.status_code})."
+            )
             
         # Step 2: Clear tenant configuration in DB
         from app.services.tenant_service import resolve_tenant_id
@@ -202,6 +223,8 @@ async def disconnect_instance(
                 logger.info("Cleared WhatsApp integration config for tenant %s", resolved_tenant_id)
                 
         return {"status": "success", "message": "Instance disconnected successfully"}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Failed to disconnect instance: %s", str(e), exc_info=True)
         raise HTTPException(
