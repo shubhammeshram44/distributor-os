@@ -10,7 +10,7 @@ from app.models.shipment import Shipment
 from app.models.ingestion import IngestionJob, IngestionStaging
 from app.models.user import User
 from app.models.ledger import CustomerLedger
-from app.models.auth import WhatsAppVerification
+from app.models.auth import WhatsAppVerification, RefreshSession
 from app.models.whatsapp_message_log import WhatsappMessageLog
 from app.models.demand_gap import DemandGap
 from app.models.payment_session import PaymentSession
@@ -39,6 +39,7 @@ __all__ = [
     "User",
     "CustomerLedger",
     "WhatsAppVerification",
+    "RefreshSession",
     "WhatsappMessageLog",
     "DemandGap",
     "PaymentSession",
