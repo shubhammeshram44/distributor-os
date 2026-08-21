@@ -305,11 +305,19 @@ export default function IntegrationsPage() {
       if (statusResp.ok) {
         const statusData = await statusResp.json();
         
-        const status = statusData.status;
-        const connected = statusData.connected;
+        const normalizedStatus =
+          typeof statusData.status === "string"
+            ? statusData.status.toLowerCase()
+            : "";
 
-        const isConnected = connected === true || status === "open";
-        const isDisconnected = connected === false || status === "closed" || status === "disconnected" || status === "close";
+        const isConnected =
+          statusData.connected === true ||
+          normalizedStatus === "open";
+
+        const isDisconnected =
+          normalizedStatus === "closed" ||
+          normalizedStatus === "disconnected" ||
+          normalizedStatus === "close";
 
         if (isConnected) {
           setProvisioningStatus("connected");
