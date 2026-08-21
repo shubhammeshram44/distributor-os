@@ -19,6 +19,10 @@ import {
 
 export default function IntegrationsPage() {
   const [activeTenantId, setActiveTenantId] = useState("");
+  const activeTenantIdRef = useRef("");
+  useEffect(() => {
+    activeTenantIdRef.current = activeTenantId;
+  }, [activeTenantId]);
   const [whatsappPhoneId, setWhatsappPhoneId] = useState("");
   const [whatsappAccessToken, setWhatsappAccessToken] = useState("");
   const [whatsappOrderPhone, setWhatsappOrderPhone] = useState("");
@@ -282,18 +286,32 @@ export default function IntegrationsPage() {
     if (!force && statusCheckInFlight.current === instanceId) {
       return;
     }
+    const tenantAtStart = activeTenantIdRef.current;
     statusCheckInFlight.current = instanceId;
     setWhatsappStatusLoading(true);
     setEvolutionError("");
     try {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
       const statusResp = await fetch(
-        `${apiBase}/api/v1/evolution/status?instance_name=${instanceId}&tenant_id=${activeTenantId}`,
+        `${apiBase}/api/v1/evolution/status?instance_name=${instanceId}&tenant_id=${tenantAtStart}`,
         { signal }
       );
+
+      // Guard against tenant switch while request was in-flight
+      if (activeTenantIdRef.current !== tenantAtStart) {
+        return;
+      }
+
       if (statusResp.ok) {
         const statusData = await statusResp.json();
-        if (statusData.connected === true || statusData.status === "open") {
+        
+        const status = statusData.status;
+        const connected = statusData.connected;
+
+        const isConnected = connected === true || status === "open";
+        const isDisconnected = connected === false || status === "closed" || status === "disconnected" || status === "close";
+
+        if (isConnected) {
           setProvisioningStatus("connected");
           if (statusData.owner_phone) {
             setWhatsappOrderPhone(statusData.owner_phone);
@@ -301,23 +319,33 @@ export default function IntegrationsPage() {
             const derived = statusData.ownerJid.replace("@s.whatsapp.net", "");
             setWhatsappOrderPhone(derived);
           }
-        } else {
+        } else if (isDisconnected) {
           setProvisioningStatus("disconnected");
+        } else {
+          setProvisioningStatus("error");
+          setEvolutionError("Unable to verify current WhatsApp status.");
         }
       } else {
         setProvisioningStatus("error");
         setEvolutionError("Unable to verify current WhatsApp status.");
       }
     } catch (err: any) {
+      // Guard against tenant switch
+      if (activeTenantIdRef.current !== tenantAtStart) {
+        return;
+      }
       if (err.name !== "AbortError") {
         console.error("Error fetching connection status:", err);
         setProvisioningStatus("error");
         setEvolutionError("Unable to verify current WhatsApp status.");
       }
     } finally {
-      setWhatsappStatusLoading(false);
-      if (statusCheckInFlight.current === instanceId) {
-        statusCheckInFlight.current = null;
+      // Guard against tenant switch
+      if (activeTenantIdRef.current === tenantAtStart) {
+        setWhatsappStatusLoading(false);
+        if (statusCheckInFlight.current === instanceId) {
+          statusCheckInFlight.current = null;
+        }
       }
     }
   };
