@@ -33,6 +33,22 @@ export default function DashboardLayout({
     const verifySession = async () => {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
       
+      const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeout = 15000): Promise<Response> => {
+        const controller = new AbortController();
+        const id = setTimeout(() => controller.abort(), timeout);
+        try {
+          const response = await fetch(url, {
+            ...options,
+            signal: controller.signal,
+          });
+          clearTimeout(id);
+          return response;
+        } catch (error) {
+          clearTimeout(id);
+          throw error;
+        }
+      };
+
       type RefreshResult =
         | { type: "success"; token: string }
         | { type: "unauthorized" }
@@ -40,7 +56,7 @@ export default function DashboardLayout({
 
       const performRefresh = async (): Promise<RefreshResult> => {
         try {
-          const resp = await fetch(`${apiBase}/api/v1/auth/refresh`, {
+          const resp = await fetchWithTimeout(`${apiBase}/api/v1/auth/refresh`, {
             method: "POST",
             credentials: "include",
             headers: {
@@ -117,7 +133,7 @@ export default function DashboardLayout({
 
           if (cancelled) return;
 
-          const resp = await fetch(`${apiBase}/api/v1/auth/me`, {
+          const resp = await fetchWithTimeout(`${apiBase}/api/v1/auth/me`, {
             method: "GET",
             credentials: "include",
             headers: {
@@ -137,28 +153,46 @@ export default function DashboardLayout({
           if (resp.status === 401 || resp.status === 403) {
             const refreshResult = await refreshSessionWithLocks();
             if (refreshResult.type === "success") {
-              const retryResp = await fetch(`${apiBase}/api/v1/auth/me`, {
-                method: "GET",
-                credentials: "include",
-                headers: {
-                  Accept: "application/json",
-                  "Content-Type": "application/json",
-                  Authorization: `Bearer ${refreshResult.token}`,
-                },
-              });
+              let retryResp;
+              try {
+                retryResp = await fetchWithTimeout(`${apiBase}/api/v1/auth/me`, {
+                  method: "GET",
+                  credentials: "include",
+                  headers: {
+                    Accept: "application/json",
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${refreshResult.token}`,
+                  },
+                });
+              } catch (err) {
+                // Network failure or timeout. Treat conservatively as transient error:
+                // Retain refreshed token and backoff retry.
+                throw new Error("Transient error during retry of /auth/me after successful refresh");
+              }
 
               if (cancelled) return;
 
               if (retryResp.status === 200) {
                 setAuthState("authenticated");
                 return;
+              } else if (retryResp.status === 401 || retryResp.status === 403) {
+                // Confirmed auth failure on the new token: clear and redirect
+                localStorage.removeItem("accessToken");
+                localStorage.removeItem("tenant_id");
+                localStorage.removeItem("tenant_name");
+                if (!cancelled) {
+                  setAuthState("redirecting");
+                  window.location.href = "/auth?expired=true";
+                }
+                return;
+              } else {
+                // 408, 429, 5xx, or unexpected non-auth 4xx: treat as transient
+                throw new Error(`Transient error (${retryResp.status}) during retry of /auth/me after successful refresh`);
               }
             } else if (refreshResult.type === "transient_error") {
               // Retain credentials and trigger the reconnecting backoff retry loop
               throw new Error("Transient error during refresh recovery");
-            }
-
-            if (refreshResult.type === "unauthorized" || refreshResult.type === "success") {
+            } else if (refreshResult.type === "unauthorized") {
               localStorage.removeItem("accessToken");
               localStorage.removeItem("tenant_id");
               localStorage.removeItem("tenant_name");
