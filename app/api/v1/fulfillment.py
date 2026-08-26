@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db, tenant_context
 from app.models.demand_gap import DemandGap
+from app.models.inventory import Inventory
 from app.models.order import Order, OrderLineItem, OrderStateLedger
 from app.services.order_confirmation_service import confirm_order
 
@@ -56,6 +57,47 @@ def _record_full_cancellation_gap(db: Session, order: Order, item: OrderLineItem
         created_at=now,
         **values,
     ))
+
+
+@router.get("/{order_id}/fulfillment-preview", status_code=status.HTTP_200_OK)
+def preview_fulfillment(order_id: uuid.UUID, db: Session = Depends(get_db)):
+    """Return real-time requested vs available quantities before confirmation."""
+    order = db.get(Order, order_id)
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    tenant_context.set(order.tenant_id)
+
+    items = db.query(OrderLineItem).filter(OrderLineItem.order_id == order.id).all()
+    inventory = {
+        row.sku_id: row
+        for row in db.query(Inventory).filter(
+            Inventory.tenant_id == order.tenant_id,
+            Inventory.sku_id.in_({item.product_id for item in items}),
+        ).all()
+    } if items else {}
+
+    lines = []
+    for item in items:
+        inv = inventory.get(item.product_id)
+        available = max(0, inv.quantity_on_hand or 0) if inv else 0
+        suggested = min(item.quantity, available)
+        lines.append({
+            "item_id": str(item.id),
+            "product_id": str(item.product_id) if item.product_id else None,
+            "requested_quantity": item.quantity,
+            "available_quantity": available,
+            "suggested_quantity": suggested,
+            "has_shortage": available < item.quantity,
+        })
+
+    return {
+        "order_id": str(order.id),
+        "has_shortage": any(line["has_shortage"] for line in lines),
+        "requested_quantity": sum(line["requested_quantity"] for line in lines),
+        "available_quantity": sum(line["available_quantity"] for line in lines),
+        "suggested_quantity": sum(line["suggested_quantity"] for line in lines),
+        "lines": lines,
+    }
 
 
 @router.post("/{order_id}/fulfillment-decision", status_code=status.HTTP_200_OK)
