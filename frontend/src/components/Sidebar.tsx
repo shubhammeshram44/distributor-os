@@ -18,6 +18,7 @@ import {
   ChevronRight,
   MessageSquare,
   Settings,
+  SlidersHorizontal,
   Link2,
   Bell,
   Menu,
@@ -38,8 +39,6 @@ export default function Sidebar({ activeTab, setActiveTab, tenantName }: Sidebar
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [isDesktop, setIsDesktop] = useState(true);
 
-  // Track viewport so the icon-only "collapsed" style only ever applies at desktop widths —
-  // the mobile drawer always shows full labels regardless of the desktop collapse preference.
   useEffect(() => {
     const mq = window.matchMedia("(min-width: 768px)");
     const update = () => setIsDesktop(mq.matches);
@@ -50,7 +49,6 @@ export default function Sidebar({ activeTab, setActiveTab, tenantName }: Sidebar
 
   const effectiveCollapsed = isCollapsed && isDesktop;
 
-  // Sync with localStorage and body classes on load
   useEffect(() => {
     const stored = localStorage.getItem("sidebarCollapsed") === "true";
     setIsCollapsed(stored);
@@ -61,7 +59,6 @@ export default function Sidebar({ activeTab, setActiveTab, tenantName }: Sidebar
     }
   }, []);
 
-  // Close the mobile drawer automatically on route change
   useEffect(() => {
     setIsMobileOpen(false);
   }, [pathname]);
@@ -87,8 +84,6 @@ export default function Sidebar({ activeTab, setActiveTab, tenantName }: Sidebar
       { name: "Dashboard", icon: LayoutDashboard, href: "/dashboard" },
       
       { type: "category", name: "OPERATIONS" },
-      // Messages tab is still WIP — kept behind a feature flag (disabled by default)
-      // until the chat experience is ready for real customers.
       ...(FEATURE_FLAGS.messages
         ? [{ name: "Messages", icon: MessageSquare, href: "/dashboard/messages" }]
         : []),
@@ -107,25 +102,18 @@ export default function Sidebar({ activeTab, setActiveTab, tenantName }: Sidebar
       
       { type: "category", name: "SETTINGS" },
       { name: "Team Settings", icon: Settings, href: "/dashboard/settings/team" },
-      // Legacy Integrations page is deprecated (superseded by Integrations V2 below).
-      // Kept in the codebase and reachable by direct URL, just hidden from the
-      // nav by default — flip FEATURE_FLAGS.integrationsV1 to bring it back.
+      { name: "Customer Defaults", icon: SlidersHorizontal, href: "/dashboard/settings/customer-defaults" },
       ...(FEATURE_FLAGS.integrationsV1
         ? [{ name: "Integrations (Legacy)", icon: Link2, href: "/dashboard/settings/integrations" }]
         : []),
-      // This was "Integrations V2 (Test)" — now the sole/primary Integrations
-      // page, so it's labeled plainly. Route is unchanged.
       { name: "Integrations", icon: Link2, href: "/dashboard/settings/integrations-v2" },
       { name: "Notifications", icon: Bell, href: "/dashboard/settings/notifications" },
       { name: "Payments", icon: CreditCard, href: "/dashboard/settings/payments" },
       { name: "Automations", icon: Zap, badge: "Soon" }
     ];
 
-
-
   return (
     <>
-      {/* Mobile hamburger trigger — only visible below md, replaces the hidden sidebar */}
       <button
         onClick={() => setIsMobileOpen(true)}
         className="md:hidden fixed top-3 left-3 z-30 w-10 h-10 flex items-center justify-center rounded-lg bg-brand-dark text-white shadow-lg"
@@ -135,7 +123,6 @@ export default function Sidebar({ activeTab, setActiveTab, tenantName }: Sidebar
         <Menu className="w-5 h-5" />
       </button>
 
-      {/* Backdrop overlay for mobile drawer */}
       {isMobileOpen && (
         <div
           className="md:hidden fixed inset-0 bg-black/50 z-20"
@@ -145,10 +132,8 @@ export default function Sidebar({ activeTab, setActiveTab, tenantName }: Sidebar
       )}
 
       <aside
-        className={`${isCollapsed ? 'md:w-16' : 'md:w-64'} w-64 bg-brand-dark text-white flex flex-col h-screen fixed left-0 top-0 border-r border-brand-darkHover z-30 transition-all duration-300 ease-in-out ${isMobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
-          }`}
+        className={`${isCollapsed ? 'md:w-16' : 'md:w-64'} w-64 bg-brand-dark text-white flex flex-col h-screen fixed left-0 top-0 border-r border-brand-darkHover z-30 transition-all duration-300 ease-in-out ${isMobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}
       >
-        {/* Brand Header */}
         <div className={`h-16 flex items-center ${isCollapsed ? 'md:justify-center md:px-2' : 'px-6'} justify-between border-b border-brand-darkHover gap-2 transition-all duration-300`}>
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded bg-brand-blue flex items-center justify-center font-bold text-lg text-white flex-shrink-0">
@@ -160,7 +145,6 @@ export default function Sidebar({ activeTab, setActiveTab, tenantName }: Sidebar
               </span>
             )}
           </div>
-          {/* Close button — mobile drawer only */}
           <button
             onClick={() => setIsMobileOpen(false)}
             className="md:hidden text-brand-textMuted hover:text-white p-1"
@@ -184,19 +168,13 @@ export default function Sidebar({ activeTab, setActiveTab, tenantName }: Sidebar
             }
 
             const Icon = item.icon;
-            // Match on exact path or a full path-segment boundary only — a naive
-            // `pathname.startsWith(item.href)` would also match "/dashboard/settings/integrations-v2"
-            // against the "Integrations" item's href ("/dashboard/settings/integrations"), since one
-            // string is a literal prefix of the other, causing both menu items to render as active
-            // at once. Requiring a trailing "/" (or an exact match) enforces a real segment boundary.
             const isActive = item.href
               ? (item.href === "/dashboard"
                 ? pathname === "/dashboard" || pathname === "/"
                 : pathname === item.href || pathname.startsWith(`${item.href}/`))
               : activeTab === item.name;
 
-            const className = `w-full flex items-center ${effectiveCollapsed ? 'justify-center p-3' : 'gap-3 px-4 py-3'
-              } rounded-lg text-sm font-medium transition-all text-left relative group ${isActive
+            const className = `w-full flex items-center ${effectiveCollapsed ? 'justify-center p-3' : 'gap-3 px-4 py-3'} rounded-lg text-sm font-medium transition-all text-left relative group ${isActive
                 ? "bg-brand-blue text-white shadow-md shadow-brand-blue/20"
                 : "text-brand-textMuted hover:bg-brand-darkHover hover:text-white"
               }`;
@@ -245,7 +223,6 @@ export default function Sidebar({ activeTab, setActiveTab, tenantName }: Sidebar
           })}
         </nav>
 
-        {/* Desktop-only collapse toggle — mobile drawer uses the close button instead */}
         <button
           onClick={toggleCollapse}
           className="hidden md:flex items-center justify-center gap-2 h-12 border-t border-brand-darkHover text-brand-textMuted hover:bg-brand-darkHover hover:text-white transition-all"
@@ -258,4 +235,3 @@ export default function Sidebar({ activeTab, setActiveTab, tenantName }: Sidebar
     </>
   );
 }
-
