@@ -1,7 +1,7 @@
 import json
 import uuid
 from datetime import datetime
-from sqlalchemy import String, DateTime, Integer, JSON
+from sqlalchemy import String, DateTime, Integer, JSON, Numeric
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
@@ -24,6 +24,14 @@ class DistributorTenant(Base):
     razorpay_key_secret_enc: Mapped[str | None] = mapped_column(String(500), nullable=True, default=None)
     razorpay_account_name: Mapped[str | None] = mapped_column(String(200), nullable=True, default=None)
     razorpay_mode: Mapped[str] = mapped_column(String(10), nullable=False, default="test")
+    # Commercial defaults copied onto each newly created customer. Changing
+    # these values never retroactively changes existing customer profiles.
+    default_customer_credit_limit: Mapped[float] = mapped_column(
+        Numeric(12, 2), nullable=False, default=5000.0, server_default="5000"
+    )
+    default_customer_payment_terms: Mapped[str] = mapped_column(
+        String(50), nullable=False, default="Net 30", server_default="Net 30"
+    )
     whatsapp_connection_status: Mapped[str] = mapped_column(
         String(20), nullable=False, server_default="unknown"
     )  # "connected" | "disconnected" | "unknown"
@@ -55,5 +63,3 @@ class DistributorTenant(Base):
             "payment_received_confirmation": True
         })
     )
-
-
