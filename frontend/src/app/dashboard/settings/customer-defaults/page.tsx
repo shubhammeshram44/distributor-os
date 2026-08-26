@@ -16,7 +16,7 @@ export default function CustomerDefaultsPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  const authHeaders = () => {
+  const authHeaders = (): Record<string, string> => {
     const token = localStorage.getItem("accessToken");
     return token ? { Authorization: `Bearer ${token}` } : {};
   };
