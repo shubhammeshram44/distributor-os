@@ -1577,7 +1577,7 @@ def test_instant_order_credit_limit_boundaries(db_session, client):
     cust_db.outstanding_balance = 2000.0
     db_session.commit()
 
-    # Case B: Order total exactly 1 Rupee over remaining credit (3001 units of ₹1 = ₹3001) -> Should fail with 422
+    # Case B: Order total exactly 1 Rupee over remaining credit (3001 units of ₹1 = ₹3001) -> Should now succeed since credit limit is advisory
     payload_fail = {
         "idempotency_key": str(uuid.uuid4()),
         "customer_id": str(cust.id),
@@ -1586,8 +1586,8 @@ def test_instant_order_credit_limit_boundaries(db_session, client):
         "payment_method": "credit"
     }
     resp_fail = client.post(f"/api/v1/orders/instant-transaction?tenant_id={tenant.id}", json=payload_fail)
-    assert resp_fail.status_code == 422
-    assert "Credit limit exceeded" in resp_fail.json()["detail"]
+    assert resp_fail.status_code == 201
+    assert resp_fail.json()["status"] == "success"
 
 
 def test_instant_order_cash_consistency(db_session, client):

@@ -2415,14 +2415,8 @@ def create_instant_transaction(
             raise HTTPException(status_code=400, detail="No valid items in order")
 
         # ── STEP 3: CREDIT LIMIT CHECK ────────────────────────────────────────
-        if payload.payment_method == "credit":
-            # Call shared helper check_credit_limit to determine if it exceeds credit limit
-            combined_total = check_credit_limit(db, customer, order_total)
-            if combined_total > float(customer.credit_limit):
-                raise HTTPException(
-                    status_code=422,
-                    detail=f"Credit limit exceeded. Combined balance: ₹{combined_total:,.2f}, Limit: ₹{float(customer.credit_limit):,.2f}"
-                )
+        # Credit limit is advisory in Van Sales.
+        # Over-limit credit transactions are allowed.
 
         # ── STEP 4: CREATE ORDER ──────────────────────────────────────────────
         # Generate internal order ID
