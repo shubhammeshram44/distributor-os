@@ -33,7 +33,12 @@ export default function DashboardLayout({
     const verifySession = async () => {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
       
-      const performRefresh = async (): Promise<string | null> => {
+      type RefreshResult =
+        | { type: "success"; token: string }
+        | { type: "unauthorized" }
+        | { type: "transient_error" };
+
+      const performRefresh = async (): Promise<RefreshResult> => {
         try {
           const resp = await fetch(`${apiBase}/api/v1/auth/refresh`, {
             method: "POST",
@@ -43,36 +48,42 @@ export default function DashboardLayout({
               "Content-Type": "application/json",
             },
           });
-          if (resp.ok) {
+          if (resp.status === 200) {
             const data = await resp.json();
             if (data.access_token) {
               localStorage.setItem("accessToken", data.access_token);
-              return data.access_token;
+              return { type: "success", token: data.access_token };
             }
           }
+          if (resp.status === 401 || resp.status === 403) {
+            return { type: "unauthorized" };
+          }
+          // Handle 408, 429, 5xx, or unexpected non-auth 4xx conservatively.
+          // By returning transient_error instead of unauthorized, we do not clear
+          // local credentials or redirect, and instead let the backoff retry kick in.
+          return { type: "transient_error" };
         } catch (err) {
           console.error("Refresh request threw network/server error:", err);
-          throw err;
+          return { type: "transient_error" };
         }
-        return null;
       };
 
-      const refreshSessionWithLocks = async (): Promise<string | null> => {
+      const refreshSessionWithLocks = async (): Promise<RefreshResult> => {
         const tokenBeforeLock = localStorage.getItem("accessToken");
         
         if (typeof window !== "undefined" && window.navigator && window.navigator.locks) {
-          return new Promise<string | null>((resolve, reject) => {
+          return new Promise<RefreshResult>((resolve) => {
             window.navigator.locks.request("distributor_os_refresh_lock", async () => {
               try {
                 const latestToken = localStorage.getItem("accessToken");
                 if (latestToken && latestToken !== tokenBeforeLock) {
-                  resolve(latestToken);
+                  resolve({ type: "success", token: latestToken });
                   return;
                 }
-                const refreshedToken = await performRefresh();
-                resolve(refreshedToken);
+                const res = await performRefresh();
+                resolve(res);
               } catch (err) {
-                reject(err);
+                resolve({ type: "transient_error" });
               }
             });
           });
@@ -89,19 +100,18 @@ export default function DashboardLayout({
           let token = localStorage.getItem("accessToken");
 
           if (!token) {
-            try {
-              const refreshedToken = await refreshSessionWithLocks();
-              if (refreshedToken) {
-                token = refreshedToken;
-              } else {
-                if (!cancelled) {
-                  setAuthState("redirecting");
-                  window.location.href = "/auth?expired=true";
-                }
-                return;
+            const refreshResult = await refreshSessionWithLocks();
+            if (refreshResult.type === "success") {
+              token = refreshResult.token;
+            } else if (refreshResult.type === "unauthorized") {
+              if (!cancelled) {
+                setAuthState("redirecting");
+                window.location.href = "/auth?expired=true";
               }
-            } catch (err) {
-              throw err;
+              return;
+            } else {
+              // refreshResult.type === "transient_error"
+              throw new Error("Transient error during initial refresh");
             }
           }
 
@@ -125,27 +135,30 @@ export default function DashboardLayout({
           }
 
           if (resp.status === 401 || resp.status === 403) {
-            try {
-              const refreshedToken = await refreshSessionWithLocks();
-              if (refreshedToken) {
-                const retryResp = await fetch(`${apiBase}/api/v1/auth/me`, {
-                  method: "GET",
-                  credentials: "include",
-                  headers: {
-                    Accept: "application/json",
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${refreshedToken}`,
-                  },
-                });
+            const refreshResult = await refreshSessionWithLocks();
+            if (refreshResult.type === "success") {
+              const retryResp = await fetch(`${apiBase}/api/v1/auth/me`, {
+                method: "GET",
+                credentials: "include",
+                headers: {
+                  Accept: "application/json",
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${refreshResult.token}`,
+                },
+              });
 
-                if (cancelled) return;
+              if (cancelled) return;
 
-                if (retryResp.status === 200) {
-                  setAuthState("authenticated");
-                  return;
-                }
+              if (retryResp.status === 200) {
+                setAuthState("authenticated");
+                return;
               }
+            } else if (refreshResult.type === "transient_error") {
+              // Retain credentials and trigger the reconnecting backoff retry loop
+              throw new Error("Transient error during refresh recovery");
+            }
 
+            if (refreshResult.type === "unauthorized" || refreshResult.type === "success") {
               localStorage.removeItem("accessToken");
               localStorage.removeItem("tenant_id");
               localStorage.removeItem("tenant_name");
@@ -154,8 +167,6 @@ export default function DashboardLayout({
                 window.location.href = "/auth?expired=true";
               }
               return;
-            } catch (err) {
-              throw err;
             }
           }
 

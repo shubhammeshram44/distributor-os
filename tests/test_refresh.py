@@ -188,3 +188,66 @@ def test_concurrent_refresh_requests(db_session):
     status_codes = [r.status_code for r in results]
     assert 200 in status_codes
     assert 401 in status_codes
+
+
+def test_unauthorized_refresh_clears_cookies(db_session):
+    tenant, user = _seed_user_and_tenant(db_session)
+    
+    # Helper to check that response headers contain correct Set-Cookie deletion directives
+    def assert_cookies_cleared(response):
+        assert response.status_code == 401
+        
+        cookie_header = response.headers.get("set-cookie", "").lower()
+        # Verify access_token delete attributes
+        assert "access_token=" in cookie_header
+        assert "path=/" in cookie_header
+        # Verify refresh_token delete attributes
+        assert "refresh_token=" in cookie_header
+        assert "path=/api/v1/auth" in cookie_header
+        # Dev attributes
+        assert "secure" not in cookie_header
+        assert "samesite=lax" in cookie_header
+
+    # 1. Missing refresh token
+    client.cookies.clear()
+    resp_missing = client.post(
+        "/api/v1/auth/refresh",
+        headers={"Origin": "https://distroos.in"}
+    )
+    assert_cookies_cleared(resp_missing)
+
+    # 2. Invalid refresh token
+    client.cookies.set("refresh_token", "non-existent-token")
+    resp_invalid = client.post(
+        "/api/v1/auth/refresh",
+        headers={"Origin": "https://distroos.in"}
+    )
+    assert_cookies_cleared(resp_invalid)
+
+    # 3. Expired refresh token
+    raw_token_exp = _create_refresh_session(db_session, user.id)
+    token_hash_exp = hashlib.sha256(raw_token_exp.encode("utf-8")).hexdigest()
+    session_exp = db_session.query(RefreshSession).filter(RefreshSession.token_hash == token_hash_exp).first()
+    session_exp.expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+    db_session.commit()
+
+    client.cookies.set("refresh_token", raw_token_exp)
+    resp_expired = client.post(
+        "/api/v1/auth/refresh",
+        headers={"Origin": "https://distroos.in"}
+    )
+    assert_cookies_cleared(resp_expired)
+
+    # 4. Revoked refresh token
+    raw_token_rev = _create_refresh_session(db_session, user.id)
+    token_hash_rev = hashlib.sha256(raw_token_rev.encode("utf-8")).hexdigest()
+    session_rev = db_session.query(RefreshSession).filter(RefreshSession.token_hash == token_hash_rev).first()
+    session_rev.revoked_at = datetime.now(timezone.utc)
+    db_session.commit()
+
+    client.cookies.set("refresh_token", raw_token_rev)
+    resp_revoked = client.post(
+        "/api/v1/auth/refresh",
+        headers={"Origin": "https://distroos.in"}
+    )
+    assert_cookies_cleared(resp_revoked)

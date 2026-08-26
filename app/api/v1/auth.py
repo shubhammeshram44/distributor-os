@@ -20,6 +20,7 @@ import secrets
 import hashlib
 from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Cookie, Header, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -106,6 +107,15 @@ def _delete_access_cookie(response: Response):
         samesite="none" if _is_prod else "lax",
         path="/"
     )
+
+def _unauthorized_response(detail: str) -> JSONResponse:
+    resp = JSONResponse(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        content={"detail": detail}
+    )
+    _delete_access_cookie(resp)
+    _delete_refresh_cookie(resp)
+    return resp
 
 def _create_refresh_session(db: Session, user_id: uuid.UUID) -> str:
     raw_token = secrets.token_urlsafe(32)
@@ -518,13 +528,7 @@ def refresh_session(
     _validate_origin(request)
 
     if not refresh_token:
-        # Clear cookies on failure to prevent stale loops
-        _delete_access_cookie(response)
-        _delete_refresh_cookie(response)
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Refresh token is missing. Please log in again."
-        )
+        return _unauthorized_response("Refresh token is missing. Please log in again.")
 
     # Compute SHA-256 hash of raw token
     token_hash = hashlib.sha256(refresh_token.encode('utf-8')).hexdigest()
@@ -537,12 +541,7 @@ def refresh_session(
     ).with_for_update().first()
 
     if not session_row:
-        _delete_access_cookie(response)
-        _delete_refresh_cookie(response)
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid refresh session context."
-        )
+        return _unauthorized_response("Invalid refresh session context.")
 
     # Validate revocation and expiry
     is_expired = (
@@ -553,22 +552,12 @@ def refresh_session(
         if is_expired and session_row.revoked_at is None:
             session_row.revoked_at = current_time
             db.commit()
-        _delete_access_cookie(response)
-        _delete_refresh_cookie(response)
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Session has expired or has been revoked. Please verify your phone to continue."
-        )
+        return _unauthorized_response("Session has expired or has been revoked. Please verify your phone to continue.")
 
     # Fetch corresponding user
     user = db.get(User, session_row.user_id)
     if not user or not user.is_active:
-        _delete_access_cookie(response)
-        _delete_refresh_cookie(response)
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authenticated user is inactive or not found."
-        )
+        return _unauthorized_response("Authenticated user is inactive or not found.")
 
     # Rotate the refresh token
     new_raw_token = secrets.token_urlsafe(32)
