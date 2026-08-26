@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import String, ForeignKey, Float, Numeric, Boolean
+from sqlalchemy import String, ForeignKey, Float, Numeric, Boolean, event, select
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 from app.database import Base, TenantMixin
 from app.utils.phone import normalize_phone_number
@@ -59,3 +59,57 @@ class CustomerAlias(Base, TenantMixin):
             return normalize_phone_number(value)
         return value
 
+
+@event.listens_for(Customer, "before_insert")
+def apply_inline_van_sales_defaults(mapper, connection, target: Customer):
+    """Keep Van Sales inline creation consistent with tenant customer defaults.
+
+    The current Van Sales endpoint identifies its inline-created customer by
+    explicitly setting credit_limit=0 and payment_terms="Net 0". Treat that
+    combination as the inline-creation signature, then replace those temporary
+    placeholders with the distributor's configured defaults before persistence.
+    """
+    if float(target.credit_limit or 0) != 0 or target.payment_terms != "Net 0":
+        return
+
+    from app.models.tenant import DistributorTenant
+
+    defaults = connection.execute(
+        select(
+            DistributorTenant.default_customer_credit_limit,
+            DistributorTenant.default_customer_payment_terms,
+        ).where(DistributorTenant.id == target.tenant_id)
+    ).first()
+
+    target.credit_limit = float(defaults[0]) if defaults and defaults[0] is not None else 5000.0
+    target.payment_terms = defaults[1] if defaults and defaults[1] else "Net 30"
+    target._created_from_van_sales_inline = True
+
+
+@event.listens_for(Customer, "after_insert")
+def create_inline_van_sales_phone_alias(mapper, connection, target: Customer):
+    """Create the WhatsApp/customer identity alias for inline Van Sales customers."""
+    if not getattr(target, "_created_from_van_sales_inline", False) or not target.phone_number:
+        return
+
+    normalized_phone = normalize_phone_number(target.phone_number)
+    if not normalized_phone:
+        return
+
+    existing = connection.execute(
+        select(CustomerAlias.id).where(
+            CustomerAlias.tenant_id == target.tenant_id,
+            CustomerAlias.alias_value == normalized_phone,
+        )
+    ).first()
+    if existing:
+        return
+
+    connection.execute(
+        CustomerAlias.__table__.insert().values(
+            id=uuid.uuid4(),
+            tenant_id=target.tenant_id,
+            customer_id=target.id,
+            alias_value=normalized_phone,
+        )
+    )
