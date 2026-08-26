@@ -682,14 +682,28 @@ export default function VanSalesModal({ isOpen, onClose, activeTenantId }: VanSa
                                         </div>
                                         {paymentMethod === "credit" && <Check className="ml-auto w-4.5 h-4.5 text-emerald-600 dark:text-emerald-400" />}
                                     </div>
-                                    {paymentMethod === "credit" && selectedCustomer &&
-                                        orderTotal > ((selectedCustomer.credit_limit ?? 0) - (selectedCustomer.outstanding_balance ?? 0)) && (
-                                        <div className="mt-2.5 p-2 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800/40 rounded-lg">
-                                            <p className="text-[10px] text-red-600 dark:text-red-400 font-medium">
-                                                ⚠️ Exceeds credit limit by ₹{(orderTotal - ((selectedCustomer.credit_limit ?? 0) - (selectedCustomer.outstanding_balance ?? 0))).toLocaleString("en-IN")}
-                                            </p>
-                                        </div>
-                                    )}
+                                    {paymentMethod === "credit" && selectedCustomer && (() => {
+                                        const creditLimit = selectedCustomer.credit_limit ?? 0;
+                                        const outstanding = selectedCustomer.outstanding_balance ?? 0;
+                                        const availableCredit = Math.max(creditLimit - outstanding, 0);
+                                        const excess = Math.max(orderTotal - availableCredit, 0);
+
+                                        if (excess <= 0) return null;
+
+                                        return (
+                                            <div className="mt-2.5 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40 rounded-xl space-y-1 text-left">
+                                                <p className="text-xs font-bold text-amber-800 dark:text-amber-300">
+                                                    ⚠️ Credit limit exceeded by ₹{excess.toLocaleString("en-IN")}
+                                                </p>
+                                                <p className="text-[10px] text-amber-700/80 dark:text-amber-400/80 font-medium">
+                                                    Available credit ₹{availableCredit.toLocaleString("en-IN")} · Order ₹{orderTotal.toLocaleString("en-IN")}
+                                                </p>
+                                                <p className="text-[10px] text-amber-800 dark:text-amber-300 font-semibold mt-0.5">
+                                                    Recommended: Collect at least ₹{excess.toLocaleString("en-IN")} from the customer.
+                                                </p>
+                                            </div>
+                                        );
+                                    })()}
                                 </button>
                             </div>
 
