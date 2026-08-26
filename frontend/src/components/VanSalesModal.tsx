@@ -30,12 +30,56 @@ interface OrderItem {
 
 type Screen = "customer" | "order" | "payment" | "success";
 type PaymentMethod = "cash" | "upi" | "credit";
-
 interface VanSalesModalProps {
     isOpen: boolean;
     onClose: () => void;
     activeTenantId: string;
 }
+
+// ── QUANTITY INPUT ───────────────────────────────────────────────────────────
+
+interface QuantityInputProps {
+    quantity: number;
+    onChange: (qty: number) => void;
+}
+
+const QuantityInput = ({ quantity, onChange }: QuantityInputProps) => {
+    const [localVal, setLocalVal] = useState<string>(String(quantity));
+
+    useEffect(() => {
+        setLocalVal(String(quantity));
+    }, [quantity]);
+
+    return (
+        <input
+            type="text"
+            inputMode="numeric"
+            value={localVal}
+            onChange={e => {
+                const val = e.target.value;
+                if (val === "") {
+                    setLocalVal("");
+                    // Do NOT call onChange(0) to allow temporary empty editing states
+                    return;
+                }
+                if (/^\d*$/.test(val)) {
+                    setLocalVal(val);
+                    const parsed = parseInt(val, 10);
+                    if (!isNaN(parsed)) {
+                        onChange(parsed);
+                    }
+                }
+            }}
+            onBlur={() => {
+                setLocalVal(String(quantity));
+            }}
+            onFocus={e => {
+                e.target.select();
+            }}
+            className="w-12 text-center text-sm font-bold text-slate-800 dark:text-white bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:border-emerald-500 py-0.5 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+        />
+    );
+};
 
 // ── COMPONENT ────────────────────────────────────────────────────────────────
 
@@ -176,6 +220,24 @@ export default function VanSalesModal({ isOpen, onClose, activeTenantId }: VanSa
                 return [...prev, { product, quantity: delta }];
             }
             return prev;
+        });
+    };
+
+    const setQuantity = (product: Product, qty: number) => {
+        setOrderItems(prev => {
+            const existing = prev.find(i => i.product.id === product.id);
+            if (qty <= 0) {
+                return prev.filter(i => i.product.id !== product.id);
+            }
+            const cleanQty = Math.floor(qty);
+            if (cleanQty <= 0) {
+                return prev.filter(i => i.product.id !== product.id);
+            }
+            if (existing) {
+                return prev.map(i => i.product.id === product.id ? { ...i, quantity: cleanQty } : i);
+            } else {
+                return [...prev, { product, quantity: cleanQty }];
+            }
         });
     };
 
@@ -452,9 +514,10 @@ export default function VanSalesModal({ isOpen, onClose, activeTenantId }: VanSa
                                             >
                                                 −
                                             </button>
-                                            <span className="w-6 text-center text-sm font-bold text-slate-850 dark:text-white">
-                                                {quantity}
-                                            </span>
+                                            <QuantityInput
+                                                quantity={quantity}
+                                                onChange={(newQty) => setQuantity(product, newQty)}
+                                            />
                                             <button
                                                 onClick={() => updateQuantity(product, 1)}
                                                 className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 font-bold text-lg flex items-center justify-center hover:bg-emerald-200 dark:hover:bg-emerald-900/60 transition-colors"
