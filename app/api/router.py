@@ -6,6 +6,7 @@ from app.api.v1.dashboard import router as dashboard_router
 from app.api.v1.products import router as products_router
 from app.api.v1.orders import router as orders_router
 from app.api.v1.customers import router as customers_router
+from app.api.v1.customer_defaults import router as customer_defaults_router
 from app.api.v1.analytics import router as analytics_router
 from app.api.v1.shipments import router as shipments_router
 from app.api.v1.users import router as users_router
@@ -28,6 +29,7 @@ api_router.include_router(orders_router)
 
 # 2. FIXED ROUTING PRIORITY: customers_router is now evaluated first
 api_router.include_router(customers_router)
+api_router.include_router(customer_defaults_router)
 
 # 3. Micro-Services Routers
 api_router.include_router(analytics_router)
