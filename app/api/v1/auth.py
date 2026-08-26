@@ -16,7 +16,11 @@ import json
 import uuid
 import logging
 import traceback
-from fastapi import APIRouter, Depends, HTTPException, status, Response, Cookie, Header
+import secrets
+import hashlib
+from datetime import datetime, timezone, timedelta
+from fastapi import APIRouter, Depends, HTTPException, status, Response, Cookie, Header, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -27,6 +31,7 @@ from firebase_admin import credentials as fb_credentials, auth as fb_auth
 from app.database import get_db
 from app.models.user import User
 from app.models.tenant import DistributorTenant
+from app.models.auth import WhatsAppVerification, RefreshSession
 from app.utils.security import sign_jwt, verify_jwt, verify_signup_token
 from app.config import settings
 
@@ -35,6 +40,104 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
+
+
+# ---------------------------------------------------------------------------
+# Session & Cookie Helper Utilities
+# ---------------------------------------------------------------------------
+
+ALLOWED_ORIGINS = [
+    "https://distributor-os-ui.onrender.com",
+    "https://distroos.in",
+    "https://www.distroos.in"
+]
+
+def _validate_origin(request: Request):
+    origin = request.headers.get("origin")
+    if origin:
+        _is_prod = os.getenv("ENVIRONMENT", "development") == "production"
+        if _is_prod:
+            if origin not in ALLOWED_ORIGINS:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="CORS validation failed: Origin not allowed."
+                )
+        else:
+            if not (origin.startswith("http://localhost:") or origin.startswith("http://127.0.0.1:") or origin in ALLOWED_ORIGINS):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="CORS validation failed: Origin not allowed in development."
+                )
+
+def _ensure_utc(dt: datetime) -> datetime:
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+def _set_refresh_cookie(response: Response, refresh_token: str):
+    _is_prod = os.getenv("ENVIRONMENT", "development") == "production"
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        httponly=True,
+        secure=_is_prod,
+        samesite="none" if _is_prod else "lax",
+        max_age=604800, # 7 days
+        path="/api/v1/auth"
+    )
+
+def _delete_refresh_cookie(response: Response):
+    _is_prod = os.getenv("ENVIRONMENT", "development") == "production"
+    response.delete_cookie(
+        key="refresh_token",
+        httponly=True,
+        secure=_is_prod,
+        samesite="none" if _is_prod else "lax",
+        path="/api/v1/auth"
+    )
+
+def _delete_access_cookie(response: Response):
+    _is_prod = os.getenv("ENVIRONMENT", "development") == "production"
+    response.delete_cookie(
+        key="access_token",
+        httponly=True,
+        secure=_is_prod,
+        samesite="none" if _is_prod else "lax",
+        path="/"
+    )
+
+def _unauthorized_response(detail: str) -> JSONResponse:
+    resp = JSONResponse(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        content={"detail": detail}
+    )
+    _delete_access_cookie(resp)
+    _delete_refresh_cookie(resp)
+    return resp
+
+def _create_refresh_session(db: Session, user_id: uuid.UUID) -> str:
+    raw_token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(raw_token.encode('utf-8')).hexdigest()
+    
+    current_time = datetime.now(timezone.utc)
+    expires_at = current_time + timedelta(days=7)
+    absolute_expires_at = current_time + timedelta(days=30)
+    
+    db_session = RefreshSession(
+        id=uuid.uuid4(),
+        user_id=user_id,
+        token_hash=token_hash,
+        created_at=current_time,
+        last_used_at=current_time,
+        expires_at=expires_at,
+        absolute_expires_at=absolute_expires_at,
+        revoked_at=None
+    )
+    db.add(db_session)
+    db.commit()
+    return raw_token
 
 
 # ---------------------------------------------------------------------------
@@ -207,7 +310,12 @@ def firebase_login(
         secure=_is_prod,
         samesite="none" if _is_prod else "lax",
         max_age=3600 * 24,
+        path="/"
     )
+
+    # Create and set 7-day refresh token
+    refresh_token = _create_refresh_session(db, user.id)
+    _set_refresh_cookie(response, refresh_token)
 
     tenant = db.get(DistributorTenant, user.tenant_id) if user.tenant_id else None
 
@@ -239,6 +347,7 @@ def _issue_session_response(
     tenant: DistributorTenant | None,
     phone_number: str,
     response: Response,
+    db: Session,
 ) -> dict:
     """Helper to sign session JWT, set cookie, and return the standard login payload."""
     token_payload = {
@@ -257,7 +366,12 @@ def _issue_session_response(
         secure=_is_prod,
         samesite="none" if _is_prod else "lax",
         max_age=3600 * 24,
+        path="/"
     )
+
+    # Create and set 7-day refresh token
+    refresh_token = _create_refresh_session(db, user.id)
+    _set_refresh_cookie(response, refresh_token)
 
     return {
         "status": "success",
@@ -337,7 +451,7 @@ def complete_signup(
     db.add(user)
     db.commit()
 
-    return _issue_session_response(user, new_tenant, phone_number, response)
+    return _issue_session_response(user, new_tenant, phone_number, response, db)
 
 
 # ---------------------------------------------------------------------------
@@ -396,25 +510,129 @@ def get_me(
 
 
 # ---------------------------------------------------------------------------
+# POST /auth/refresh
+# ---------------------------------------------------------------------------
+
+@router.post("/refresh", status_code=status.HTTP_200_OK)
+def refresh_session(
+    request: Request,
+    response: Response,
+    refresh_token: str | None = Cookie(None),
+    db: Session = Depends(get_db),
+):
+    """
+    Refreshes the session using the HttpOnly refresh token cookie.
+    Runs inside a transaction with pessimistic locking (SELECT FOR UPDATE).
+    """
+    # CSRF/Origin validation
+    _validate_origin(request)
+
+    if not refresh_token:
+        return _unauthorized_response("Refresh token is missing. Please log in again.")
+
+    # Compute SHA-256 hash of raw token
+    token_hash = hashlib.sha256(refresh_token.encode('utf-8')).hexdigest()
+
+    current_time = datetime.now(timezone.utc)
+    
+    # Query within transaction, locking the row for update
+    session_row = db.query(RefreshSession).filter(
+        RefreshSession.token_hash == token_hash
+    ).with_for_update().first()
+
+    if not session_row:
+        return _unauthorized_response("Invalid refresh session context.")
+
+    # Validate revocation and expiry
+    is_expired = (
+        _ensure_utc(session_row.expires_at) < current_time or
+        _ensure_utc(session_row.absolute_expires_at) < current_time
+    )
+    if session_row.revoked_at is not None or is_expired:
+        if is_expired and session_row.revoked_at is None:
+            session_row.revoked_at = current_time
+            db.commit()
+        return _unauthorized_response("Session has expired or has been revoked. Please verify your phone to continue.")
+
+    # Fetch corresponding user
+    user = db.get(User, session_row.user_id)
+    if not user or not user.is_active:
+        return _unauthorized_response("Authenticated user is inactive or not found.")
+
+    # Rotate the refresh token
+    new_raw_token = secrets.token_urlsafe(32)
+    new_token_hash = hashlib.sha256(new_raw_token.encode('utf-8')).hexdigest()
+
+    # Calculate new rolling expiry
+    new_expires_at = current_time + timedelta(days=7)
+    if new_expires_at > _ensure_utc(session_row.absolute_expires_at):
+        new_expires_at = _ensure_utc(session_row.absolute_expires_at)
+
+    # Update session row under the database transaction lock
+    session_row.token_hash = new_token_hash
+    session_row.last_used_at = current_time
+    session_row.expires_at = new_expires_at
+    db.commit()
+
+    # Issue new 24-hour access token JWT
+    token_payload = {
+        "user_id": str(user.id),
+        "tenant_id": str(user.tenant_id) if user.tenant_id else None,
+        "sub": user.email_or_phone,
+        "role": user.role,
+    }
+    new_access_token = sign_jwt(token_payload)
+
+    # Set new cookies
+    _is_prod = os.getenv("ENVIRONMENT", "development") == "production"
+    response.set_cookie(
+        key="access_token",
+        value=new_access_token,
+        httponly=True,
+        secure=_is_prod,
+        samesite="none" if _is_prod else "lax",
+        max_age=3600 * 24, # 24 hours
+        path="/"
+    )
+    _set_refresh_cookie(response, new_raw_token)
+
+    return {
+        "status": "success",
+        "token": new_access_token,
+        "access_token": new_access_token,
+        "token_type": "bearer"
+    }
+
+
+# ---------------------------------------------------------------------------
 # POST /auth/logout
 # ---------------------------------------------------------------------------
 
 @router.post("/logout", status_code=status.HTTP_200_OK)
-def logout(response: Response):
+def logout(
+    request: Request,
+    response: Response,
+    refresh_token: str | None = Cookie(None),
+    db: Session = Depends(get_db),
+):
     """
-    Clears the secure HttpOnly session access cookie across cross-origin domains.
+    Clears the secure HttpOnly session cookies and revokes the active refresh session in the database.
     """
-    # Must mirror the exact attributes used when the cookie was set (see
-    # firebase-login/signup above). Browsers silently REFUSE to set/overwrite
-    # a `Secure`-flagged cookie over a plain HTTP response — if this always
-    # sent secure=True while local dev sets the cookie with secure=False, the
-    # deletion is a no-op in dev and the old (still technically valid) cookie
-    # lingers in the browser, later shadowing a fresh, valid session token.
-    _is_prod = os.getenv("ENVIRONMENT", "development") == "production"
-    response.delete_cookie(
-        key="access_token",
-        httponly=True,
-        secure=_is_prod,
-        samesite="none" if _is_prod else "lax",
-    )
+    # CSRF/Origin validation
+    _validate_origin(request)
+
+    if refresh_token:
+        # Revoke in DB
+        token_hash = hashlib.sha256(refresh_token.encode('utf-8')).hexdigest()
+        session_row = db.query(RefreshSession).filter(
+            RefreshSession.token_hash == token_hash
+        ).with_for_update().first()
+        if session_row and session_row.revoked_at is None:
+            session_row.revoked_at = datetime.now(timezone.utc)
+            db.commit()
+
+    # Clear both cookies using identical matching attributes
+    _delete_access_cookie(response)
+    _delete_refresh_cookie(response)
+
     return {"status": "success", "message": "Session logged out successfully"}

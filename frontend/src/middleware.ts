@@ -28,14 +28,7 @@ export function middleware(request: NextRequest) {
     token = request.cookies.get('access_token')?.value;
   }
 
-  // Protect /dashboard paths
-  if (pathname.startsWith('/dashboard')) {
-    if (!token) {
-      // On token extraction failure, execute NextResponse.redirect to '/login'.
-      const loginUrl = new URL('/login', request.url);
-      return NextResponse.redirect(loginUrl);
-    }
-  }
+  // Let all /dashboard requests pass to client-side auth guard in DashboardLayout
 
   // Redirect to /dashboard if logged in and trying to access /auth
   if (pathname === '/auth') {

@@ -54,11 +54,21 @@ export default function AuthPage() {
   const [resendCooldown, setResendCooldown] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [expiredMsg, setExpiredMsg] = useState<string | null>(null);
   const confirmationRef = useRef<ConfirmationResult | null>(null);
   const recaptchaRef = useRef<RecaptchaVerifier | null>(null);
 
   const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
   const RESEND_COOLDOWN_SECONDS = 30;
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("expired") === "true") {
+        setExpiredMsg("Your session has expired or is invalid. Please request a new OTP to log back in.");
+      }
+    }
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -260,6 +270,13 @@ export default function AuthPage() {
               Phone sign-in is temporarily unavailable (authentication service is not configured).
               Please contact support.
             </span>
+          </div>
+        )}
+
+        {expiredMsg && (
+          <div className="flex items-center gap-2 p-3.5 mb-5 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-xl text-amber-700 dark:text-amber-400 text-xs font-semibold animate-pulse">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{expiredMsg}</span>
           </div>
         )}
 
