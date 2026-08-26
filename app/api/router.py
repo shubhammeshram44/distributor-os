@@ -5,6 +5,7 @@ from app.api.v1.ingestion import router as ingestion_router
 from app.api.v1.dashboard import router as dashboard_router
 from app.api.v1.products import router as products_router
 from app.api.v1.orders import router as orders_router
+from app.api.v1.fulfillment import router as fulfillment_router
 from app.api.v1.customers import router as customers_router
 from app.api.v1.customer_defaults import router as customer_defaults_router
 from app.api.v1.analytics import router as analytics_router
@@ -26,6 +27,7 @@ api_router.include_router(ingestion_router)
 api_router.include_router(dashboard_router)
 api_router.include_router(products_router)
 api_router.include_router(orders_router)
+api_router.include_router(fulfillment_router)
 
 # 2. FIXED ROUTING PRIORITY: customers_router is now evaluated first
 api_router.include_router(customers_router)
