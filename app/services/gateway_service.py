@@ -1,8 +1,14 @@
+from __future__ import annotations
+
 import os
+import uuid
 import asyncio
 import logging
 import httpx
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
 
 logger = logging.getLogger("uvicorn.error")
 
