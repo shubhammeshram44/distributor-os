@@ -1,8 +1,10 @@
 import os
 import asyncio
 import logging
+import uuid
 import httpx
 from typing import Optional
+from sqlalchemy.orm import Session
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -287,8 +289,6 @@ class EvolutionGatewayService:
         """
         Idempotent and non-destructive provisioning flow.
         """
-        import uuid
-        from sqlalchemy.orm import Session
         from app.models.tenant import DistributorTenant
         from fastapi import HTTPException
         

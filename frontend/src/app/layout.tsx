@@ -3,6 +3,7 @@ import "./globals.css";
 import type { Metadata } from "next";
 import Script from "next/script";
 import { ThemeProvider } from "@/contexts/ThemeContext";
+import FulfillmentConfirmationInterceptor from "@/components/FulfillmentConfirmationInterceptor";
 
 const figtree = Figtree({
   subsets: ["latin"],
@@ -15,9 +16,6 @@ export const metadata: Metadata = {
   description: "B2B Operational Operating System for India",
 };
 
-// Runs before hydration to set the correct theme attribute/class from
-// localStorage, preventing a flash of the wrong theme on load. Defaults to
-// "dark" (the new premium default) when no preference has been saved yet.
 const THEME_BOOTSTRAP_SCRIPT = `
 (function () {
   try {
@@ -67,7 +65,10 @@ export default function RootLayout({
         )}
       </head>
       <body className="antialiased bg-dashboard-bg text-dashboard-text" suppressHydrationWarning>
-        <ThemeProvider>{children}</ThemeProvider>
+        <ThemeProvider>
+          {children}
+          <FulfillmentConfirmationInterceptor />
+        </ThemeProvider>
       </body>
     </html>
   );
