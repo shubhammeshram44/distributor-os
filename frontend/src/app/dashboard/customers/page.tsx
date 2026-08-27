@@ -226,7 +226,7 @@ function CustomersContent() {
 
     try {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-      const resp = await fetch(`${apiBase}/api/v1/customers/${targetId}/notification-prefs`, {
+      const resp = await fetch(`${apiBase}/api/v1/customers/${targetId}/notification-prefs?tenant_id=${activeTenantId}`, {
         method: "PATCH",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -274,7 +274,7 @@ function CustomersContent() {
     setSavingConfig(true);
     try {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-      const resp = await fetch(`${apiBase}/api/v1/customers/${selectedCustomer.id}`, {
+      const resp = await fetch(`${apiBase}/api/v1/customers/${selectedCustomer.id}?tenant_id=${activeTenantId}`, {
         method: "PATCH",
         credentials: "include",
         headers: { "Content-Type": "application/json" },

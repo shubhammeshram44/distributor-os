@@ -18,19 +18,27 @@ class CustomerUpdatePayload(BaseModel):
 def update_customer(
     customer_id: uuid.UUID,
     payload: CustomerUpdatePayload,
+    tenant_id: uuid.UUID,
     db: Session = Depends(get_db)
 ):
     """
     Updates a customer's credit limit and billing terms dynamically.
     """
+    # Fix for CUST-2: unlike every other endpoint in this router, this one
+    # previously fetched the customer by ID alone (no tenant_id param at
+    # all) and only set tenant_context AFTER the fetch had already
+    # succeeded -- so any caller who obtained a customer UUID (from another
+    # tenant's own data, logs, etc.) could silently alter that customer's
+    # credit limit/billing terms across tenant boundaries. Now requires and
+    # verifies tenant_id up front, matching the convention already used by
+    # onboard_customer/list_customers/etc. in this same file.
+    tenant_context.set(tenant_id)
     customer = db.get(Customer, customer_id)
-    if not customer:
+    if not customer or customer.tenant_id != tenant_id:
         raise HTTPException(
             status_code=404,
             detail="Customer not found"
         )
-    
-    tenant_context.set(customer.tenant_id)
     
     customer.credit_limit = payload.credit_limit
     customer.payment_terms = payload.billing_terms
@@ -323,16 +331,19 @@ class CustomerNotificationPrefPayload(BaseModel):
 def update_customer_notification_prefs(
     customer_id: uuid.UUID,
     payload: CustomerNotificationPrefPayload,
+    tenant_id: uuid.UUID,
     db: Session = Depends(get_db)
 ):
+    # Fix for CUST-2: same cross-tenant IDOR as update_customer above --
+    # tenant_id is now required and verified up front.
+    tenant_context.set(tenant_id)
     customer = db.get(Customer, customer_id)
-    if not customer:
+    if not customer or customer.tenant_id != tenant_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Customer not found"
         )
 
-    tenant_context.set(customer.tenant_id)
     customer.whatsapp_notifications_enabled = payload.whatsapp_notifications_enabled
     db.commit()
 

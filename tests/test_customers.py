@@ -20,6 +20,7 @@ def test_patch_customer_settings(db_session, client):
 
     # Setup Customer
     cust = Customer(
+        tenant_id=tenant.id,
         retailer_name="Settings Test Shop", customer_id="C-SETTINGS-1", address_text="Settings Street, Delhi",
         gstin="07AAAAA1111A1Z1", tax_group="GST", payment_terms="0-15 Days",
         credit_limit=50000.0, outstanding_balance=1000.0
@@ -29,7 +30,7 @@ def test_patch_customer_settings(db_session, client):
 
     # Call PATCH endpoint
     response = client.patch(
-        f"/api/v1/customers/{cust.id}",
+        f"/api/v1/customers/{cust.id}?tenant_id={tenant.id}",
         json={
             "credit_limit": 75000.0,
             "billing_terms": "16-30 Days"
@@ -52,8 +53,9 @@ def test_patch_customer_settings(db_session, client):
 
 def test_patch_customer_settings_not_found(client):
     fake_id = uuid.uuid4()
+    fake_tenant_id = uuid.uuid4()
     response = client.patch(
-        f"/api/v1/customers/{fake_id}",
+        f"/api/v1/customers/{fake_id}?tenant_id={fake_tenant_id}",
         json={
             "credit_limit": 75000.0,
             "billing_terms": "16-30 Days"
@@ -61,6 +63,44 @@ def test_patch_customer_settings_not_found(client):
     )
     assert response.status_code == 404
     assert "Customer not found" in response.json()["detail"]
+
+
+def test_patch_customer_settings_cross_tenant_is_rejected(db_session, client):
+    """
+    Regression test for CUST-2: a caller supplying another tenant's
+    customer_id must not be able to modify that customer's credit
+    limit/billing terms by passing a DIFFERENT (their own, or any
+    arbitrary) tenant_id -- and must not succeed at all if no tenant_id
+    ownership check is performed. Previously this endpoint had no tenant_id
+    parameter whatsoever and derived tenant scoping only from the fetched
+    customer row itself, after the fetch had already succeeded.
+    """
+    tenant_a = DistributorTenant(name="Tenant A Customer Owner")
+    tenant_b = DistributorTenant(name="Tenant B Attacker")
+    db_session.add_all([tenant_a, tenant_b])
+    db_session.commit()
+
+    cust = Customer(
+        tenant_id=tenant_a.id,
+        retailer_name="Tenant A Shop", customer_id="C-CROSSTENANT-1", address_text="Delhi",
+        gstin="07AAAAA1111A1Z1", tax_group="GST", payment_terms="0-15 Days",
+        credit_limit=50000.0, outstanding_balance=0.0
+    )
+    db_session.add(cust)
+    db_session.commit()
+
+    # Attacker (operating as Tenant B) tries to modify Tenant A's customer
+    # by passing Tenant B's own id as tenant_id.
+    response = client.patch(
+        f"/api/v1/customers/{cust.id}?tenant_id={tenant_b.id}",
+        json={"credit_limit": 999999.0, "billing_terms": "Hacked"}
+    )
+    assert response.status_code == 404
+
+    db_session.expire_all()
+    cust_db = db_session.get(Customer, cust.id)
+    assert float(cust_db.credit_limit) == 50000.0
+    assert cust_db.payment_terms == "0-15 Days"
 
 
 def test_onboard_customer_success(db_session, client):
@@ -184,3 +224,57 @@ def test_customer_statement(db_session, client):
     assert statement[1]["amount"] == 400.0
     assert statement[1]["running_balance"] == 600.0
 
+
+
+def test_update_customer_notification_prefs_success(db_session, client):
+    tenant = DistributorTenant(name="Notif Prefs Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+
+    cust = Customer(
+        tenant_id=tenant.id,
+        retailer_name="Notif Prefs Shop", customer_id="C-NOTIFPREFS-1", address_text="Delhi",
+        gstin="07AAAAA1111A1Z1", tax_group="GST", payment_terms="0-15 Days",
+        whatsapp_notifications_enabled=True
+    )
+    db_session.add(cust)
+    db_session.commit()
+
+    response = client.patch(
+        f"/api/v1/customers/{cust.id}/notification-prefs?tenant_id={tenant.id}",
+        json={"whatsapp_notifications_enabled": False}
+    )
+    assert response.status_code == 200
+    assert response.json()["whatsapp_notifications_enabled"] is False
+
+    db_session.expire_all()
+    assert db_session.get(Customer, cust.id).whatsapp_notifications_enabled is False
+
+
+def test_update_customer_notification_prefs_cross_tenant_is_rejected(db_session, client):
+    """
+    Regression test for CUST-2: same cross-tenant IDOR fix applied to
+    update_customer_notification_prefs.
+    """
+    tenant_a = DistributorTenant(name="Notif Tenant A")
+    tenant_b = DistributorTenant(name="Notif Tenant B")
+    db_session.add_all([tenant_a, tenant_b])
+    db_session.commit()
+
+    cust = Customer(
+        tenant_id=tenant_a.id,
+        retailer_name="Notif Cross Tenant Shop", customer_id="C-NOTIFCROSS-1", address_text="Delhi",
+        gstin="07AAAAA1111A1Z1", tax_group="GST", payment_terms="0-15 Days",
+        whatsapp_notifications_enabled=True
+    )
+    db_session.add(cust)
+    db_session.commit()
+
+    response = client.patch(
+        f"/api/v1/customers/{cust.id}/notification-prefs?tenant_id={tenant_b.id}",
+        json={"whatsapp_notifications_enabled": False}
+    )
+    assert response.status_code == 404
+
+    db_session.expire_all()
+    assert db_session.get(Customer, cust.id).whatsapp_notifications_enabled is True
