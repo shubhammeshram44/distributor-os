@@ -168,12 +168,26 @@ async def razorpay_webhook(request: Request, db: Session = Depends(get_db)):
         amount_paid_paise = payload["payload"]["payment"]["entity"]["amount"]
         amount_paid_inr = amount_paid_paise / 100
         
-        # Find PaymentSession
+        # Fix for PAY-1: lock the PaymentSession row for the duration of this
+        # transaction so a retried/duplicate webhook delivery for the same
+        # payment (Razorpay retries on slow/ambiguous responses, and this can
+        # also be hit twice by a manual "check status" action) can't read the
+        # same pre-update "status != PAID" snapshot as a concurrent request
+        # and both proceed to double-credit the customer.
+        from app.models.payment import Payment
         session = db.query(PaymentSession).filter(
             PaymentSession.razorpay_payment_link_id == payment_link_id
-        ).first()
-        
-        if session and session.status != "PAID":
+        ).with_for_update().first()
+
+        # Defense-in-depth: even if two requests somehow still interleave
+        # around the lock (e.g. different PaymentSession rows resolving to
+        # the same underlying Razorpay payment), never record a second
+        # Payment for a razorpay_payment_id we've already processed.
+        already_processed = db.query(Payment).filter(
+            Payment.reference_number == razorpay_payment_id
+        ).first() is not None
+
+        if session and session.status != "PAID" and not already_processed:
             session.status = "PAID"
             session.razorpay_payment_id = razorpay_payment_id
             session.paid_at = datetime.utcnow()
@@ -194,6 +208,15 @@ async def razorpay_webhook(request: Request, db: Session = Depends(get_db)):
                 "Razorpay reconciled: session=%s invoice=%s amount=%.2f",
                 session.id, session.invoice_id, amount_paid_inr
             )
+        elif session and already_processed and session.status != "PAID":
+            # The payment was already recorded (e.g. by a concurrent request
+            # that raced past the status check before this one acquired the
+            # lock) but this session's own status/paid_at was never updated
+            # to reflect it -- fix that up without creating a second Payment.
+            session.status = "PAID"
+            session.razorpay_payment_id = razorpay_payment_id
+            session.paid_at = session.paid_at or datetime.utcnow()
+            db.commit()
     
     return {"status": "ok"}
 
