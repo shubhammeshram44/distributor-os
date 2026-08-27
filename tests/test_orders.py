@@ -265,6 +265,97 @@ def test_pending_allocations_queue_and_approve(db_session, client):
     assert order_db.current_status == "Confirmed"
 
 
+def test_confirm_order_post_rejects_already_confirmed_order(db_session, client):
+    """
+    Regression test for ORD-1: POST /orders/{id}/confirm previously had zero
+    state validation -- calling it twice (double-click, retry) on the same
+    order would re-run the full inventory deduction, customer ledger debit,
+    and Invoice creation each time. Only Draft orders may be confirmed.
+    """
+    tenant = DistributorTenant(name="Confirm Twice Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+    tenant_context.set(tenant.id)
+
+    p = Product(sku_id="PROD-CONFIRM-TWICE", brand="HUL", category="Soap", pack_size="100g", base_price=100.0, stock_quantity=50)
+    db_session.add(p)
+    db_session.flush()
+    inv = Inventory(tenant_id=tenant.id, sku_id=p.id, location="Loc", quantity_on_hand=50, low_stock_threshold=5)
+    db_session.add(inv)
+    db_session.flush()
+
+    cust = Customer(
+        retailer_name="Confirm Twice Shop", customer_id="C-CONFIRM-TWICE-1", address_text="Delhi",
+        gstin="07AAAAA1111A1Z1", tax_group="GST", payment_terms="COD",
+        credit_limit=100000.0, outstanding_balance=0.0
+    )
+    db_session.add(cust)
+    db_session.flush()
+
+    order = Order(tenant_id=tenant.id, internal_order_id="ORD-CONFIRM-TWICE-1", source="Portal", customer_id=cust.id)
+    db_session.add(order)
+    db_session.flush()
+    db_session.add(OrderLineItem(order_id=order.id, product_id=p.id, quantity=5, unit_price=100.0))
+    db_session.add(OrderStateLedger(order_id=order.id, from_status=None, to_status="Draft", updated_by="admin"))
+    db_session.commit()
+
+    first = client.post(f"/api/v1/orders/{order.id}/confirm")
+    assert first.status_code == 200
+
+    db_session.expire_all()
+    outstanding_after_first = float(db_session.get(Customer, cust.id).outstanding_balance)
+    stock_after_first = db_session.get(Inventory, inv.id).quantity_on_hand
+    assert outstanding_after_first == 500.0
+    assert stock_after_first == 45
+
+    # Re-confirming the same (now Confirmed) order must be rejected, not
+    # silently re-run.
+    second = client.post(f"/api/v1/orders/{order.id}/confirm")
+    assert second.status_code == 409
+
+    db_session.expire_all()
+    assert float(db_session.get(Customer, cust.id).outstanding_balance) == outstanding_after_first
+    assert db_session.get(Inventory, inv.id).quantity_on_hand == stock_after_first
+    from app.models.invoice import Invoice
+    invoice_count = db_session.query(Invoice).filter(Invoice.order_id == order.id).count()
+    assert invoice_count == 1
+
+
+def test_dispatch_order_post_rejects_draft_order(db_session, client):
+    """
+    Regression test for ORD-2: POST /orders/{id}/dispatch previously
+    performed the Dispatched transition with no state validation at all --
+    a Draft order could be "dispatched" while skipping Confirmed entirely.
+    """
+    tenant = DistributorTenant(name="Dispatch Draft Reject Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+    tenant_context.set(tenant.id)
+
+    cust = Customer(
+        retailer_name="Dispatch Draft Shop", customer_id="C-DISPATCH-DRAFT-1", address_text="Delhi",
+        gstin="07AAAAA1111A1Z1", tax_group="GST", payment_terms="COD"
+    )
+    db_session.add(cust)
+    db_session.flush()
+
+    order = Order(tenant_id=tenant.id, internal_order_id="ORD-DISPATCH-DRAFT-1", source="Portal", customer_id=cust.id)
+    db_session.add(order)
+    db_session.flush()
+    db_session.add(OrderStateLedger(order_id=order.id, from_status=None, to_status="Draft", updated_by="admin"))
+    db_session.commit()
+
+    response = client.post(
+        f"/api/v1/orders/{order.id}/dispatch",
+        json={"delivery_partner": "Test Courier", "vehicle_number": "KA-01-AB-1234"}
+    )
+    assert response.status_code == 409
+
+    db_session.expire_all()
+    db_session.refresh(order)
+    assert order.current_status == "Draft"
+
+
 def test_dispatch_releases_committed_inventory(db_session, client):
     """Dispatching a confirmed order should release its allocated units from
     quantity_committed (they've physically left the warehouse) without
@@ -1312,7 +1403,8 @@ def test_record_delivery_event(db_session, client):
     db_session.add(cust)
     db_session.flush()
 
-    # Setup Order
+    # Setup Order -- must already be Dispatched for delivery-event to be a
+    # valid transition (see ORD-2: Dispatched -> Delivered only).
     order = Order(
         tenant_id=tenant.id,
         internal_order_id="ORD-DELIVERY-TEST-1",
@@ -1321,8 +1413,10 @@ def test_record_delivery_event(db_session, client):
     )
     db_session.add(order)
     db_session.flush()
+    order.status = "Dispatched"
 
     db_session.add(OrderStateLedger(order_id=order.id, from_status=None, to_status="Draft", updated_by="admin"))
+    db_session.add(OrderStateLedger(order_id=order.id, from_status="Draft", to_status="Dispatched", updated_by="admin"))
     db_session.commit()
 
     # Call delivery event endpoint
@@ -1346,6 +1440,43 @@ def test_record_delivery_event(db_session, client):
     assert order.current_status == "Delivered"
     assert order.delivery_source == "manual"
     assert order.delivered_at is not None
+
+
+def test_record_delivery_event_rejects_invalid_from_status(db_session, client):
+    """
+    Regression test for ORD-2: record_delivery_event previously had zero
+    state validation -- a Draft (or Cancelled/already-Delivered) order could
+    be marked Delivered directly, skipping Confirmed and Dispatched
+    entirely. Only Dispatched -> Delivered is a valid transition.
+    """
+    tenant = DistributorTenant(name="Delivery Invalid Transition Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+    tenant_context.set(tenant.id)
+
+    cust = Customer(
+        retailer_name="Delivery Invalid Retailer", customer_id="C-DEL-INVALID", address_text="Address",
+        gstin="07AAAAA1111A1Z1", tax_group="GST", payment_terms="COD"
+    )
+    db_session.add(cust)
+    db_session.flush()
+
+    order = Order(tenant_id=tenant.id, internal_order_id="ORD-DELIVERY-INVALID-1", source="Portal", customer_id=cust.id)
+    db_session.add(order)
+    db_session.flush()
+    db_session.add(OrderStateLedger(order_id=order.id, from_status=None, to_status="Draft", updated_by="admin"))
+    db_session.commit()
+
+    response = client.post(
+        f"/api/v1/orders/{order.id}/delivery-event",
+        json={"status": "delivered", "source": "manual", "tenant_id": str(tenant.id)}
+    )
+    assert response.status_code == 409
+
+    db_session.expire_all()
+    db_session.refresh(order)
+    assert order.current_status == "Draft"
+    assert order.delivered_at is None
 
 
 def test_orders_list_query_count_regression(db_session, client):

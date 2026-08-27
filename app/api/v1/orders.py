@@ -319,7 +319,7 @@ def cancel_order(
 
     if current not in ("Draft", "Pending", "Confirmed", "Needs Review", "Partially Confirmed", "Awaiting Stock"):
         raise HTTPException(
-            status_code=400,
+            status_code=409,
             detail=f"Cannot cancel order with status '{current}'. Only Draft/Confirmed orders can be cancelled."
         )
 
@@ -377,6 +377,14 @@ def cancel_order(
             to_status="Cancelled",
             updated_by="system_cancel_request"
         ))
+        # Fix for DASH-1: the ledger transition was written, but order.status
+        # itself was never actually updated to "Cancelled" -- leaving the
+        # order's own status column stuck at its pre-cancel value (e.g.
+        # "Confirmed"). Downstream consumers that filter on Order.status
+        # directly (dashboard revenue aggregation, Tally export's
+        # EXPORTABLE_STATUSES allowlist) would then keep treating a
+        # cancelled order as live revenue / an exportable sale.
+        order.status = "Cancelled"
 
         db.commit()
         return {"status": "success", "order_id": str(order.id), "new_status": "Cancelled"}
@@ -531,7 +539,7 @@ def update_order_status(
     allowed = _VALID_TRANSITIONS.get(current_from_status, set())
     if payload.to_status not in allowed:
         raise HTTPException(
-            status_code=400,
+            status_code=409,
             detail=f"Invalid transition '{current_from_status}' → '{payload.to_status}'. Allowed: {sorted(allowed) or 'none (terminal or triage state)'}"
         )
 
@@ -1610,6 +1618,20 @@ def confirm_order_post(order_id: uuid.UUID, db: Session = Depends(get_db)):
 
     tenant_context.set(order.tenant_id)
 
+    # Fix for ORD-1: this endpoint previously had zero state validation,
+    # allowing an already-Confirmed/Dispatched/Delivered/Cancelled order to
+    # be re-confirmed -- each call re-ran the full inventory deduction,
+    # customer ledger debit, and Invoice creation, double/triple-counting
+    # all three on every repeat call (double-click, retry, or accidental
+    # resubmission). Only Draft -> Confirmed is valid here, matching
+    # update_order_status's _VALID_TRANSITIONS table and the frontend's own
+    # "Draft -> Confirmed" comment (messages/page.tsx).
+    if order.current_status != "Draft":
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot confirm order in status '{order.current_status}'. Only Draft orders can be confirmed."
+        )
+
     from app.services.order_confirmation_service import confirm_order
     confirm_order(db, order, updated_by="API")
     db.commit()
@@ -1877,6 +1899,19 @@ def dispatch_order_post(order_id: uuid.UUID, payload: DispatchPayload, backgroun
         raise HTTPException(status_code=404, detail="Order not found")
 
     tenant_context.set(order.tenant_id)
+
+    # Fix for ORD-2: this endpoint previously performed the Dispatched
+    # transition with NO state validation at all -- a Draft order could be
+    # "dispatched" while skipping Confirmed entirely, and an already-
+    # Dispatched/Delivered/Cancelled order could be re-dispatched, releasing
+    # committed inventory and firing a duplicate dispatch notification.
+    # Matches update_order_status's _VALID_TRANSITIONS table (Confirmed and
+    # Partially Confirmed -> Dispatched are the only valid "from" states).
+    if order.current_status not in ("Confirmed", "Partially Confirmed"):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot dispatch order in status '{order.current_status}'. Order must be Confirmed or Partially Confirmed first."
+        )
     
     shipment = db.query(Shipment).filter(Shipment.order_id == order_id).first()
     from app.models.customer import Customer
@@ -2012,6 +2047,16 @@ def record_delivery_event(
         raise HTTPException(status_code=404, detail="Order not found")
 
     tenant_context.set(order.tenant_id)
+
+    # Fix for ORD-2: this endpoint previously had zero state validation --
+    # a Cancelled, Draft, or already-Delivered order could be marked
+    # Delivered directly. Only Dispatched -> Delivered is valid, matching
+    # update_order_status's _VALID_TRANSITIONS table.
+    if order.current_status != "Dispatched":
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot record delivery for order in status '{order.current_status}'. Order must be Dispatched first."
+        )
 
     # Check if OrderStateLedger model exists
     has_ledger = False
