@@ -1,5 +1,6 @@
 import csv
 import os
+import re
 import uuid
 import logging
 import io
@@ -16,13 +17,25 @@ from app.database import tenant_context, with_db_retry
 import openpyxl
 
 # Event Discriminator & Ingestion Imports
-from datetime import datetime
+from datetime import datetime, timedelta
 from app.models.tenant import DistributorTenant
 from app.models.customer import Customer, CustomerAlias
 from app.models.order import Order, OrderLineItem, OrderStateLedger
 from app.services.gemini_service import GeminiService
 from app.utils.phone import normalize_phone_number, get_phone_number_variants
 from app.services.tenant_service import DEMO_TENANT_ID
+
+
+def normalize_message_content(text: str) -> str:
+    """
+    Normalizes WhatsApp message text for duplicate-content comparison:
+    lowercases, collapses all whitespace runs to a single space, and strips
+    leading/trailing whitespace. Used by the 5-minute content-based
+    deduplication check in ingest_message() (see WA-2) -- two messages that
+    only differ in casing/whitespace (e.g. a customer editing and resending
+    "10 Soap" vs "10  soap") are still treated as the same content.
+    """
+    return re.sub(r"\s+", " ", (text or "").strip().lower())
 
 logger = logging.getLogger(__name__)
 
@@ -502,6 +515,43 @@ class IngestionService:
                 "failed_rows": 0,
                 "error_message": None
             }
+
+        # ── LAYER 5b: Content-Based Duplicate Detection (WA-2) ───────────────────
+        # Deduplicates orders received within 5 minutes from the same customer
+        # with identical normalized content. This is distinct from (and in
+        # addition to) the webhook layer's message-ID-based retry dedup
+        # (app/api/v1/whatsapp.py's _PROCESSED_MSG_IDS) -- that only catches
+        # the exact same Evolution API delivery being retried; it does NOT
+        # catch a customer manually resending the identical text within the
+        # window (a fresh message ID each time), nor survive a process
+        # restart/multi-worker deployment, since it's an in-memory set. This
+        # check is DB-backed (keyed on Order.raw_source_text + customer_id +
+        # tenant_id + created_at), so it works across restarts/workers.
+        normalized_incoming = normalize_message_content(message_text)
+        dedup_window_start = datetime.utcnow() - timedelta(minutes=5)
+        recent_orders = db.query(Order).filter(
+            Order.tenant_id == tenant_id,
+            Order.customer_id == customer.id,
+            Order.source == "WhatsApp",
+            Order.created_at >= dedup_window_start,
+            Order.raw_source_text.isnot(None),
+        ).order_by(Order.created_at.desc()).all()
+        for existing_order in recent_orders:
+            if normalize_message_content(existing_order.raw_source_text) == normalized_incoming:
+                logger.info(
+                    "IngestionService: Layer 5b – Duplicate content from customer %s within 5-minute window "
+                    "(matches order %s created at %s); skipping.",
+                    customer.id, existing_order.internal_order_id, existing_order.created_at
+                )
+                return {
+                    "status": "duplicate",
+                    "message": "Duplicate order content received within the last 5 minutes; skipped.",
+                    "order_id": existing_order.internal_order_id,
+                    "job_id": None,
+                    "successful_rows": 0,
+                    "failed_rows": 0,
+                    "error_message": None
+                }
 
         # ── PRE-FILTER: Skip Gemini for obvious non-order messages ──────────────────
         # Saves ~40% of Gemini API calls at no cost to order accuracy.

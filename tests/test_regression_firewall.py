@@ -76,6 +76,62 @@ def test_whatsapp_webhook_decoupled_routing(db_session, setup_test_catalog):
     assert response.json().get("status") == "success"
 
 
+def test_whatsapp_content_duplicate_within_5_minutes_is_skipped(db_session, setup_test_catalog):
+    """
+    Regression test for WA-2: the spec requires deduplicating orders
+    received within 5 minutes from the same customer with identical
+    normalized content. Previously only an in-memory, message-ID-keyed
+    dedup existed (webhook-retry protection) -- a customer manually
+    resending the exact same text (a fresh message ID each time, e.g. a
+    retry from their own phone, or a WhatsApp client's own delivery retry
+    assigning a new id) created a second, fully independent duplicate order.
+    """
+    tenant = db_session.query(DistributorTenant).first()
+    tenant.whatsapp_order_phone = "+918888888888"
+    db_session.commit()
+
+    payload = {
+        "sender": "+919999888877",
+        "receiver": "+918888888888",
+        "message": "Bhaiya, send 5 packs of PatanjaliDantKanti"
+    }
+    first_response = client.post("/api/v1/whatsapp/webhook", json=payload)
+    assert first_response.status_code == 200
+    assert first_response.json().get("status") == "success"
+
+    orders_after_first = db_session.query(Order).filter(Order.source == "WhatsApp").count()
+    assert orders_after_first == 1
+
+    # Resend the EXACT same content (different casing/whitespace to prove
+    # normalization) within the 5-minute window -- must be skipped as a
+    # duplicate, not create a second order.
+    duplicate_payload = {
+        "sender": "+919999888877",
+        "receiver": "+918888888888",
+        "message": "  Bhaiya,  SEND 5 packs of PatanjaliDantKanti  "
+    }
+    second_response = client.post("/api/v1/whatsapp/webhook", json=duplicate_payload)
+    assert second_response.status_code == 200
+    assert second_response.json().get("status") == "duplicate"
+
+    orders_after_second = db_session.query(Order).filter(Order.source == "WhatsApp").count()
+    assert orders_after_second == 1, "Resending identical content within 5 minutes must not create a second order"
+
+    # A genuinely DIFFERENT message from the same customer must still go
+    # through normally (dedup must not be overly broad).
+    different_payload = {
+        "sender": "+919999888877",
+        "receiver": "+918888888888",
+        "message": "Bhaiya, send 20 packs of SurfExcel this time"
+    }
+    third_response = client.post("/api/v1/whatsapp/webhook", json=different_payload)
+    assert third_response.status_code == 200
+    assert third_response.json().get("status") == "success"
+
+    orders_after_third = db_session.query(Order).filter(Order.source == "WhatsApp").count()
+    assert orders_after_third == 2, "A genuinely different message must not be treated as a duplicate"
+
+
 # =====================================================================
 # 2. THE ORDER JOURNEY (ADDITION, CONFIRMATION, SHIPMENT)
 # =====================================================================
