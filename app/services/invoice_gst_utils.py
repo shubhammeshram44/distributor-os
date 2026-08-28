@@ -7,18 +7,29 @@ Indian financial year runs Apr-Mar: if the invoice date's month is >= 4, the
 FY is "{year}-{year+1 last 2 digits}"; otherwise it's "{year-1}-{year last 2
 digits}".
 
-Concurrency tradeoff: the sequence number is derived by counting existing
-invoice_number rows for this tenant+FY and incrementing. Under concurrent
+Concurrency: the sequence number is derived by counting existing
+invoice_number rows for this tenant+FY and incrementing -- under concurrent
 confirmations for the same tenant within the same request-response window,
-two transactions could theoretically read the same count and generate a
-duplicate number (a classic count-then-insert race). We accept this for now
-rather than introducing a dedicated per-tenant counter table with row-level
-locking, since invoice confirmation is a low-concurrency, per-distributor,
-human-triggered action in this product today. A DB-level unique index on
-(tenant_id, invoice_number) still exists as a safety net — a genuine race
-would surface as an IntegrityError on insert rather than silently persisting
-duplicate invoice numbers. If concurrent order confirmation becomes common,
-replace this with a `SELECT ... FOR UPDATE` counter row per tenant+FY.
+two transactions could read the same count and generate a duplicate number
+(a classic count-then-insert race). A DB-level unique index on
+(tenant_id, invoice_number) is the real backstop, guaranteeing no duplicate
+number is ever actually persisted.
+
+Fix for ORD-9: that backstop alone previously meant a genuine race crashed
+the LOSING transaction outright with an unhandled IntegrityError -- an
+otherwise perfectly valid order confirmation (credit check passed, stock
+already deducted) could fail with a raw 500 purely because of an
+invoice-numbering collision unrelated to its own data.
+create_invoice_with_unique_number() below retries the number-generation +
+insert inside a per-attempt SAVEPOINT a bounded number of times, so a race
+is resolved transparently (the loser simply computes the next number and
+retries) instead of surfacing as a crash. We use this retry-on-conflict
+approach rather than a dedicated per-tenant counter table with
+`SELECT ... FOR UPDATE` row locking, since invoice confirmation remains a
+low-concurrency, per-distributor, human-triggered action in this product
+today, and a bounded retry loop is a much smaller change with the same
+end-to-end correctness guarantee (no duplicate numbers, no unnecessary
+user-facing failure).
 
 CGST/SGST split: standard Indian intra-state GST convention — each product's
 own gst_rate (not a hardcoded 18%) is split evenly into CGST + SGST, each
@@ -26,6 +37,7 @@ applied to that line item's taxable value (allocated_quantity * unit_price).
 """
 import uuid
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
 from app.models.invoice import Invoice
 
@@ -55,6 +67,32 @@ def generate_invoice_number(db: Session, tenant_id: uuid.UUID, dt) -> str:
     )
     sequence = existing_count + 1
     return f"{prefix}{sequence:03d}"
+
+
+def create_invoice_with_unique_number(
+    db: Session, tenant_id: uuid.UUID, dt, invoice_kwargs: dict, max_attempts: int = 5
+) -> Invoice:
+    """Creates and flushes an Invoice row with a generated sequential invoice
+    number, retrying inside a per-attempt SAVEPOINT if a concurrent
+    confirmation/backfill for the same tenant+financial-year already claimed
+    that exact number (see ORD-9). `invoice_kwargs` must not include
+    `tenant_id` or `invoice_number` -- both are set here.
+    """
+    last_error: IntegrityError | None = None
+    for _ in range(max_attempts):
+        number = generate_invoice_number(db, tenant_id, dt)
+        nested = db.begin_nested()
+        try:
+            invoice = Invoice(tenant_id=tenant_id, invoice_number=number, **invoice_kwargs)
+            db.add(invoice)
+            db.flush()
+            nested.commit()
+            return invoice
+        except IntegrityError as exc:
+            nested.rollback()
+            last_error = exc
+            continue
+    raise last_error
 
 
 def compute_cgst_sgst(items, products_by_id: dict) -> tuple[float, float]:

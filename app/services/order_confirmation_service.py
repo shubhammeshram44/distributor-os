@@ -220,30 +220,37 @@ def confirm_order(db: Session, order: Order, updated_by: str, bypass_credit_limi
     # (e.g. via the allocation-queue approval flow in a separate workstream).
     invoice = None
     if billing_total > 0:
-        from app.services.invoice_gst_utils import compute_cgst_sgst, generate_invoice_number
+        from app.services.invoice_gst_utils import compute_cgst_sgst, create_invoice_with_unique_number
 
         cgst_amount, sgst_amount = compute_cgst_sgst(items, _products_by_id)
         invoice_created_at = datetime.utcnow()
 
-        invoice = Invoice(
-            tenant_id=order.tenant_id,
-            order_id=order.id,
-            gstin=customer.gstin if customer.gstin else "PENDING",
-            total_amount=billing_total,
-            # No real IRP (Invoice Registration Portal) integration exists yet —
-            # these must NOT claim a government e-invoice was actually cleared/generated.
-            irn_status="NOT_APPLICABLE",
-            qr_code_status="NOT_APPLICABLE",
-            customer_id=order.customer_id,
-            payment_status="UNPAID",
-            amount_paid=0.0,
-            created_at=invoice_created_at,
-            cgst_amount=cgst_amount,
-            sgst_amount=sgst_amount,
-            invoice_number=generate_invoice_number(db, order.tenant_id, invoice_created_at),
+        # Fix for ORD-9: previously built the Invoice directly with a single
+        # generate_invoice_number() call, then a bare db.flush() -- a
+        # concurrent confirmation for this same tenant+financial-year that
+        # landed first would win the (tenant_id, invoice_number) unique
+        # constraint, crashing THIS otherwise-valid confirmation (credit
+        # check already passed, stock already deducted) with an unhandled
+        # IntegrityError/500. create_invoice_with_unique_number() retries
+        # inside a per-attempt SAVEPOINT instead.
+        invoice = create_invoice_with_unique_number(
+            db, order.tenant_id, invoice_created_at,
+            {
+                "order_id": order.id,
+                "gstin": customer.gstin if customer.gstin else "PENDING",
+                "total_amount": billing_total,
+                # No real IRP (Invoice Registration Portal) integration exists yet —
+                # these must NOT claim a government e-invoice was actually cleared/generated.
+                "irn_status": "NOT_APPLICABLE",
+                "qr_code_status": "NOT_APPLICABLE",
+                "customer_id": order.customer_id,
+                "payment_status": "UNPAID",
+                "amount_paid": 0.0,
+                "created_at": invoice_created_at,
+                "cgst_amount": cgst_amount,
+                "sgst_amount": sgst_amount,
+            },
         )
-        db.add(invoice)
-        db.flush()
 
     # ── 9. Reconcile any existing customer credits against new invoice ──────────
 

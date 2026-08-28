@@ -1,11 +1,23 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import String, ForeignKey, Numeric, DateTime
+from sqlalchemy import String, ForeignKey, Numeric, DateTime, Index
 from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base, TenantMixin
 
 class Invoice(Base, TenantMixin):
     __tablename__ = "invoices"
+    __table_args__ = (
+        # Fix for ORD-9: this unique index previously existed only via the
+        # 710e0718f19f Alembic migration (a raw op.create_index() call), not
+        # mirrored here at the ORM level -- so the SQLite test suite (which
+        # bootstraps tables via Base.metadata.create_all() from these
+        # models, not by running migrations) never actually enforced it,
+        # letting a real invoice-numbering race go untested. Named to match
+        # the existing migration exactly so create_all() on a genuinely
+        # fresh database and the migration itself agree on one object, not
+        # two duplicate indexes.
+        Index("ix_invoices_tenant_invoice_number", "tenant_id", "invoice_number", unique=True),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     order_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orders.id", ondelete="CASCADE"), nullable=False)

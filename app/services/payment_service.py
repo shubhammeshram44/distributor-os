@@ -96,7 +96,7 @@ def reconcile_payments_and_invoices(db: Session, tenant_id: uuid.UUID, customer_
                 if amount_sum <= 0:
                     continue
 
-                from app.services.invoice_gst_utils import compute_cgst_sgst, generate_invoice_number
+                from app.services.invoice_gst_utils import compute_cgst_sgst, create_invoice_with_unique_number
                 from app.models.product import Product
                 _product_ids = {item.product_id for item in order.line_items}
                 _products_by_id = {
@@ -104,28 +104,35 @@ def reconcile_payments_and_invoices(db: Session, tenant_id: uuid.UUID, customer_
                 } if _product_ids else {}
                 cgst_amount, sgst_amount = compute_cgst_sgst(order.line_items, _products_by_id)
 
-                invoice = Invoice(
-                    tenant_id=tenant_id,
-                    order_id=order.id,
-                    gstin=customer.gstin if (customer and customer.gstin) else "PENDING",
-                    total_amount=amount_sum,
-                    # No real IRP integration exists yet — do not claim a
-                    # government e-invoice was actually cleared/generated.
-                    irn_status="NOT_APPLICABLE",
-                    qr_code_status="NOT_APPLICABLE",
-                    customer_id=order.customer_id,
-                    payment_status="UNPAID",
-                    amount_paid=0.0,
-                    created_at=order.created_at,
-                    cgst_amount=cgst_amount,
-                    sgst_amount=sgst_amount,
-                    invoice_number=generate_invoice_number(db, tenant_id, order.created_at),
+                # Fix for ORD-9: previously built the Invoice directly with a
+                # single generate_invoice_number() call, deferring a single
+                # batched db.flush() for the whole backfill loop -- a
+                # concurrent confirmation/backfill for this tenant+financial-
+                # year landing first would win the (tenant_id, invoice_number)
+                # unique constraint and crash this ENTIRE reconciliation pass
+                # (including every other order's otherwise-fine backfilled
+                # invoice) with an unhandled IntegrityError.
+                # create_invoice_with_unique_number() flushes and retries
+                # per-order inside its own SAVEPOINT instead.
+                create_invoice_with_unique_number(
+                    db, tenant_id, order.created_at,
+                    {
+                        "order_id": order.id,
+                        "gstin": customer.gstin if (customer and customer.gstin) else "PENDING",
+                        "total_amount": amount_sum,
+                        # No real IRP integration exists yet — do not claim a
+                        # government e-invoice was actually cleared/generated.
+                        "irn_status": "NOT_APPLICABLE",
+                        "qr_code_status": "NOT_APPLICABLE",
+                        "customer_id": order.customer_id,
+                        "payment_status": "UNPAID",
+                        "amount_paid": 0.0,
+                        "created_at": order.created_at,
+                        "cgst_amount": cgst_amount,
+                        "sgst_amount": sgst_amount,
+                    },
                 )
-                db.add(invoice)
                 invoices_created = True
-                
-    if invoices_created:
-        db.flush()
 
     # 2. Find completed payments and allocate unallocated balances via FIFO
     payment_query = db.query(Payment).filter(
