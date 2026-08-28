@@ -201,8 +201,29 @@ def test_concurrent_refresh_requests(db_session):
         results = [f.result() for f in futures]
         
     status_codes = [r.status_code for r in results]
-    assert 200 in status_codes
-    assert 401 in status_codes
+    assert status_codes == [200, 200]
+
+    # Exactly one response should have rotated and set the new cookie
+    resp_with_cookie = [r for r in results if "refresh_token" in r.cookies]
+    resp_no_cookie = [r for r in results if "refresh_token" not in r.cookies]
+    assert len(resp_with_cookie) == 1
+    assert len(resp_no_cookie) == 1
+
+    # Retrieve the new raw token from the cookie
+    new_raw_token = resp_with_cookie[0].cookies["refresh_token"]
+
+    db_session.expire_all()
+    session_row = db_session.query(RefreshSession).filter(RefreshSession.user_id == user.id).first()
+
+    # The canonical current token hash in DB must match the rotated token
+    assert session_row.token_hash == hashlib.sha256(new_raw_token.encode("utf-8")).hexdigest()
+    # The previous token hash must be the original token hash
+    assert session_row.previous_token_hash == hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+
+    # Verify that the new raw token is fully usable for subsequent normal refreshes
+    client.cookies.set("refresh_token", new_raw_token)
+    subsequent_resp = client.post("/api/v1/auth/refresh", headers={"Origin": "https://distroos.in"})
+    assert subsequent_resp.status_code == 200
 
 
 def test_unauthorized_refresh_clears_cookies(db_session):
@@ -266,3 +287,57 @@ def test_unauthorized_refresh_clears_cookies(db_session):
         headers={"Origin": "https://distroos.in"}
     )
     assert_cookies_cleared(resp_revoked)
+
+
+def test_previous_token_grace_period(db_session):
+    tenant, user = _seed_user_and_tenant(db_session)
+    raw_token_1 = _create_refresh_session(db_session, user.id)
+    
+    # 1. First refresh rotates token from 1 to 2
+    client.cookies.set("refresh_token", raw_token_1)
+    resp_1 = client.post("/api/v1/auth/refresh", headers={"Origin": "https://distroos.in"})
+    assert resp_1.status_code == 200
+    raw_token_2 = resp_1.cookies["refresh_token"]
+    
+    # 2. Refreshing again with token 1 (immediately previous token) within grace period should succeed,
+    # but under the concurrency fix it does NOT rotate, so no refresh_token cookie is returned.
+    client.cookies.set("refresh_token", raw_token_1)
+    resp_2 = client.post("/api/v1/auth/refresh", headers={"Origin": "https://distroos.in"})
+    assert resp_2.status_code == 200
+    assert "refresh_token" not in resp_2.cookies
+    
+    # 3. Old token 1 outside grace period is rejected
+    session_row = db_session.query(RefreshSession).filter(RefreshSession.user_id == user.id).first()
+    session_row.previous_token_valid_until = datetime.now(timezone.utc) - timedelta(seconds=1)
+    db_session.commit()
+    
+    client.cookies.set("refresh_token", raw_token_1)
+    resp_expired = client.post("/api/v1/auth/refresh", headers={"Origin": "https://distroos.in"})
+    assert resp_expired.status_code == 401
+    
+    # 4. Refreshing with token 2 (the current canonical token) should still succeed normally (rotates 2 -> 3)
+    client.cookies.set("refresh_token", raw_token_2)
+    resp_3 = client.post("/api/v1/auth/refresh", headers={"Origin": "https://distroos.in"})
+    assert resp_3.status_code == 200
+    raw_token_3 = resp_3.cookies["refresh_token"]
+    assert raw_token_3 != raw_token_2
+
+
+def test_rolling_and_absolute_expiry(db_session):
+    tenant, user = _seed_user_and_tenant(db_session)
+    raw_token = _create_refresh_session(db_session, user.id)
+    
+    h = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+    session_row = db_session.query(RefreshSession).filter(RefreshSession.token_hash == h).first()
+    
+    initial_absolute = _ensure_utc(session_row.absolute_expires_at)
+    
+    client.cookies.set("refresh_token", raw_token)
+    response = client.post("/api/v1/auth/refresh", headers={"Origin": "https://distroos.in"})
+    assert response.status_code == 200
+    
+    db_session.expire_all()
+    session_row = db_session.query(RefreshSession).filter(RefreshSession.user_id == user.id).first()
+    
+    assert _ensure_utc(session_row.expires_at) > datetime.now(timezone.utc) + timedelta(days=6.9)
+    assert _ensure_utc(session_row.absolute_expires_at) == initial_absolute

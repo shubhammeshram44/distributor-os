@@ -25,3 +25,5 @@ class RefreshSession(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     absolute_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    previous_token_hash: Mapped[str | None] = mapped_column(String(64), unique=True, index=True, nullable=True)
+    previous_token_valid_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
