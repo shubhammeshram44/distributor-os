@@ -34,11 +34,14 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
-ALLOWED_ORIGINS = [
-    "https://distributor-os-ui.onrender.com",
-    "https://distroos.in",
-    "https://www.distroos.in"
-]
+# Fix for AUTH-4: this used to be a separate, independently-maintained
+# origin allowlist from app/main.py's CORSMiddleware config -- the two had
+# already drifted apart (main.py's list was missing these production
+# domains). ALLOWED_ORIGINS is now re-exported here (for any existing
+# import of `app.api.v1.auth.ALLOWED_ORIGINS`) from the single shared
+# source of truth in app/utils/origin_policy.py, which both main.py's CORS
+# middleware and this module's origin validation reference.
+from app.utils.origin_policy import ALLOWED_ORIGINS, is_origin_allowed
 
 
 def normalize_indian_phone(value: str) -> str:
@@ -78,13 +81,8 @@ def _canonicalize_user_phone(user: User, canonical_phone: str) -> bool:
 
 def _validate_origin(request: Request):
     origin = request.headers.get("origin")
-    if origin:
-        _is_prod = os.getenv("ENVIRONMENT", "development") == "production"
-        if _is_prod:
-            if origin not in ALLOWED_ORIGINS:
-                raise HTTPException(status_code=400, detail="CORS validation failed: Origin not allowed.")
-        elif not (origin.startswith("http://localhost:") or origin.startswith("http://127.0.0.1:") or origin in ALLOWED_ORIGINS):
-            raise HTTPException(status_code=400, detail="CORS validation failed: Origin not allowed in development.")
+    if origin and not is_origin_allowed(origin):
+        raise HTTPException(status_code=400, detail="CORS validation failed: Origin not allowed.")
 
 
 def _ensure_utc(dt: datetime) -> datetime:
