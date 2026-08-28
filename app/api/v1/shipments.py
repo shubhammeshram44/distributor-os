@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Cookie, Header, B
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select, and_, or_
 from sqlalchemy.orm import Session, aliased, joinedload
+from sqlalchemy.exc import IntegrityError
 from app.database import get_db, tenant_context
 from app.models.order import Order, OrderLineItem, OrderStateLedger
 from app.models.customer import Customer
@@ -520,28 +521,46 @@ def create_shipment(
         if existing:
             continue
 
-        new_shipment = Shipment(
-            id=uuid.uuid4(),
-            tenant_id=extracted_tenant_id,
-            order_id=order_id,
-            carrier=driver_name,
-            tracking_id=payload.vehicle_number,
-            status="Out For Delivery",
-            destination=dest
-        )
-        db.add(new_shipment)
+        # Fix for SHIP-5: the existing-shipment check above is a plain
+        # check-then-insert with no lock -- a classic TOCTOU race. Two
+        # near-simultaneous dispatch requests for the same order could both
+        # pass that check before either commits, creating two Shipment rows
+        # (and two OrderStateLedger entries, and a double order.status
+        # write) for one order. The DB-level unique constraint on
+        # shipments(tenant_id, order_id) is the actual backstop; a per-order
+        # SAVEPOINT (nested transaction) started BEFORE staging any of this
+        # order's mutations lets exactly this order's insert be rolled back
+        # and skipped on a race, without discarding shipments already
+        # committed earlier in this same batch request.
+        nested = db.begin_nested()
+        try:
+            new_shipment = Shipment(
+                id=uuid.uuid4(),
+                tenant_id=extracted_tenant_id,
+                order_id=order_id,
+                carrier=driver_name,
+                tracking_id=payload.vehicle_number,
+                status="Out For Delivery",
+                destination=dest
+            )
+            db.add(new_shipment)
 
+            # Transition order to Dispatched in ledger
+            db.add(OrderStateLedger(
+                id=uuid.uuid4(),
+                tenant_id=extracted_tenant_id,
+                order_id=order_id,
+                from_status=order.current_status,
+                to_status="Dispatched",
+                updated_by="back_office"
+            ))
+            order.status = "Dispatched"
+            db.flush()
+            nested.commit()
+        except IntegrityError:
+            nested.rollback()
+            continue
 
-        # Transition order to Dispatched in ledger
-        db.add(OrderStateLedger(
-            id=uuid.uuid4(),
-            tenant_id=extracted_tenant_id,
-            order_id=order_id,
-            from_status=order.current_status,
-            to_status="Dispatched",
-            updated_by="back_office"
-        ))
-        order.status = "Dispatched"
         created_shipments.append(new_shipment)
 
     db.commit()

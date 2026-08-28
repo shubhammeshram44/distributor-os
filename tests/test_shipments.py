@@ -536,3 +536,61 @@ def test_update_shipment_status_requires_order_dispatched_first(db_session, clie
     db_session.refresh(shipment)
     assert shipment.status == "Out For Delivery"
     client.cookies.clear()
+
+
+def test_create_shipment_race_condition_caught_by_db_constraint(db_session, client, monkeypatch):
+    """
+    Regression test for SHIP-5: create_shipment's existing-shipment check is
+    a plain check-then-insert with no lock -- a classic TOCTOU race. This
+    simulates the race directly by monkeypatching the pre-check to always
+    report "no existing shipment found" (as if a concurrent request's insert
+    hadn't committed yet when this request's SELECT ran), then verifies the
+    request still cannot succeed in creating a genuine duplicate: the
+    DB-level unique constraint on shipments(tenant_id, order_id) must catch
+    it and skip just that order, rather than either crashing the whole
+    batch or silently creating two shipment rows for one order.
+    """
+    tenant, _, order, existing_shipment = _setup_tenant_order_shipment(
+        db_session, "ShipRaceTenant", order_status="Confirmed", create_shipment=True
+    )
+
+    driver = User(tenant_id=tenant.id, full_name="Race Driver", phone_number="+919999000011", role="Driver")
+    db_session.add(driver)
+    db_session.commit()
+
+    # Force the pre-check to report "no existing shipment" (simulating the
+    # race window), so the request proceeds straight to the insert -- which
+    # must then be caught by the DB constraint, not silently succeed.
+    from sqlalchemy.orm import Query
+    original_first = Query.first
+
+    def _patched_first(self):
+        if self.column_descriptions and self.column_descriptions[0]["entity"] is Shipment:
+            return None
+        return original_first(self)
+
+    monkeypatch.setattr(Query, "first", _patched_first)
+
+    token = sign_jwt({"user_id": str(uuid.uuid4()), "tenant_id": str(tenant.id), "role": "SUPER_ADMIN"})
+    client.cookies.set("access_token", token)
+
+    response = client.post(
+        "/api/v1/shipments",
+        json={
+            "driver_id": str(driver.id),
+            "vehicle_number": "KA-01-RACE-1",
+            "order_ids": [str(order.id)]
+        }
+    )
+    client.cookies.clear()
+
+    # The batch endpoint must not 500 -- it should just skip the order that
+    # lost the race (count == 0), since a shipment for it already exists.
+    assert response.status_code == 201
+    assert response.json()["count"] == 0
+
+    db_session.expire_all()
+    shipment_count = db_session.query(Shipment).filter(
+        Shipment.tenant_id == tenant.id, Shipment.order_id == order.id
+    ).count()
+    assert shipment_count == 1, "The race must not result in two shipments for the same order"

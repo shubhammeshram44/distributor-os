@@ -1,11 +1,18 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import String, ForeignKey, DateTime
+from sqlalchemy import String, ForeignKey, DateTime, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship, object_session
 from app.database import Base, TenantMixin
 
 class Shipment(Base, TenantMixin):
     __tablename__ = "shipments"
+    __table_args__ = (
+        # SHIP-5: the create_shipment endpoint's existing-shipment check is
+        # a plain check-then-insert with no lock -- a classic TOCTOU race.
+        # One order should never have two shipment rows; enforce it at the
+        # DB level as the actual backstop.
+        UniqueConstraint("tenant_id", "order_id", name="uq_shipments_tenant_order"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     order_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orders.id", ondelete="CASCADE"), nullable=False)
