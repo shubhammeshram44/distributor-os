@@ -4,6 +4,7 @@ import logging
 import asyncio
 import os
 import sys
+from collections import OrderedDict
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status, Query, BackgroundTasks, Request, Cookie, Header
 from fastapi.responses import Response
@@ -27,7 +28,14 @@ logger = logging.getLogger("uvicorn.error")
 
 # Bounded in-memory set to deduplicate Evolution API retries within a session.
 # Keys are the Evolution API message IDs (data.key.id from the raw payload).
-_PROCESSED_MSG_IDS: set[str] = set()
+# Fix for WA-7: this must evict the OLDEST entry once full, not an arbitrary
+# one -- plain set.pop() has no defined order, so a legitimate very-recent
+# message ID could get evicted right after being added while a genuinely
+# stale one lingers, defeating the dedup guarantee for real near-term
+# WhatsApp/Evolution API retries. An OrderedDict (used purely as an
+# insertion-ordered set via dict keys) makes "oldest" well-defined and
+# O(1) to evict via popitem(last=False).
+_PROCESSED_MSG_IDS: "OrderedDict[str, None]" = OrderedDict()
 _PROCESSED_MSG_IDS_MAX = 10_000
 
 
@@ -36,8 +44,8 @@ def _check_and_mark_msg_id(msg_id: str) -> bool:
     if msg_id in _PROCESSED_MSG_IDS:
         return True
     if len(_PROCESSED_MSG_IDS) >= _PROCESSED_MSG_IDS_MAX:
-        _PROCESSED_MSG_IDS.pop()
-    _PROCESSED_MSG_IDS.add(msg_id)
+        _PROCESSED_MSG_IDS.popitem(last=False)
+    _PROCESSED_MSG_IDS[msg_id] = None
     return False
 
 
