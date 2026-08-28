@@ -460,3 +460,158 @@ def test_list_customers_search_matches_customer_alias(db_session, client):
     assert response.status_code == 200
     ids = {item["id"] for item in response.json()["items"]}
     assert str(cust.id) in ids, "Searching by a registered CustomerAlias value must find the customer"
+
+
+# ---------------------------------------------------------------------------
+# CUST-4: soft-delete (archive) support
+# ---------------------------------------------------------------------------
+
+def test_delete_customer_soft_deletes_and_excludes_from_default_list(db_session, client):
+    """
+    Regression test for CUST-4: DELETE /customers/{id} must soft-delete
+    (is_active=False, deleted_at set), never hard-delete -- and the
+    customer must disappear from the default GET /customers list but
+    still be fetchable via include_inactive=True.
+    """
+    tenant = DistributorTenant(name="Soft Delete Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+    tenant_context.set(tenant.id)
+
+    cust = Customer(
+        tenant_id=tenant.id, retailer_name="Closing Down Store", customer_id="C-SOFTDEL-1",
+        address_text="Delhi", gstin="07AAAAA1111A1Z1", tax_group="GST", payment_terms="COD"
+    )
+    db_session.add(cust)
+    db_session.commit()
+
+    response = client.delete(f"/api/v1/customers/{cust.id}?tenant_id={tenant.id}")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["is_active"] is False
+    assert data["deleted_at"] is not None
+
+    db_session.expire_all()
+    db_session.refresh(cust)
+    assert cust.is_active is False
+    assert cust.deleted_at is not None
+
+    # Row must still physically exist -- this is a soft-delete only.
+    assert db_session.query(Customer).filter(Customer.id == cust.id).count() == 1
+
+    default_list = client.get(f"/api/v1/customers?tenant_id={tenant.id}")
+    assert str(cust.id) not in {item["id"] for item in default_list.json()["items"]}
+
+    inactive_list = client.get(f"/api/v1/customers?tenant_id={tenant.id}&include_inactive=true")
+    assert str(cust.id) in {item["id"] for item in inactive_list.json()["items"]}
+
+
+def test_delete_customer_is_idempotent(db_session, client):
+    """Deleting an already-archived customer must be a clean no-op success,
+    not an error -- and must not reset deleted_at to a later timestamp."""
+    tenant = DistributorTenant(name="Idempotent Delete Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+    tenant_context.set(tenant.id)
+
+    cust = Customer(
+        tenant_id=tenant.id, retailer_name="Already Gone Store", customer_id="C-SOFTDEL-2",
+        address_text="Delhi", gstin="07AAAAA1111A1Z1", tax_group="GST", payment_terms="COD"
+    )
+    db_session.add(cust)
+    db_session.commit()
+
+    first = client.delete(f"/api/v1/customers/{cust.id}?tenant_id={tenant.id}")
+    assert first.status_code == 200
+    first_deleted_at = first.json()["deleted_at"]
+
+    second = client.delete(f"/api/v1/customers/{cust.id}?tenant_id={tenant.id}")
+    assert second.status_code == 200
+    assert second.json()["deleted_at"] == first_deleted_at
+
+
+def test_delete_customer_rejects_cross_tenant(db_session, client):
+    """A tenant must not be able to soft-delete another tenant's customer."""
+    tenant_a = DistributorTenant(name="Delete Tenant A")
+    tenant_b = DistributorTenant(name="Delete Tenant B")
+    db_session.add_all([tenant_a, tenant_b])
+    db_session.commit()
+
+    cust_b = Customer(
+        tenant_id=tenant_b.id, retailer_name="Tenant B Store", customer_id="C-SOFTDEL-CROSS",
+        address_text="Delhi", gstin="07AAAAA1111A1Z1", tax_group="GST", payment_terms="COD"
+    )
+    db_session.add(cust_b)
+    db_session.commit()
+
+    response = client.delete(f"/api/v1/customers/{cust_b.id}?tenant_id={tenant_a.id}")
+    assert response.status_code == 404
+
+    db_session.expire_all()
+    db_session.refresh(cust_b)
+    assert cust_b.is_active is True
+
+
+def test_restore_customer_reactivates(db_session, client):
+    """POST /customers/{id}/restore must reverse a soft-delete."""
+    tenant = DistributorTenant(name="Restore Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+    tenant_context.set(tenant.id)
+
+    cust = Customer(
+        tenant_id=tenant.id, retailer_name="Reopened Store", customer_id="C-RESTORE-1",
+        address_text="Delhi", gstin="07AAAAA1111A1Z1", tax_group="GST", payment_terms="COD",
+        is_active=False, deleted_at=__import__("datetime").datetime.utcnow()
+    )
+    db_session.add(cust)
+    db_session.commit()
+
+    response = client.post(f"/api/v1/customers/{cust.id}/restore?tenant_id={tenant.id}")
+    assert response.status_code == 200
+    assert response.json()["is_active"] is True
+
+    db_session.expire_all()
+    db_session.refresh(cust)
+    assert cust.is_active is True
+    assert cust.deleted_at is None
+
+
+def test_confirming_order_for_deactivated_customer_is_blocked(db_session, client):
+    """
+    Regression test for CUST-4: a soft-deleted customer must not be able
+    to have new orders confirmed against them (this would create a new
+    invoice + debit their balance for a customer staff explicitly
+    archived), even though their EXISTING historical orders/invoices
+    remain fully visible and untouched.
+    """
+    from app.models.product import Product
+    from app.models.inventory import Inventory
+    from app.models.order import Order, OrderLineItem
+
+    tenant = DistributorTenant(name="Deactivated Confirm Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+    tenant_context.set(tenant.id)
+
+    p = Product(sku_id="PROD-DEACTIVATED-1", brand="HUL", category="Soap", pack_size="100g", base_price=45.0, stock_quantity=50)
+    db_session.add(p)
+    db_session.flush()
+    db_session.add(Inventory(tenant_id=tenant.id, sku_id=p.id, location="Loc", quantity_on_hand=50, low_stock_threshold=10))
+
+    cust = Customer(
+        tenant_id=tenant.id, retailer_name="Deactivated Store", customer_id="C-DEACTIVATED-1",
+        address_text="Delhi", gstin="07AAAAA1111A1Z1", tax_group="GST", payment_terms="COD",
+        credit_limit=100000.0, is_active=False
+    )
+    db_session.add(cust)
+    db_session.flush()
+
+    order = Order(tenant_id=tenant.id, internal_order_id="ORD-DEACTIVATED-1", source="Portal", customer_id=cust.id)
+    db_session.add(order)
+    db_session.flush()
+    db_session.add(OrderLineItem(order_id=order.id, product_id=p.id, quantity=5, unit_price=45.0))
+    db_session.commit()
+
+    response = client.put(f"/api/v1/orders/{order.id}/status", json={"to_status": "Confirmed"})
+    assert response.status_code == 409

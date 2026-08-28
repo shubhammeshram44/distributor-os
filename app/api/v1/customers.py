@@ -58,6 +58,67 @@ def update_customer(
     }
 
 
+@router.delete("/{customer_id}", status_code=status.HTTP_200_OK)
+def delete_customer(
+    customer_id: uuid.UUID,
+    tenant_id: uuid.UUID,
+    db: Session = Depends(get_db)
+):
+    """
+    Soft-deletes (archives) a customer -- never a hard DELETE. Fix for
+    CUST-4: this is the intentional, spec-required way to remove a
+    customer from active use (e.g. a store that closed down) while
+    guaranteeing their historical orders/invoices/ledger entries remain
+    fully intact and queryable (this endpoint never touches those rows;
+    DB-1's ondelete="RESTRICT" on every customer_id FK also makes a real
+    hard-delete structurally impossible for any customer with financial
+    history). Idempotent: deleting an already-archived customer is a
+    no-op success, not an error.
+    """
+    tenant_context.set(tenant_id)
+    customer = db.get(Customer, customer_id)
+    if not customer or customer.tenant_id != tenant_id:
+        raise HTTPException(status_code=404, detail="Customer not found")
+
+    if customer.is_active:
+        customer.is_active = False
+        customer.deleted_at = datetime.utcnow()
+        db.commit()
+
+    return {
+        "status": "success",
+        "customer_id": str(customer.id),
+        "is_active": customer.is_active,
+        "deleted_at": customer.deleted_at.isoformat() if customer.deleted_at else None
+    }
+
+
+@router.post("/{customer_id}/restore", status_code=status.HTTP_200_OK)
+def restore_customer(
+    customer_id: uuid.UUID,
+    tenant_id: uuid.UUID,
+    db: Session = Depends(get_db)
+):
+    """
+    Reverses a soft-delete, restoring a customer to active use. Companion
+    to delete_customer above -- since soft-delete is the only supported
+    delete mechanism (CUST-4), restoring is just as important: an
+    accidental archive must be undoable without any data-recovery effort,
+    since no data was ever actually removed.
+    """
+    tenant_context.set(tenant_id)
+    customer = db.get(Customer, customer_id)
+    if not customer or customer.tenant_id != tenant_id:
+        raise HTTPException(status_code=404, detail="Customer not found")
+
+    if not customer.is_active:
+        customer.is_active = True
+        customer.deleted_at = None
+        db.commit()
+
+    return {"status": "success", "customer_id": str(customer.id), "is_active": customer.is_active}
+
+
 class CustomerCreatePayload(BaseModel):
     store_name: str
     contact_number: str
@@ -146,6 +207,7 @@ def list_customers(
     search: str | None = None,
     sort_by: str = "retailer_name",
     sort_order: str = "asc",
+    include_inactive: bool = False,
     db: Session = Depends(get_db)
 ):
     """
@@ -154,6 +216,15 @@ def list_customers(
     tenant_context.set(tenant_id)
 
     query = db.query(Customer).filter(Customer.tenant_id == tenant_id)
+    # Fix for CUST-4: soft-deleted (archived) customers are excluded from
+    # the default staff-facing list -- their historical orders/invoices
+    # remain fully queryable elsewhere (statement/payments endpoints look
+    # customers up by ID directly, not through this filtered list), but a
+    # deactivated store shouldn't keep cluttering everyday customer lists
+    # or remain selectable for new orders. include_inactive=True opts back
+    # in for an admin "show archived customers" view.
+    if not include_inactive:
+        query = query.filter(Customer.is_active.is_(True))
 
     if search:
         term = f"%{search.lower()}%"
@@ -212,7 +283,9 @@ def list_customers(
             "credit_limit": float(customer.credit_limit) if customer.credit_limit else 0.0,
             "outstanding_balance": float(customer.outstanding_balance) if customer.outstanding_balance else 0.0,
             "phone": customer.phone_number if customer.phone_number else (fallback_alias.alias_value if fallback_alias else "N/A"),
-            "whatsapp_notifications_enabled": customer.whatsapp_notifications_enabled
+            "whatsapp_notifications_enabled": customer.whatsapp_notifications_enabled,
+            "is_active": customer.is_active,
+            "deleted_at": customer.deleted_at.isoformat() if customer.deleted_at else None
         })
 
     return {"items": response_payload, "total": total_count, "skip": skip, "limit": limit}

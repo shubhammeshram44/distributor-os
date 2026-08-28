@@ -1,5 +1,6 @@
 import uuid
-from sqlalchemy import String, ForeignKey, Float, Numeric, Boolean, event, select, UniqueConstraint
+from datetime import datetime
+from sqlalchemy import String, ForeignKey, Float, Numeric, Boolean, DateTime, event, select, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 from app.database import Base, TenantMixin
 from app.utils.phone import normalize_phone_number
@@ -24,6 +25,16 @@ class Customer(Base, TenantMixin):
 
     phone_number: Mapped[str | None] = mapped_column(String(50), nullable=True, default=None)
     whatsapp_notifications_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    # Fix for CUST-4: soft-delete support. Customers must never be hard-
+    # deleted (their orders/invoices/ledger entries are RESTRICTed from
+    # cascading away -- see DB-1 -- specifically so this history always
+    # remains queryable), but staff still need a way to archive a customer
+    # out of active lists (e.g. a store that closed down) without losing
+    # any of that history. is_active=False + deleted_at set is that
+    # archival marker; nothing referencing customer_id is ever touched.
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="1")
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
 
     aliases: Mapped[list["CustomerAlias"]] = relationship(back_populates="customer", cascade="all, delete-orphan")
 

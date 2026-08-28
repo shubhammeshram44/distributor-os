@@ -50,6 +50,17 @@ def confirm_order(db: Session, order: Order, updated_by: str, bypass_credit_limi
     customer = db.get(Customer, order.customer_id)
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
+    # Fix for CUST-4: a soft-deleted (archived) customer must not be able to
+    # transact -- confirming an order debits their outstanding balance and
+    # creates a new invoice, which makes no sense for a customer staff have
+    # explicitly deactivated (e.g. a closed-down store). This does not
+    # affect that customer's EXISTING orders/invoices, which remain fully
+    # visible and unaffected; it only blocks NEW commercial activity.
+    if not customer.is_active:
+        raise HTTPException(
+            status_code=409,
+            detail="This customer has been deactivated and cannot have new orders confirmed. Restore the customer first."
+        )
 
     from_status = order.current_status
 
