@@ -206,6 +206,103 @@ def test_dashboard_overview_endpoint(db_session, client, seed_demo_data):
     assert next(item for item in donut if item["name"] == "0-15 Days")["percentage"] == 39
 
 
+def test_dashboard_overview_outstanding_collections_matches_metrics(db_session, client, seed_demo_data):
+    """
+    Regression test for DASH-3: GET /dashboard/overview's outstanding_collections
+    previously summed the GROSS total_amount of every invoice regardless of
+    payment_status, without subtracting amount_paid -- inflating the figure
+    and including fully-PAID invoices. GET /dashboard/metrics computes the
+    same "Outstanding Collections" label correctly (nets total - paid,
+    excludes PAID invoices). The same KPI must return the same value from
+    both endpoints for the same tenant/data.
+
+    The demo seed data alone doesn't isolate this bug (every seeded invoice
+    is UNPAID with amount_paid=0.0, so gross == net coincidentally) -- a
+    PAID invoice with a nonzero amount_paid is added directly so the two
+    calculations can actually diverge if the bug is present.
+    """
+    from app.models.invoice import Invoice as _Invoice
+    from app.models.customer import Customer as _Customer
+    from app.models.order import Order as _Order
+
+    demo_tenant_id = uuid.UUID("d3b07384-d113-4956-a5d2-64be7357c11d")
+    tenant_context.set(demo_tenant_id)
+
+    cust = db_session.query(_Customer).filter(_Customer.tenant_id == demo_tenant_id).first()
+    order = db_session.query(_Order).filter(_Order.tenant_id == demo_tenant_id).first()
+
+    paid_invoice = _Invoice(
+        tenant_id=demo_tenant_id, order_id=order.id, customer_id=cust.id,
+        gstin="PENDING", total_amount=5000.0, amount_paid=5000.0,
+        payment_status="PAID", irn_status="NOT_APPLICABLE", qr_code_status="NOT_APPLICABLE",
+        invoice_number="DASH3-TEST-PAID-1"
+    )
+    db_session.add(paid_invoice)
+    db_session.commit()
+
+    metrics_resp = client.get(f"/api/v1/dashboard/metrics?tenant_id={demo_tenant_id}")
+    assert metrics_resp.status_code == 200
+    metrics_outstanding = metrics_resp.json()["outstanding_collections"]
+
+    overview_resp = client.get(f"/api/v1/dashboard/overview?tenant_id={demo_tenant_id}")
+    assert overview_resp.status_code == 200
+    overview_outstanding = overview_resp.json()["metrics"]["outstanding_collections"]
+
+    # The new PAID invoice (5000, fully paid) must NOT appear in either
+    # endpoint's outstanding total -- both must agree, and both must
+    # exclude it (i.e. equal the pre-existing 377190.0 baseline, not
+    # 377190.0 + 5000.0).
+    assert overview_outstanding == metrics_outstanding == 377190.0
+
+
+def test_dashboard_metrics_end_date_includes_todays_orders(db_session, client, seed_demo_data):
+    """
+    Regression test for DASH-6: a plain "YYYY-MM-DD" end_date parsed to
+    midnight (00:00:00) of that day, and the `<= end_dt` filter then
+    excluded every order created LATER that same day -- silently dropping
+    "today" from every date-ranged KPI whenever end_date=<today> is passed,
+    exactly as the Sales Analytics UI's Performance Metrics widget does
+    (frontend/src/app/dashboard/sales-analytics/page.tsx builds
+    endDate = now.toISOString().split("T")[0]).
+    """
+    from app.models.tenant import DistributorTenant as _Tenant
+    from app.models.customer import Customer as _Customer
+    from app.models.product import Product as _Product
+    from app.models.order import Order as _Order, OrderLineItem as _OLI, OrderStateLedger as _OSL
+
+    demo_tenant_id = uuid.UUID("d3b07384-d113-4956-a5d2-64be7357c11d")
+    tenant_context.set(demo_tenant_id)
+
+    cust = db_session.query(_Customer).filter(_Customer.tenant_id == demo_tenant_id).first()
+    prod = db_session.query(_Product).filter(_Product.tenant_id == demo_tenant_id).first()
+
+    # Create an order created "right now" (later today), confirmed.
+    today_order = _Order(
+        tenant_id=demo_tenant_id, internal_order_id="ORD-DASH6-TODAY-1",
+        source="Portal", customer_id=cust.id
+    )
+    db_session.add(today_order)
+    db_session.flush()
+    db_session.add(_OLI(order_id=today_order.id, product_id=prod.id, quantity=1, unit_price=999.0, allocated_quantity=1))
+    db_session.add(_OSL(order_id=today_order.id, from_status=None, to_status="Confirmed", updated_by="test"))
+    today_order.status = "Confirmed"
+    db_session.commit()
+
+    today_str = datetime.utcnow().strftime("%Y-%m-%d")
+    resp = client.get(
+        f"/api/v1/dashboard/metrics?tenant_id={demo_tenant_id}&start_date=2020-01-01&end_date={today_str}"
+    )
+    assert resp.status_code == 200
+
+    # Compare orders_count with vs without end_date to prove today's order is included.
+    resp_no_end_date = client.get(f"/api/v1/dashboard/metrics?tenant_id={demo_tenant_id}&start_date=2020-01-01")
+    assert resp_no_end_date.status_code == 200
+    assert resp.json()["orders_count"] == resp_no_end_date.json()["orders_count"], (
+        "Passing end_date=today must include orders created today, matching the "
+        "unfiltered (no end_date) count"
+    )
+
+
 def test_dashboard_collections_donut_non_demo_tenant_buckets_by_invoice_age(db_session, client):
     """
     Regression test for the collections-donut / dashboard-overview N+1 fix: the
@@ -286,6 +383,18 @@ def test_dashboard_credit_risk_alerts(db_session, client, seed_demo_data):
     assert "alerts" in data
     assert "total_at_risk_count" in data
     assert "total_at_risk_amount" in data
+
+
+def test_dashboard_credit_risk_alerts_requires_authentication(db_session, client):
+    """
+    Regression test for TENANT-3: GET /dashboard/credit-risk-alerts
+    previously required only a bare tenant_id query param with no JWT
+    resolution at all -- any caller could pull any tenant's outstanding-
+    balance/credit-risk data by supplying that tenant's UUID. With no
+    tenant_id and no session at all, the request must be rejected outright.
+    """
+    resp = client.get("/api/v1/dashboard/credit-risk-alerts")
+    assert resp.status_code == 401
 
 
 def test_dashboard_business_health_score(db_session, client, seed_demo_data):

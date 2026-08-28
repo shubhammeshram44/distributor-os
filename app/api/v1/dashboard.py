@@ -96,7 +96,15 @@ def get_dashboard_metrics(
             if "T" in end_date:
                 end_dt = datetime.fromisoformat(end_date.replace("Z", "+00:00").replace("+00:00", ""))
             else:
-                end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+                # Fix for DASH-6: a plain "YYYY-MM-DD" end_date parsed to
+                # midnight (00:00:00) of that day, and every order created
+                # later that same day was then excluded by the `<= end_dt`
+                # filter below -- silently dropping "today" from every
+                # date-ranged KPI whenever the caller passes today's date
+                # (exactly what the Sales Analytics UI's 7/30/90-day
+                # Performance Metrics widget does). Treat a date-only
+                # end_date as inclusive of the WHOLE day.
+                end_dt = datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1) - timedelta(microseconds=1)
         except Exception:
             pass
 
@@ -387,7 +395,10 @@ def get_dashboard_overview(
             if "T" in end_date:
                 end_dt = datetime.fromisoformat(end_date.replace("Z", "+00:00").replace("+00:00", ""))
             else:
-                end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+                # Fix for DASH-6: see identical fix + rationale in
+                # get_dashboard_metrics above -- a date-only end_date must
+                # be treated as inclusive of the whole day.
+                end_dt = datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1) - timedelta(microseconds=1)
         except Exception:
             pass
 
@@ -469,7 +480,18 @@ def get_dashboard_overview(
             average_order_value_change = float((aov - hist_aov) / hist_aov * 100)
 
     # 4. Outstanding Collections (Snapshot - Timeframe-Irrespective)
-    outstanding_stmt = select(func.sum(Invoice.total_amount)).where(Invoice.tenant_id == tenant_id)
+    # Fix for DASH-3: this previously summed the GROSS total_amount of every
+    # invoice regardless of payment_status, without subtracting amount_paid
+    # at all -- inflating this figure (always >= the correct value) and
+    # including fully-PAID invoices, unlike /dashboard/metrics's identical-
+    # purpose calculation just above, which correctly nets (total - paid)
+    # and excludes PAID invoices. The same "Outstanding Collections" label
+    # showed two different, and one flatly wrong, numbers depending which
+    # endpoint the frontend called. Now matches /metrics exactly.
+    outstanding_stmt = (
+        select(func.sum(Invoice.total_amount - Invoice.amount_paid))
+        .where(and_(Invoice.tenant_id == tenant_id, Invoice.payment_status != "PAID"))
+    )
     outstanding = db.execute(outstanding_stmt).scalar() or 0.0
 
     # 5. Inventory counts (Low Stock, Out of Stock, Total SKUs, Inventory Value)
@@ -1193,13 +1215,20 @@ def parse_payment_terms_days(payment_terms: str | None) -> int:
 
 @router.get("/credit-risk-alerts")
 def get_credit_risk_alerts(
-    tenant_id: uuid.UUID,
+    tenant_id: uuid.UUID | None = None,
+    access_token: str | None = Cookie(None),
+    authorization: str | None = Header(None),
     db: Session = Depends(get_db)
 ):
     """
     Returns top customers by credit risk for dashboard widget.
     Shows max 5 customers, ordered by risk level then overdue days.
     """
+    # Fix for TENANT-3: unlike every other dashboard endpoint, this one
+    # required a bare `tenant_id` query param with no JWT resolution at
+    # all -- any caller could pull any tenant's outstanding-balance/
+    # credit-risk data by supplying that tenant's UUID.
+    tenant_id = resolve_tenant_id(tenant_id, access_token, authorization)
     from app.models.customer import Customer
     from app.models.ledger import CustomerLedger
     from datetime import datetime, timedelta
