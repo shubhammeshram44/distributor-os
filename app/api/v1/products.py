@@ -395,6 +395,17 @@ def import_products_csv(
                     updated_skus.append(sku_id)
                 else:
                     # Insert operation
+                    # Fix for INV-4: Product.stock_quantity defaults to 100
+                    # (see app/models/product.py) if left unset, while the
+                    # paired Inventory row below is (correctly) created with
+                    # quantity_on_hand=0 -- a bulk-imported catalog has no
+                    # real on-hand count yet. Leaving stock_quantity at its
+                    # default caused the two to permanently disagree: the
+                    # Products list showed "100 in stock" for a SKU that was
+                    # actually unorderable (0 real stock, per Inventory,
+                    # which is what confirm_order() actually reads).
+                    # Explicitly set to 0 to match, mirroring create_product's
+                    # own stock_quantity/quantity_on_hand sync pattern below.
                     new_product = Product(
                         id=uuid.uuid4(),
                         tenant_id=tenant_id,
@@ -402,7 +413,8 @@ def import_products_csv(
                         brand=brand,
                         category=category,
                         pack_size=pack_size,
-                        base_price=base_price
+                        base_price=base_price,
+                        stock_quantity=0
                     )
                     db.add(new_product)
                     db.flush()
@@ -434,7 +446,7 @@ def import_products_csv(
                         tenant_id=tenant_id,
                         sku_id=new_product.id,
                         location="Aisle-A1",
-                        quantity_on_hand=0,
+                        quantity_on_hand=new_product.stock_quantity,
                         quantity_committed=0,
                         low_stock_threshold=10
                     )

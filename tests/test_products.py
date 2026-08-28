@@ -85,6 +85,46 @@ def test_import_products_success(db_session, client):
     assert "BrandInsert CatInsert" in alias_names
 
 
+def test_import_products_stock_quantity_matches_inventory_on_hand(db_session, client):
+    """
+    Regression test for INV-4: bulk CSV import previously left
+    Product.stock_quantity unset on newly-inserted products, so it took
+    the column's default value (100), while the paired Inventory row was
+    (correctly) created with quantity_on_hand=0 -- a bulk-imported catalog
+    has no real on-hand count yet. This meant the Products list showed
+    "100 in stock" for a freshly-imported SKU that was actually
+    unorderable (0 real stock, per Inventory, which is what
+    confirm_order() actually reads for allocation).
+    """
+    tenant = DistributorTenant(name="INV4 Import Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+    tenant_context.set(tenant.id)
+
+    csv_content = (
+        "sku_id,brand,category,pack_size,base_price\n"
+        "PROD-INV4-NEW,BrandInv4,CatInv4,500g,75.00\n"
+    )
+    csv_file = io.BytesIO(csv_content.encode("utf-8"))
+
+    response = client.post(
+        "/api/v1/products/import",
+        data={"tenant_id": str(tenant.id)},
+        files={"file": ("products.csv", csv_file, "text/csv")}
+    )
+    assert response.status_code == 200
+
+    db_session.expire_all()
+    new_prod = db_session.query(Product).filter_by(sku_id="PROD-INV4-NEW").one()
+    inv = db_session.query(Inventory).filter_by(sku_id=new_prod.id).one()
+
+    assert new_prod.stock_quantity == inv.quantity_on_hand == 0, (
+        "A freshly bulk-imported product's Product.stock_quantity must match "
+        "its paired Inventory.quantity_on_hand -- both should be 0 (no real "
+        "stock known yet), not 100/0"
+    )
+
+
 def test_import_products_missing_headers(db_session, client):
     tenant = DistributorTenant(name="Import Header Test Tenant")
     db_session.add(tenant)
