@@ -1,10 +1,17 @@
 import uuid
-from sqlalchemy import String, ForeignKey, Numeric, Integer
+from sqlalchemy import String, ForeignKey, Numeric, Integer, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base, TenantMixin
 
 class Product(Base, TenantMixin):
     __tablename__ = "products"
+    __table_args__ = (
+        # INV-6: DB-level enforcement of unique SKU per tenant. Previously only
+        # an app-side check-then-insert existed (products.py), which is not
+        # race-safe -- two concurrent create_product/import_products_csv calls
+        # for the same SKU could both pass the check and both insert.
+        UniqueConstraint("tenant_id", "sku_id", name="uq_products_tenant_sku_id"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     sku_id: Mapped[str] = mapped_column(String(100), nullable=False)
