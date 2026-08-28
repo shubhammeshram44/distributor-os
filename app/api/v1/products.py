@@ -357,6 +357,15 @@ def import_products_csv(
         error_rows = []
         updated_skus = []
         inserted_skus = []
+        # Fix for INV-8: track SKUs already processed within THIS file so a
+        # duplicate row silently "wins" over an earlier one in the same
+        # upload is flagged as an error instead of quietly overwriting it --
+        # previously the DB-existence check below couldn't tell an
+        # in-file duplicate apart from a legitimate update to a
+        # pre-existing catalog SKU, since the first occurrence's INSERT was
+        # already flushed and visible to the second occurrence's SELECT
+        # within the same transaction.
+        seen_skus_in_file = set()
 
         print("\n================== PRODUCT CATALOG IMPORT STARTED ==================")
         print(f"File Name: {file.filename}")
@@ -384,6 +393,14 @@ def import_products_csv(
                 if base_price < 0:
                     raise ValueError("Base price cannot be negative.")
 
+                if sku_id in seen_skus_in_file:
+                    raise ValueError(
+                        f"Duplicate SKU '{sku_id}' appears more than once in this file "
+                        "-- only the first occurrence can be processed. Remove the "
+                        "duplicate row and re-upload."
+                    )
+                seen_skus_in_file.add(sku_id)
+
                 # Core transactional lookup logic loop
                 existing_product = db.query(Product).filter(Product.sku_id == sku_id).first()
                 if existing_product:
@@ -395,6 +412,17 @@ def import_products_csv(
                     updated_skus.append(sku_id)
                 else:
                     # Insert operation
+                    # Fix for INV-4: Product.stock_quantity defaults to 100
+                    # (see app/models/product.py) if left unset, while the
+                    # paired Inventory row below is (correctly) created with
+                    # quantity_on_hand=0 -- a bulk-imported catalog has no
+                    # real on-hand count yet. Leaving stock_quantity at its
+                    # default caused the two to permanently disagree: the
+                    # Products list showed "100 in stock" for a SKU that was
+                    # actually unorderable (0 real stock, per Inventory,
+                    # which is what confirm_order() actually reads).
+                    # Explicitly set to 0 to match, mirroring create_product's
+                    # own stock_quantity/quantity_on_hand sync pattern below.
                     new_product = Product(
                         id=uuid.uuid4(),
                         tenant_id=tenant_id,
@@ -402,7 +430,8 @@ def import_products_csv(
                         brand=brand,
                         category=category,
                         pack_size=pack_size,
-                        base_price=base_price
+                        base_price=base_price,
+                        stock_quantity=0
                     )
                     db.add(new_product)
                     db.flush()
@@ -434,7 +463,7 @@ def import_products_csv(
                         tenant_id=tenant_id,
                         sku_id=new_product.id,
                         location="Aisle-A1",
-                        quantity_on_hand=0,
+                        quantity_on_hand=new_product.stock_quantity,
                         quantity_committed=0,
                         low_stock_threshold=10
                     )

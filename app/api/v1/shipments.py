@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Cookie, Header, B
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select, and_, or_
 from sqlalchemy.orm import Session, aliased, joinedload
+from sqlalchemy.exc import IntegrityError
 from app.database import get_db, tenant_context
 from app.models.order import Order, OrderLineItem, OrderStateLedger
 from app.models.customer import Customer
@@ -478,7 +479,9 @@ def create_shipment(
     extracted_tenant_id = resolve_tenant_id(None, access_token, authorization)
     tenant_context.set(extracted_tenant_id)
 
-    driver = db.get(User, payload.driver_id)
+    driver = db.query(User).filter(
+        User.id == payload.driver_id, User.tenant_id == extracted_tenant_id
+    ).first()
     if not driver:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -488,40 +491,76 @@ def create_shipment(
 
     created_shipments = []
     for order_id in payload.order_ids:
-        order = db.get(Order, order_id)
+        # Fix for SHIP-1: previously fetched by PK alone with no tenant_id
+        # filter -- order_id is fully caller-controlled, so any tenant could
+        # dispatch/hijack another tenant's order, see their customer's real
+        # address, and desync that tenant's order status/ledger.
+        order = db.query(Order).filter(
+            Order.id == order_id, Order.tenant_id == extracted_tenant_id
+        ).first()
         if not order:
             continue
 
-        customer = db.get(Customer, order.customer_id)
+        # Fix for SHIP-3: previously dispatched an order regardless of its
+        # current status -- a Draft, Cancelled, or already-Delivered order
+        # could be silently dispatched. Only Confirmed/Partially Confirmed
+        # orders may be dispatched (matches orders.py's own
+        # _VALID_TRANSITIONS table).
+        if order.current_status not in ("Confirmed", "Partially Confirmed"):
+            continue
+
+        customer = db.query(Customer).filter(
+            Customer.id == order.customer_id, Customer.tenant_id == extracted_tenant_id
+        ).first()
         dest = customer.address_text if customer else "Unknown"
 
         # Check if already has shipment
-        existing = db.query(Shipment).filter(Shipment.order_id == order_id).first()
+        existing = db.query(Shipment).filter(
+            Shipment.order_id == order_id, Shipment.tenant_id == extracted_tenant_id
+        ).first()
         if existing:
             continue
 
-        new_shipment = Shipment(
-            id=uuid.uuid4(),
-            tenant_id=extracted_tenant_id,
-            order_id=order_id,
-            carrier=driver_name,
-            tracking_id=payload.vehicle_number,
-            status="Out For Delivery",
-            destination=dest
-        )
-        db.add(new_shipment)
+        # Fix for SHIP-5: the existing-shipment check above is a plain
+        # check-then-insert with no lock -- a classic TOCTOU race. Two
+        # near-simultaneous dispatch requests for the same order could both
+        # pass that check before either commits, creating two Shipment rows
+        # (and two OrderStateLedger entries, and a double order.status
+        # write) for one order. The DB-level unique constraint on
+        # shipments(tenant_id, order_id) is the actual backstop; a per-order
+        # SAVEPOINT (nested transaction) started BEFORE staging any of this
+        # order's mutations lets exactly this order's insert be rolled back
+        # and skipped on a race, without discarding shipments already
+        # committed earlier in this same batch request.
+        nested = db.begin_nested()
+        try:
+            new_shipment = Shipment(
+                id=uuid.uuid4(),
+                tenant_id=extracted_tenant_id,
+                order_id=order_id,
+                carrier=driver_name,
+                tracking_id=payload.vehicle_number,
+                status="Out For Delivery",
+                destination=dest
+            )
+            db.add(new_shipment)
 
+            # Transition order to Dispatched in ledger
+            db.add(OrderStateLedger(
+                id=uuid.uuid4(),
+                tenant_id=extracted_tenant_id,
+                order_id=order_id,
+                from_status=order.current_status,
+                to_status="Dispatched",
+                updated_by="back_office"
+            ))
+            order.status = "Dispatched"
+            db.flush()
+            nested.commit()
+        except IntegrityError:
+            nested.rollback()
+            continue
 
-        # Transition order to Dispatched in ledger
-        db.add(OrderStateLedger(
-            id=uuid.uuid4(),
-            tenant_id=extracted_tenant_id,
-            order_id=order_id,
-            from_status=order.current_status,
-            to_status="Dispatched",
-            updated_by="back_office"
-        ))
-        order.status = "Dispatched"
         created_shipments.append(new_shipment)
 
     db.commit()
@@ -544,17 +583,66 @@ def update_shipment_status(
     shipment_id: uuid.UUID,
     payload: ShipmentStatusPayload,
     background_tasks: BackgroundTasks,
+    access_token: str | None = Cookie(None),
+    authorization: str | None = Header(None),
     db: Session = Depends(get_db)
 ):
-    shipment = db.get(Shipment, shipment_id)
+    # Fix for SHIP-2: this endpoint previously had NO authentication or
+    # tenant scoping at all -- it derived "the tenant" from whichever
+    # shipment_id the caller happened to reference, rather than from the
+    # caller's own authenticated session. Any caller (even fully
+    # unauthenticated) could mark an arbitrary tenant's shipment delivered.
+    extracted_tenant_id = resolve_tenant_id(None, access_token, authorization)
+    tenant_context.set(extracted_tenant_id)
+
+    shipment = db.query(Shipment).filter(
+        Shipment.id == shipment_id, Shipment.tenant_id == extracted_tenant_id
+    ).first()
     if not shipment:
         raise HTTPException(status_code=404, detail="Shipment not found")
 
-    tenant_context.set(shipment.tenant_id)
+    # Fix for SHIP-4: payload.status was previously an unconstrained,
+    # arbitrary string with no validation -- any value (typos, garbage,
+    # lowercase variants) was persisted verbatim into shipment.status AND
+    # order.status, silently breaking case-sensitive filters used elsewhere
+    # (e.g. Order.status == "Confirmed" in /pending). Restrict to the
+    # actual shipment lifecycle values this endpoint is ever used for.
+    _ALLOWED_TARGET_STATUSES = {"delivered", "completed", "out for delivery"}
+    normalized_status = payload.status.strip().lower()
+    if normalized_status not in _ALLOWED_TARGET_STATUSES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported shipment status '{payload.status}'. Allowed: Delivered, Out For Delivery."
+        )
+    is_delivered_target = normalized_status in ("delivered", "completed")
+
+    order = db.query(Order).filter(
+        Order.id == shipment.order_id, Order.tenant_id == extracted_tenant_id
+    ).first()
+
+    # Idempotency guard: re-applying the same target status this shipment
+    # already has (double-click, retry) must be a safe no-op -- not
+    # duplicate the OrderStateLedger row, re-fire a customer notification,
+    # or overwrite the true first-delivery timestamp.
+    if shipment.status.strip().lower() == normalized_status:
+        return {
+            "status": "success",
+            "shipment_id": str(shipment.id),
+            "new_status": shipment.status
+        }
+
+    # Only a Dispatched order can be marked Delivered here (matches
+    # orders.py's own _VALID_TRANSITIONS table) -- prevents marking a
+    # Draft/Cancelled/never-dispatched order's shipment as delivered.
+    if is_delivered_target and order and order.current_status not in ("Dispatched",):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot mark shipment delivered while order is in status '{order.current_status}'. Order must be Dispatched first."
+        )
+
     shipment.status = payload.status
 
     # Log transition in order ledger without modifying outstanding payment balance
-    order = db.get(Order, shipment.order_id)
     if order:
         db.add(OrderStateLedger(
             id=uuid.uuid4(),
@@ -567,14 +655,14 @@ def update_shipment_status(
         order.status = payload.status
 
         # Update order.delivered_at and order.delivery_source if status is delivered/completed
-        if payload.status.upper() in ("DELIVERED", "COMPLETED"):
+        if is_delivered_target:
             order.delivered_at = datetime.utcnow()
             order.delivery_source = payload.source
 
     db.commit()
 
     # Fire order_delivered notification if status is delivered/completed (non-blocking)
-    if payload.status.upper() in ("DELIVERED", "COMPLETED") and order:
+    if is_delivered_target and order:
         background_tasks.add_task(
             _fire_delivered_notification_sync,
             str(order.tenant_id),

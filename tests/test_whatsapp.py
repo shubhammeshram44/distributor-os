@@ -1,5 +1,6 @@
 import uuid
 import pytest
+from collections import OrderedDict
 from fastapi.testclient import TestClient
 from app.main import app
 from app.models.tenant import DistributorTenant
@@ -680,3 +681,66 @@ def test_whatsapp_webhook_connection_open_auto_sync_only_tenant_fallback(db_sess
 
 
 
+
+
+# ---------------------------------------------------------------------------
+# WA-7: message-ID dedup eviction must be FIFO (oldest-first), not arbitrary
+# ---------------------------------------------------------------------------
+
+def test_processed_msg_id_eviction_is_oldest_first():
+    """
+    Regression test for WA-7: _PROCESSED_MSG_IDS used a plain set with
+    set.pop() to evict once full -- Python sets have no defined ordering, so
+    that could evict a just-added, still-relevant message ID while an old,
+    genuinely stale one stayed put, silently weakening the dedup guarantee
+    for real near-term Evolution API retries. Eviction must always remove
+    the OLDEST entry first (a proper FIFO/insertion-order guarantee).
+    """
+    import app.api.v1.whatsapp as wa
+
+    # Deterministic check: the eviction order guarantee requires an
+    # insertion-ordered structure. A plain set has no ordering contract at
+    # all (CPython's set iteration order depends on hash values / process
+    # hash-randomization seed, not insertion order) -- the behavioral
+    # assertions below happened to pass "by accident" against the old
+    # set-based implementation in some interpreter runs (small sets of
+    # short strings can coincidentally hash-iterate in insertion order),
+    # so this type check is the only fully reliable, seed-independent way
+    # to pin down the fix.
+    assert isinstance(wa._PROCESSED_MSG_IDS, OrderedDict), (
+        "_PROCESSED_MSG_IDS must be an OrderedDict (or equivalent insertion-"
+        "ordered structure) so eviction has a well-defined oldest-first "
+        "order -- a plain set's iteration/pop order is not guaranteed to "
+        "match insertion order (see WA-7)."
+    )
+
+    wa._PROCESSED_MSG_IDS.clear()
+    original_max = wa._PROCESSED_MSG_IDS_MAX
+    wa._PROCESSED_MSG_IDS_MAX = 3
+    try:
+        assert wa._check_and_mark_msg_id("msg-1") is False
+        assert wa._check_and_mark_msg_id("msg-2") is False
+        assert wa._check_and_mark_msg_id("msg-3") is False
+        # Set is now full (3/3). Adding a 4th must evict msg-1 (the oldest),
+        # never msg-2 or msg-3 (the more recently seen ones).
+        assert wa._check_and_mark_msg_id("msg-4") is False
+
+        assert "msg-1" not in wa._PROCESSED_MSG_IDS, "oldest entry must be evicted first"
+        assert "msg-2" in wa._PROCESSED_MSG_IDS
+        assert "msg-3" in wa._PROCESSED_MSG_IDS
+        assert "msg-4" in wa._PROCESSED_MSG_IDS
+
+        # msg-1 was evicted, so it must now be treated as a "new" message
+        # again (not a false-negative duplicate) -- and doing so evicts
+        # msg-2 (now the oldest), not msg-3 or msg-4.
+        assert wa._check_and_mark_msg_id("msg-1") is False
+        assert "msg-2" not in wa._PROCESSED_MSG_IDS
+        assert "msg-3" in wa._PROCESSED_MSG_IDS
+        assert "msg-4" in wa._PROCESSED_MSG_IDS
+        assert "msg-1" in wa._PROCESSED_MSG_IDS
+
+        # A still-present ID must still be correctly detected as a duplicate.
+        assert wa._check_and_mark_msg_id("msg-3") is True
+    finally:
+        wa._PROCESSED_MSG_IDS_MAX = original_max
+        wa._PROCESSED_MSG_IDS.clear()

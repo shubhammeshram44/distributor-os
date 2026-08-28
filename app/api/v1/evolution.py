@@ -1,6 +1,7 @@
 import uuid
 import logging
 import asyncio
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query, status, Cookie, Header
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -217,6 +218,14 @@ async def disconnect_instance(
             if tenant:
                 tenant.whatsapp_phone_id = None
                 tenant.whatsapp_order_phone = None
+                # Fix for WA-5: disconnect_instance cleared the phone/instance
+                # config but never updated whatsapp_connection_status (or
+                # its accompanying disconnected_at/reason fields), so
+                # GET .../whatsapp-status kept reporting "connected" even
+                # though the instance had just been deleted on Evolution API.
+                tenant.whatsapp_connection_status = "disconnected"
+                tenant.whatsapp_disconnected_at = datetime.utcnow()
+                tenant.whatsapp_disconnect_reason = "manual_disconnect"
                 db.commit()
                 # Invalidate cache
                 IngestionService.invalidate_tenant_cache(resolved_tenant_id)

@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     # Firebase Authentication
     FIREBASE_CREDENTIALS_JSON: str | None = None
 
+    # Deployment environment: "development" (default, safe for local work) or
+    # "production". Used only to gate the SECRET_KEY safety check below —
+    # does not otherwise change app behavior.
+    ENVIRONMENT: str = "development"
 
     # Allow configuration via environment variables or .env file
     model_config = SettingsConfigDict(
@@ -27,3 +31,19 @@ class Settings(BaseSettings):
     )
 
 settings = Settings()
+
+# Fix for AUTH-3: SECRET_KEY signs every JWT session/refresh token in the
+# app (see app/utils/security.py). Its default value is a fixed, publicly
+# visible string committed to source control -- if a production deployment
+# is ever started with ENVIRONMENT=production but without overriding
+# SECRET_KEY, anyone who reads this file could forge a valid session token
+# for any user/tenant, a complete authentication bypass. Fail fast at
+# startup rather than silently running with all this implies.
+_INSECURE_DEFAULT_SECRET_KEY = "super-secret-key-distributor-os-2026"
+if settings.ENVIRONMENT.lower() == "production" and settings.SECRET_KEY == _INSECURE_DEFAULT_SECRET_KEY:
+    raise RuntimeError(
+        "SECRET_KEY is still set to the insecure, publicly-known default value "
+        "while ENVIRONMENT=production. Set a strong, unique SECRET_KEY via the "
+        "environment before starting the app in production -- refusing to start "
+        "with a forgeable JWT signing secret."
+    )

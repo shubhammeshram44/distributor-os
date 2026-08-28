@@ -9,7 +9,7 @@ class PaymentPromise(Base, TenantMixin):
     __tablename__ = "payment_promises"
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    customer_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("customers.id", ondelete="CASCADE"), nullable=False)
+    customer_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("customers.id", ondelete="RESTRICT"), nullable=False)
     # Nullable: a promise may be general (covers multiple/unspecified invoices) rather than tied to one invoice.
     invoice_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("invoices.id", ondelete="CASCADE"), nullable=True)
 

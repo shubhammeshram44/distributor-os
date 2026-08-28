@@ -31,4 +31,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_column("customer_ledgers", "description")
+    bind = op.get_bind()
+    if column_exists(bind, "customer_ledgers", "description"):
+        op.drop_column("customer_ledgers", "description")

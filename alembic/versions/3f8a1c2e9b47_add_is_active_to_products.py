@@ -30,5 +30,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    with op.batch_alter_table('products') as batch_op:
-        batch_op.drop_column('is_active')
+    bind = op.get_bind()
+    if column_exists(bind, 'products', 'is_active'):
+        with op.batch_alter_table('products') as batch_op:
+            batch_op.drop_column('is_active')

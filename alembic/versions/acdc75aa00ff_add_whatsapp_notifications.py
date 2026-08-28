@@ -54,10 +54,14 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     """Downgrade schema."""
+    bind = op.get_bind()
     with op.batch_alter_table('distributor_tenants', schema=None) as batch_op:
-        batch_op.drop_column('notification_prefs')
+        if column_exists(bind, 'distributor_tenants', 'notification_prefs'):
+            batch_op.drop_column('notification_prefs')
 
     with op.batch_alter_table('customers', schema=None) as batch_op:
-        batch_op.drop_column('whatsapp_notifications_enabled')
+        if column_exists(bind, 'customers', 'whatsapp_notifications_enabled'):
+            batch_op.drop_column('whatsapp_notifications_enabled')
 
-    op.drop_table('whatsapp_message_logs')
+    if table_exists(bind, 'whatsapp_message_logs'):
+        op.drop_table('whatsapp_message_logs')

@@ -14,37 +14,23 @@ from app.models.product import Product
 logger = logging.getLogger("uvicorn.error")
 
 
-def check_credit_limit(db: Session, customer: Customer, order_total: float, exclude_order_id: uuid.UUID | None = None) -> float:
+def check_credit_limit(db: Session, customer: Customer, order_total: float) -> float:
     """
-    Computes the total combined outstanding balance for a customer.
-    Checks only orders in Confirmed, Partially Confirmed, or Awaiting Stock state.
-    """
-    from sqlalchemy import select as sa_select, func, and_, or_, case
-    from app.models.order import Order, OrderLineItem
+    Computes the customer's total combined outstanding exposure if this new
+    order's billing_total were added on top of their current outstanding
+    balance.
 
-    # Matches the original Python `li.allocated_quantity or li.quantity` semantics:
-    # falls back to `quantity` when allocated_quantity is NULL *or* 0.
-    _effective_qty = case(
-        (or_(OrderLineItem.allocated_quantity.is_(None), OrderLineItem.allocated_quantity == 0), OrderLineItem.quantity),
-        else_=OrderLineItem.allocated_quantity
-    )
-    
-    query = (
-        sa_select(func.sum(_effective_qty * OrderLineItem.unit_price))
-        .join(Order, OrderLineItem.order_id == Order.id)
-        .where(
-            and_(
-                Order.customer_id == customer.id,
-                Order.tenant_id == customer.tenant_id,
-                Order.status.in_(["Confirmed", "Partially Confirmed", "Awaiting Stock"])
-            )
-        )
-    )
-    if exclude_order_id:
-        query = query.where(Order.id != exclude_order_id)
-        
-    confirmed_outstanding = float(db.execute(query).scalar() or 0.0)
-    return confirmed_outstanding + order_total
+    Fix for CUST-1: this previously re-summed only orders still in
+    Confirmed/Partially Confirmed/Awaiting Stock status, so the moment an
+    order was Dispatched or Delivered (the normal, fast fulfillment path) it
+    silently dropped out of the credit check entirely -- even though it was
+    still fully unpaid. customer.outstanding_balance (see ledger_service.py)
+    is the single, ledger-derived source of truth for a customer's true
+    unpaid exposure across ALL orders/invoices regardless of fulfillment
+    status, and is what every other risk display in the app already uses.
+    """
+    return float(customer.outstanding_balance or 0.0) + order_total
+
 
 
 def confirm_order(db: Session, order: Order, updated_by: str, bypass_credit_limit: bool = False) -> Invoice | None:
@@ -101,15 +87,28 @@ def confirm_order(db: Session, order: Order, updated_by: str, bypass_credit_limi
 
     # ── 3. Inventory allocation (single pass, partial fill) ────────────────────
     # Batch-fetch all inventory rows for this order's SKUs in one query instead of
-    # one SELECT per line item.
+    # one SELECT per line item. Uses SELECT ... FOR UPDATE (with_for_update) so
+    # concurrent confirmations touching the same SKUs serialize on these locked
+    # rows instead of each reading a stale on-hand snapshot and both committing
+    # an allocation the physical stock can't actually support (see INV-1).
     _sku_ids = {item.product_id for item in items}
     _inventory_by_sku = {
         inv.sku_id: inv
         for inv in db.query(Inventory).filter(
             Inventory.tenant_id == order.tenant_id,
             Inventory.sku_id.in_(_sku_ids)
-        ).all()
+        ).with_for_update().all()
     } if _sku_ids else {}
+
+    # Deferred inventory decrements: (inv_record, allocated_qty) pairs computed
+    # here are only APPLIED after the credit-limit check below passes (see
+    # step 5). Previously the actual `quantity_on_hand -=` decrement happened
+    # here, was flushed, and got permanently committed even if the
+    # credit-limit check failed afterwards -- silently and irreversibly
+    # burning real stock on every credit-rejected confirmation attempt, with
+    # each retry compounding the loss since the order never advances past
+    # Draft (see INV-2, ORD-3).
+    _pending_deductions: list[tuple[Inventory, int]] = []
 
     for item in items:
         inv_record = _inventory_by_sku.get(item.product_id)
@@ -144,10 +143,10 @@ def confirm_order(db: Session, order: Order, updated_by: str, bypass_credit_limi
                     created_at=datetime.utcnow(),
                 ))
 
-        # Deduct inventory for allocated units
+        # Defer the actual inventory deduction until after the credit-limit
+        # check passes (step 5) -- do NOT mutate inv_record here.
         if inv_record and allocated > 0:
-            inv_record.quantity_on_hand -= allocated
-            inv_record.quantity_committed = (inv_record.quantity_committed or 0) + allocated
+            _pending_deductions.append((inv_record, allocated))
 
     db.flush()
 
@@ -161,8 +160,11 @@ def confirm_order(db: Session, order: Order, updated_by: str, bypass_credit_limi
     )
 
     # ── 5. Credit limit check against billing total ────────────────────────────
+    # Runs BEFORE any inventory deduction is applied (see step 3) so that a
+    # credit-limit failure can never leave a partial, uncompensated stock
+    # decrement behind -- see INV-2, ORD-3.
     if not bypass_credit_limit:
-        combined = check_credit_limit(db, customer, billing_total, exclude_order_id=order.id)
+        combined = check_credit_limit(db, customer, billing_total)
         if combined > float(customer.credit_limit):
             db.add(DemandGap(
                 id=uuid.uuid4(),
@@ -186,6 +188,16 @@ def confirm_order(db: Session, order: Order, updated_by: str, bypass_credit_limi
                 detail=f"Credit limit exceeded. Combined balance: ₹{combined:,.2f}, Limit: ₹{float(customer.credit_limit):,.2f}"
             )
 
+    # ── 5b. Apply the deferred inventory deductions ────────────────────────────
+    # Only now, after the credit-limit check has passed, do we actually
+    # decrement on-hand stock -- computed with the FOR UPDATE-locked rows from
+    # step 3, so this reflects a consistent, race-free snapshot.
+    for inv_record, allocated in _pending_deductions:
+        inv_record.quantity_on_hand -= allocated
+        inv_record.quantity_committed = (inv_record.quantity_committed or 0) + allocated
+    if _pending_deductions:
+        db.flush()
+
     # ── 6. Record DEBIT transaction via ledger service ─────────────────────────
     # This atomically writes the ledger entry AND recomputes outstanding_balance
     # from the full ledger — preventing balance/ledger sync drift.
@@ -208,30 +220,37 @@ def confirm_order(db: Session, order: Order, updated_by: str, bypass_credit_limi
     # (e.g. via the allocation-queue approval flow in a separate workstream).
     invoice = None
     if billing_total > 0:
-        from app.services.invoice_gst_utils import compute_cgst_sgst, generate_invoice_number
+        from app.services.invoice_gst_utils import compute_cgst_sgst, create_invoice_with_unique_number
 
         cgst_amount, sgst_amount = compute_cgst_sgst(items, _products_by_id)
         invoice_created_at = datetime.utcnow()
 
-        invoice = Invoice(
-            tenant_id=order.tenant_id,
-            order_id=order.id,
-            gstin=customer.gstin if customer.gstin else "PENDING",
-            total_amount=billing_total,
-            # No real IRP (Invoice Registration Portal) integration exists yet —
-            # these must NOT claim a government e-invoice was actually cleared/generated.
-            irn_status="NOT_APPLICABLE",
-            qr_code_status="NOT_APPLICABLE",
-            customer_id=order.customer_id,
-            payment_status="UNPAID",
-            amount_paid=0.0,
-            created_at=invoice_created_at,
-            cgst_amount=cgst_amount,
-            sgst_amount=sgst_amount,
-            invoice_number=generate_invoice_number(db, order.tenant_id, invoice_created_at),
+        # Fix for ORD-9: previously built the Invoice directly with a single
+        # generate_invoice_number() call, then a bare db.flush() -- a
+        # concurrent confirmation for this same tenant+financial-year that
+        # landed first would win the (tenant_id, invoice_number) unique
+        # constraint, crashing THIS otherwise-valid confirmation (credit
+        # check already passed, stock already deducted) with an unhandled
+        # IntegrityError/500. create_invoice_with_unique_number() retries
+        # inside a per-attempt SAVEPOINT instead.
+        invoice = create_invoice_with_unique_number(
+            db, order.tenant_id, invoice_created_at,
+            {
+                "order_id": order.id,
+                "gstin": customer.gstin if customer.gstin else "PENDING",
+                "total_amount": billing_total,
+                # No real IRP (Invoice Registration Portal) integration exists yet —
+                # these must NOT claim a government e-invoice was actually cleared/generated.
+                "irn_status": "NOT_APPLICABLE",
+                "qr_code_status": "NOT_APPLICABLE",
+                "customer_id": order.customer_id,
+                "payment_status": "UNPAID",
+                "amount_paid": 0.0,
+                "created_at": invoice_created_at,
+                "cgst_amount": cgst_amount,
+                "sgst_amount": sgst_amount,
+            },
         )
-        db.add(invoice)
-        db.flush()
 
     # ── 9. Reconcile any existing customer credits against new invoice ──────────
 

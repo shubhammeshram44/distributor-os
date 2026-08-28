@@ -96,6 +96,10 @@ def test_delivery_event_notification_deferred_to_background_task(db_session):
     from app.api.v1.orders import record_delivery_event, DeliveryEventRequest
 
     tenant, cust, order = _make_tenant_and_confirmed_order(db_session, "DeliveryBGTest")
+    # record_delivery_event only allows Dispatched -> Delivered (see ORD-2);
+    # advance the order past Confirmed first.
+    order.status = "Dispatched"
+    db_session.commit()
 
     background_tasks = BackgroundTasks()
     payload = DeliveryEventRequest(status="delivered", source="manual", tenant_id=str(tenant.id))

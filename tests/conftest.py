@@ -17,24 +17,47 @@ from app.models.inventory import Inventory
 from app.models.ledger import CustomerLedger
 from app.models.invoice import Invoice
 
-@pytest.fixture(name="db_engine")
-def fixture_db_engine():
+@pytest.fixture(scope="session")
+def _shared_postgres_engine():
+    """Fix for a CI-blocking test-infrastructure bug: fixture_db_engine below
+    previously called create_engine(database_url) with NO explicit scope,
+    which defaults to function scope -- so a brand-new SQLAlchemy engine
+    (each with its own real connection pool) was created for EVERY SINGLE
+    TEST FUNCTION when running against a real Postgres DATABASE_URL (as CI's
+    migration-parity.yml workflow does), and never disposed. Postgres's
+    default max_connections=100 (matching the postgres:16 image CI uses) is
+    exhausted partway through a ~270-test run, surfacing as a cascade of
+    unrelated "OperationalError: ... sorry, too many clients already"
+    errors on every subsequent test -- not a real regression in any
+    endpoint, just resource exhaustion in the test harness itself.
+    One shared, session-scoped engine (with a small bounded pool) removes
+    the leak entirely while each test still gets a clean, isolated dataset
+    via the existing per-test TRUNCATE below -- test isolation semantics are
+    unchanged, only the number of physical connections opened.
+    """
     database_url = os.environ.get("DATABASE_URL")
-    if database_url:
-        engine = create_engine(database_url)
-        # Make sure the schema exists (usually already applied via Alembic in
-        # CI, but this is a harmless no-op in that case) and reset all data
-        # before each test. Without this, tests share state through the same
-        # real database and fail/pass depending on run order (unlike the
-        # sqlite:///:memory: branch below, which gets a brand-new empty
-        # engine per test automatically).
-        Base.metadata.create_all(bind=engine, checkfirst=True)
-        with engine.begin() as connection:
+    if not database_url:
+        yield None
+        return
+    engine = create_engine(database_url, pool_size=5, max_overflow=2)
+    Base.metadata.create_all(bind=engine, checkfirst=True)
+    yield engine
+    engine.dispose()
+
+
+@pytest.fixture(name="db_engine")
+def fixture_db_engine(_shared_postgres_engine):
+    if _shared_postgres_engine is not None:
+        # Reset all data before each test so tests don't share state through
+        # the same real database and fail/pass depending on run order
+        # (unlike the sqlite:///:memory: branch below, which gets a
+        # brand-new empty engine per test automatically).
+        with _shared_postgres_engine.begin() as connection:
             table_names = [t.name for t in reversed(Base.metadata.sorted_tables)]
             if table_names:
                 quoted = ", ".join(f'"{name}"' for name in table_names)
                 connection.exec_driver_sql(f"TRUNCATE TABLE {quoted} RESTART IDENTITY CASCADE")
-        yield engine
+        yield _shared_postgres_engine
     else:
         engine = create_engine(
             "sqlite:///:memory:",

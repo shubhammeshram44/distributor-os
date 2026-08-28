@@ -5,7 +5,7 @@ import typing
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status, Cookie, Header, BackgroundTasks
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func, and_, select as sa_select, update as sa_update
 from sqlalchemy.orm import Session, aliased, joinedload
 from app.database import get_db, tenant_context
@@ -132,10 +132,25 @@ def list_orders(
             (Order.customer_id.in_(customer_ids_matching))
         )
 
+    # Fix for DASH-7: status_filter was declared as an accepted query
+    # parameter but never actually applied to the query or the total
+    # count -- silently accepted and silently ignored.
+    if status_filter:
+        filters.append(Order.status == status_filter)
+
     # Sorting
+    # Fix for ORD-5: "amount" was an explicit dict key mapped to None (not
+    # missing), so dict.get("amount", Order.created_at) returned None
+    # instead of the intended fallback -- dict.get()'s default only
+    # applies when the key is ABSENT, not when its value is None. Calling
+    # None.desc()/.asc() below then raised an unhandled AttributeError
+    # (500) for any client requesting ?sort_by=amount, a documented sort
+    # option the response schema itself exposes. Sort by the joined
+    # Invoice.total_amount (coalesced to 0 for orders with no invoice yet)
+    # instead of a null placeholder.
     _sort_col = {
         "created_at": Order.created_at,
-        "amount": None,  # computed, handled below
+        "amount": func.coalesce(Invoice.total_amount, 0),
     }.get(sort_by, Order.created_at)
 
     order_clause = _sort_col.desc() if sort_order == "desc" else _sort_col.asc()
@@ -319,7 +334,7 @@ def cancel_order(
 
     if current not in ("Draft", "Pending", "Confirmed", "Needs Review", "Partially Confirmed", "Awaiting Stock"):
         raise HTTPException(
-            status_code=400,
+            status_code=409,
             detail=f"Cannot cancel order with status '{current}'. Only Draft/Confirmed orders can be cancelled."
         )
 
@@ -377,6 +392,14 @@ def cancel_order(
             to_status="Cancelled",
             updated_by="system_cancel_request"
         ))
+        # Fix for DASH-1: the ledger transition was written, but order.status
+        # itself was never actually updated to "Cancelled" -- leaving the
+        # order's own status column stuck at its pre-cancel value (e.g.
+        # "Confirmed"). Downstream consumers that filter on Order.status
+        # directly (dashboard revenue aggregation, Tally export's
+        # EXPORTABLE_STATUSES allowlist) would then keep treating a
+        # cancelled order as live revenue / an exportable sale.
+        order.status = "Cancelled"
 
         db.commit()
         return {"status": "success", "order_id": str(order.id), "new_status": "Cancelled"}
@@ -478,7 +501,17 @@ def export_orders_csv(
     ])
     for o in orders:
         cust = custs.get(o.customer_id)
-        amount = sum(float(i.quantity * i.unit_price) for i in o.line_items)
+        # Fix for ORD-6: use allocated_quantity (the actually-fulfilled qty
+        # after partial-stock allocation), falling back to the requested
+        # quantity only when never allocated -- matching the same pattern
+        # already used everywhere else amounts are computed from line items
+        # (list_orders, Order.total_amount, dispatch/cancel restock, etc.).
+        # Using the raw requested quantity here overstated the CSV amount
+        # for any order that was only partially fulfilled.
+        amount = sum(
+            float((i.allocated_quantity if i.allocated_quantity is not None else i.quantity) * i.unit_price)
+            for i in o.line_items
+        )
         writer.writerow([
             o.internal_order_id,
             cust.retailer_name if cust else "Unknown",
@@ -531,7 +564,7 @@ def update_order_status(
     allowed = _VALID_TRANSITIONS.get(current_from_status, set())
     if payload.to_status not in allowed:
         raise HTTPException(
-            status_code=400,
+            status_code=409,
             detail=f"Invalid transition '{current_from_status}' → '{payload.to_status}'. Allowed: {sorted(allowed) or 'none (terminal or triage state)'}"
         )
 
@@ -605,7 +638,12 @@ def restore_inventory_for_order(db: Session, order: Order) -> None:
 
 class ItemResolvePayload(BaseModel):
     sku_code: str
-    quantity: int
+    # Fix for INV-5: previously an unconstrained int -- a negative quantity
+    # here was clamped to 0 by confirm_order's `allocated = min(quantity,
+    # available)` guard (so inventory was never touched), but
+    # billing_total still summed the negative contribution, silently
+    # under-invoicing the whole order.
+    quantity: int = Field(..., gt=0)
     save_as_permanent_alias: bool | None = False
 
 @router.patch("/items/{item_id}/resolve", status_code=status.HTTP_200_OK)
@@ -1318,8 +1356,10 @@ def get_order_by_id(
 
 class OrderItemCreate(BaseModel):
     sku_id: str
-    quantity: int
-    unit_price: float
+    # Fix for INV-5: same negative-quantity under-invoicing issue as
+    # ItemResolvePayload above -- see that comment for the full mechanism.
+    quantity: int = Field(..., gt=0)
+    unit_price: float = Field(..., ge=0)
 
 
 class OrderCreatePayload(BaseModel):
@@ -1490,18 +1530,29 @@ from app.models.shipment import Shipment
 
 class IngestionOrderItem(BaseModel):
     sku_id: str
-    quantity: int
-    price: float
+    # Fix for INV-5: same negative-quantity under-invoicing issue as
+    # ItemResolvePayload above -- see that comment for the full mechanism.
+    quantity: int = Field(..., gt=0)
+    price: float = Field(..., ge=0)
 
 class IngestionOrderPayload(BaseModel):
     customer_id: Any
     items: list[IngestionOrderItem]
 
 @router.post("/create", status_code=201)
-def create_order_generic(payload: IngestionOrderPayload, db: Session = Depends(get_db)):
-    # 1. Resolve tenant_id: use first tenant or DEMO_TENANT_ID
-    tenant = db.query(DistributorTenant).first()
-    tenant_id = tenant.id if tenant else DEMO_TENANT_ID
+def create_order_generic(
+    payload: IngestionOrderPayload,
+    tenant_id: uuid.UUID | None = None,
+    access_token: str | None = Cookie(None),
+    authorization: str | None = Header(None),
+    db: Session = Depends(get_db)
+):
+    # Fix for TENANT-4: previously resolved "the tenant" via
+    # db.query(DistributorTenant).first() -- an arbitrary row, ignoring the
+    # caller's actual identity. In a real multi-tenant deployment this
+    # would create every order against whichever tenant happened to be
+    # first in the table, regardless of who actually submitted it.
+    tenant_id = resolve_tenant_id(tenant_id, access_token, authorization)
     tenant_context.set(tenant_id)
 
     # 2. Resolve customer
@@ -1609,6 +1660,20 @@ def confirm_order_post(order_id: uuid.UUID, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Order not found")
 
     tenant_context.set(order.tenant_id)
+
+    # Fix for ORD-1: this endpoint previously had zero state validation,
+    # allowing an already-Confirmed/Dispatched/Delivered/Cancelled order to
+    # be re-confirmed -- each call re-ran the full inventory deduction,
+    # customer ledger debit, and Invoice creation, double/triple-counting
+    # all three on every repeat call (double-click, retry, or accidental
+    # resubmission). Only Draft -> Confirmed is valid here, matching
+    # update_order_status's _VALID_TRANSITIONS table and the frontend's own
+    # "Draft -> Confirmed" comment (messages/page.tsx).
+    if order.current_status != "Draft":
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot confirm order in status '{order.current_status}'. Only Draft orders can be confirmed."
+        )
 
     from app.services.order_confirmation_service import confirm_order
     confirm_order(db, order, updated_by="API")
@@ -1877,6 +1942,19 @@ def dispatch_order_post(order_id: uuid.UUID, payload: DispatchPayload, backgroun
         raise HTTPException(status_code=404, detail="Order not found")
 
     tenant_context.set(order.tenant_id)
+
+    # Fix for ORD-2: this endpoint previously performed the Dispatched
+    # transition with NO state validation at all -- a Draft order could be
+    # "dispatched" while skipping Confirmed entirely, and an already-
+    # Dispatched/Delivered/Cancelled order could be re-dispatched, releasing
+    # committed inventory and firing a duplicate dispatch notification.
+    # Matches update_order_status's _VALID_TRANSITIONS table (Confirmed and
+    # Partially Confirmed -> Dispatched are the only valid "from" states).
+    if order.current_status not in ("Confirmed", "Partially Confirmed"):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot dispatch order in status '{order.current_status}'. Order must be Confirmed or Partially Confirmed first."
+        )
     
     shipment = db.query(Shipment).filter(Shipment.order_id == order_id).first()
     from app.models.customer import Customer
@@ -2012,6 +2090,16 @@ def record_delivery_event(
         raise HTTPException(status_code=404, detail="Order not found")
 
     tenant_context.set(order.tenant_id)
+
+    # Fix for ORD-2: this endpoint previously had zero state validation --
+    # a Cancelled, Draft, or already-Delivered order could be marked
+    # Delivered directly. Only Dispatched -> Delivered is valid, matching
+    # update_order_status's _VALID_TRANSITIONS table.
+    if order.current_status != "Dispatched":
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot record delivery for order in status '{order.current_status}'. Order must be Dispatched first."
+        )
 
     # Check if OrderStateLedger model exists
     has_ledger = False
@@ -2370,17 +2458,56 @@ def create_instant_transaction(
                     status_code=400,
                     detail="Either customer_id or new_customer_name is required"
                 )
-            customer = Customer(
-                id=uuid.uuid4(),
-                tenant_id=resolved_tenant_id,
-                retailer_name=payload.new_customer_name,
-                phone_number=payload.new_customer_phone,
-                credit_limit=0.0,  # ₹0 credit by default for new inline customers
-                outstanding_balance=0.0,
-                payment_terms="Net 0"
-            )
-            db.add(customer)
-            db.flush()
+            # Fix for CUST-3: this path previously had NO existing-customer
+            # lookup at all -- every Van Sales transaction for a walk-in
+            # customer with no customer_id created a brand-new Customer row,
+            # even if the exact same phone number had already been onboarded
+            # (e.g. a repeat walk-in visit, or the same customer served by a
+            # different salesman). Look up by phone first and reuse the
+            # existing customer instead of always creating a duplicate.
+            customer = None
+            if payload.new_customer_phone:
+                from app.utils.phone import normalize_phone_number, get_phone_number_variants
+                phone_variants = get_phone_number_variants(payload.new_customer_phone)
+                from app.models.customer import CustomerAlias
+                customer = db.query(Customer).join(CustomerAlias).filter(
+                    Customer.tenant_id == resolved_tenant_id,
+                    CustomerAlias.alias_value.in_(phone_variants)
+                ).first()
+                if not customer:
+                    customer = db.query(Customer).filter(
+                        Customer.tenant_id == resolved_tenant_id,
+                        Customer.phone_number.in_(phone_variants)
+                    ).first()
+
+            if not customer:
+                customer = Customer(
+                    id=uuid.uuid4(),
+                    tenant_id=resolved_tenant_id,
+                    retailer_name=payload.new_customer_name,
+                    phone_number=payload.new_customer_phone,
+                    credit_limit=0.0,  # ₹0 credit by default for new inline customers
+                    outstanding_balance=0.0,
+                    payment_terms="Net 0"
+                )
+                db.add(customer)
+                try:
+                    db.flush()
+                except IntegrityError:
+                    # Defense-in-depth for the same TOCTOU race
+                    # onboard_customer guards against (see CUST-3): if a
+                    # concurrent request just registered this same phone
+                    # number under this tenant, fall back to it instead of
+                    # a raw 500.
+                    db.rollback()
+                    if payload.new_customer_phone:
+                        phone_variants = get_phone_number_variants(payload.new_customer_phone)
+                        customer = db.query(Customer).filter(
+                            Customer.tenant_id == resolved_tenant_id,
+                            Customer.phone_number.in_(phone_variants)
+                        ).first()
+                    if not customer:
+                        raise
 
         # ── STEP 2: VALIDATE ITEMS ────────────────────────────────────────────
         if not payload.items:

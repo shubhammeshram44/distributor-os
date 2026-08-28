@@ -18,6 +18,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
+from sqlalchemy.exc import IntegrityError
 
 import firebase_admin
 from firebase_admin import credentials as fb_credentials, auth as fb_auth
@@ -270,7 +271,18 @@ def complete_signup(payload: SignupPayload, response: Response, db: Session = De
                 phone_number=phone_number, email_or_phone=phone_number, hashed_password=None,
                 role="SUPER_ADMIN", is_active=True, firebase_uid=firebase_uid)
     db.add(user)
-    db.commit()
+    # Fix for AUTH-5: the existence checks above are a plain check-then-insert
+    # with no lock -- a classic TOCTOU race. Two near-simultaneous signup
+    # requests for the same phone/firebase_uid could both pass those checks
+    # before either commits. The DB-level unique constraint on
+    # users.firebase_uid is the actual backstop; catch the resulting
+    # IntegrityError here and turn it into the same clean 409 the upfront
+    # check already returns, instead of an unhandled 500.
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="An account with this phone number already exists. Please log in.")
     return _issue_session_response(user, new_tenant, phone_number, response, db, True)
 
 
@@ -290,6 +302,14 @@ def get_me(access_token: str | None = Cookie(None), authorization: str | None = 
     user = db.get(User, uuid.UUID(token_payload["user_id"]))
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
+    # Fix for AUTH-2: previously the still-valid JWT alone was sufficient
+    # for the rest of the token's lifetime (up to 24h), even after an admin
+    # deactivated the user -- is_active was never re-checked here, unlike
+    # /auth/refresh (see below) which already does. /auth/me is the exact
+    # endpoint the frontend's dashboard auth guard calls on every fresh
+    # page/tab load, so this is the most consequential place to close it.
+    if not user.is_active:
+        raise HTTPException(status_code=401, detail="Account has been deactivated")
     tenant = db.get(DistributorTenant, user.tenant_id)
     return {"id": str(user.id), "full_name": user.full_name,
             "phone_number": user.phone_number or "", "role": user.role,

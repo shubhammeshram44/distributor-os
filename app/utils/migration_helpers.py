@@ -37,3 +37,36 @@ def index_exists(bind: sa.engine.Connection, table_name: str, index_name: str) -
     if table_name not in inspector.get_table_names():
         return False
     return any(idx["name"] == index_name for idx in inspector.get_indexes(table_name))
+
+
+def unique_constraint_exists(bind: sa.engine.Connection, table_name: str, constraint_name: str) -> bool:
+    """True if `constraint_name` exists as a table-level UNIQUE CONSTRAINT
+    (as opposed to a bare unique INDEX). Postgres treats these as distinct
+    object types with different DROP syntax; a name can exist as one or the
+    other depending on whether it was created via a SQLAlchemy
+    UniqueConstraint (e.g. through Base.metadata.create_all(), which the
+    initial-schema migration's fast path uses against the current ORM
+    models) or via op.create_index(..., unique=True) in a later migration.
+    """
+    inspector = sa.inspect(bind)
+    if table_name not in inspector.get_table_names():
+        return False
+    return any(c["name"] == constraint_name for c in inspector.get_unique_constraints(table_name))
+
+
+def drop_unique_index_or_constraint(bind: sa.engine.Connection, table_name: str, name: str) -> None:
+    """Drop `name` whether it currently exists as a UNIQUE CONSTRAINT or a
+    bare unique INDEX on `table_name` -- a migration that adds this object
+    via op.create_index(unique=True) cannot assume which physical form it
+    ended up as, since a database bootstrapped from the current ORM models
+    (which may declare the same name as a UniqueConstraint) will have
+    created a real constraint instead of a plain index, and Postgres
+    refuses `DROP INDEX` on a constraint's backing index (must use
+    `DROP CONSTRAINT`, or vice versa is a no-op error). No-op if neither
+    exists.
+    """
+    from alembic import op
+    if unique_constraint_exists(bind, table_name, name):
+        op.drop_constraint(name, table_name, type_="unique")
+    elif index_exists(bind, table_name, name):
+        op.drop_index(name, table_name=table_name)

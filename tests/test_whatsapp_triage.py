@@ -321,3 +321,104 @@ def test_whatsapp_hybrid_matching_lux_patanjali(db_session, client, monkeypatch)
     assert item_map[p1.id].quantity == 10
     assert item_map[p2.id].quantity == 5
 
+
+
+def test_sender_belongs_to_claimed_tenant_helper(db_session):
+    """
+    Regression test for WA-1: direct unit test of the new
+    _sender_belongs_to_claimed_tenant() guard added to
+    app/api/v1/whatsapp.py. Before this fix, process_whatsapp_webhook_payload
+    trusted a raw, unauthenticated `tenant_id` field straight from the
+    request JSON body as soon as the instance/phone_number_id (or a User
+    phone match) failed to resolve a tenant -- with NO verification that the
+    claimed tenant had any actual relationship to the message's sender. This
+    function (which did not exist pre-fix) now gates that trust: it must
+    return True only when the sender's phone is a genuine registered
+    customer of the SPECIFIC tenant being claimed, and False for every other
+    combination (unregistered phone, or a phone that is a real customer but
+    of a DIFFERENT tenant than the one being claimed).
+    """
+    from app.api.v1.whatsapp import _sender_belongs_to_claimed_tenant
+
+    tenant_a = DistributorTenant(name="Helper Test Tenant A")
+    tenant_b = DistributorTenant(name="Helper Test Tenant B")
+    db_session.add_all([tenant_a, tenant_b])
+    db_session.commit()
+
+    customer_a = Customer(
+        tenant_id=tenant_a.id, retailer_name="Tenant A Customer", customer_id="CUST-HELPER-A",
+        address_text="X", gstin="29AAAAA1111A1Z1", tax_group="GST-18", payment_terms="0-15 Days"
+    )
+    db_session.add(customer_a)
+    db_session.flush()
+    db_session.add(CustomerAlias(tenant_id=tenant_a.id, customer_id=customer_a.id, alias_value="+919777666655"))
+    db_session.commit()
+
+    # Correct case: phone genuinely belongs to a customer of the CLAIMED tenant.
+    assert _sender_belongs_to_claimed_tenant(db_session, "+919777666655", tenant_a.id) is True
+
+    # Cross-tenant spoofing: same phone, but claiming a DIFFERENT tenant than
+    # the one it's actually registered under.
+    assert _sender_belongs_to_claimed_tenant(db_session, "+919777666655", tenant_b.id) is False
+
+    # Entirely unregistered phone number, claiming any tenant.
+    assert _sender_belongs_to_claimed_tenant(db_session, "+919000000000", tenant_a.id) is False
+
+    # No phone / no claimed tenant at all.
+    assert _sender_belongs_to_claimed_tenant(db_session, "", tenant_a.id) is False
+    assert _sender_belongs_to_claimed_tenant(db_session, "+919777666655", None) is False
+
+
+def test_whatsapp_webhook_rejects_spoofed_cross_tenant_id(db_session, client):
+    """
+    Functional/defense-in-depth test for WA-1: claiming a real victim
+    tenant's id via the unauthenticated `tenant_id` webhook field, using a
+    phone number that is a real customer of a DIFFERENT tenant, must not
+    create an order under the victim tenant. Note: this specific black-box
+    scenario also happens to be caught by ingestion_service.py's Layer-5
+    customer whitelist (which is implicitly tenant-scoped by the app-wide
+    ORM tenant filter once tenant_context is set) even without this fix --
+    so this test alone doesn't isolate the new guard (see
+    test_sender_belongs_to_claimed_tenant_helper above for a test that does).
+    It's kept as an end-to-end confirmation that the full request pipeline
+    behaves correctly for this attack shape.
+    """
+    victim_tenant = DistributorTenant(name="Victim Tenant WA1")
+    attacker_known_tenant = DistributorTenant(name="Attacker's Own Tenant WA1")
+    db_session.add_all([victim_tenant, attacker_known_tenant])
+    db_session.commit()
+
+    # A real customer exists, but under the ATTACKER's own tenant, not the
+    # victim's -- the attacker knows this phone number because it's their
+    # own customer, not because they've compromised the victim.
+    attacker_customer = Customer(
+        tenant_id=attacker_known_tenant.id,
+        retailer_name="Attacker's Own Customer",
+        customer_id="CUST-ATTACKER-1",
+        address_text="Somewhere",
+        gstin="29AAAAA1111A1Z1",
+        tax_group="GST-18",
+        payment_terms="0-15 Days"
+    )
+    db_session.add(attacker_customer)
+    db_session.flush()
+    db_session.add(CustomerAlias(tenant_id=attacker_known_tenant.id, customer_id=attacker_customer.id, alias_value="+919888777766"))
+    db_session.commit()
+
+    orders_before = db_session.query(Order).filter(Order.tenant_id == victim_tenant.id).count()
+    assert orders_before == 0
+
+    # Attacker claims the VICTIM's tenant_id, using their own (non-victim)
+    # customer's phone number.
+    response = client.post("/api/v1/whatsapp/webhook", json={
+        "tenant_id": str(victim_tenant.id),
+        "phone_number": "+919888777766",
+        "message_text": "10 units of anything"
+    })
+    assert response.status_code == 200
+    data = response.json()
+    # Must be ignored/rejected -- not processed as a successful order against the victim tenant.
+    assert data.get("status") != "success"
+
+    orders_after_victim = db_session.query(Order).filter(Order.tenant_id == victim_tenant.id).count()
+    assert orders_after_victim == 0, "Spoofed tenant_id claim must not create an order under the victim tenant"

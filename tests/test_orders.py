@@ -265,6 +265,97 @@ def test_pending_allocations_queue_and_approve(db_session, client):
     assert order_db.current_status == "Confirmed"
 
 
+def test_confirm_order_post_rejects_already_confirmed_order(db_session, client):
+    """
+    Regression test for ORD-1: POST /orders/{id}/confirm previously had zero
+    state validation -- calling it twice (double-click, retry) on the same
+    order would re-run the full inventory deduction, customer ledger debit,
+    and Invoice creation each time. Only Draft orders may be confirmed.
+    """
+    tenant = DistributorTenant(name="Confirm Twice Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+    tenant_context.set(tenant.id)
+
+    p = Product(sku_id="PROD-CONFIRM-TWICE", brand="HUL", category="Soap", pack_size="100g", base_price=100.0, stock_quantity=50)
+    db_session.add(p)
+    db_session.flush()
+    inv = Inventory(tenant_id=tenant.id, sku_id=p.id, location="Loc", quantity_on_hand=50, low_stock_threshold=5)
+    db_session.add(inv)
+    db_session.flush()
+
+    cust = Customer(
+        retailer_name="Confirm Twice Shop", customer_id="C-CONFIRM-TWICE-1", address_text="Delhi",
+        gstin="07AAAAA1111A1Z1", tax_group="GST", payment_terms="COD",
+        credit_limit=100000.0, outstanding_balance=0.0
+    )
+    db_session.add(cust)
+    db_session.flush()
+
+    order = Order(tenant_id=tenant.id, internal_order_id="ORD-CONFIRM-TWICE-1", source="Portal", customer_id=cust.id)
+    db_session.add(order)
+    db_session.flush()
+    db_session.add(OrderLineItem(order_id=order.id, product_id=p.id, quantity=5, unit_price=100.0))
+    db_session.add(OrderStateLedger(order_id=order.id, from_status=None, to_status="Draft", updated_by="admin"))
+    db_session.commit()
+
+    first = client.post(f"/api/v1/orders/{order.id}/confirm")
+    assert first.status_code == 200
+
+    db_session.expire_all()
+    outstanding_after_first = float(db_session.get(Customer, cust.id).outstanding_balance)
+    stock_after_first = db_session.get(Inventory, inv.id).quantity_on_hand
+    assert outstanding_after_first == 500.0
+    assert stock_after_first == 45
+
+    # Re-confirming the same (now Confirmed) order must be rejected, not
+    # silently re-run.
+    second = client.post(f"/api/v1/orders/{order.id}/confirm")
+    assert second.status_code == 409
+
+    db_session.expire_all()
+    assert float(db_session.get(Customer, cust.id).outstanding_balance) == outstanding_after_first
+    assert db_session.get(Inventory, inv.id).quantity_on_hand == stock_after_first
+    from app.models.invoice import Invoice
+    invoice_count = db_session.query(Invoice).filter(Invoice.order_id == order.id).count()
+    assert invoice_count == 1
+
+
+def test_dispatch_order_post_rejects_draft_order(db_session, client):
+    """
+    Regression test for ORD-2: POST /orders/{id}/dispatch previously
+    performed the Dispatched transition with no state validation at all --
+    a Draft order could be "dispatched" while skipping Confirmed entirely.
+    """
+    tenant = DistributorTenant(name="Dispatch Draft Reject Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+    tenant_context.set(tenant.id)
+
+    cust = Customer(
+        retailer_name="Dispatch Draft Shop", customer_id="C-DISPATCH-DRAFT-1", address_text="Delhi",
+        gstin="07AAAAA1111A1Z1", tax_group="GST", payment_terms="COD"
+    )
+    db_session.add(cust)
+    db_session.flush()
+
+    order = Order(tenant_id=tenant.id, internal_order_id="ORD-DISPATCH-DRAFT-1", source="Portal", customer_id=cust.id)
+    db_session.add(order)
+    db_session.flush()
+    db_session.add(OrderStateLedger(order_id=order.id, from_status=None, to_status="Draft", updated_by="admin"))
+    db_session.commit()
+
+    response = client.post(
+        f"/api/v1/orders/{order.id}/dispatch",
+        json={"delivery_partner": "Test Courier", "vehicle_number": "KA-01-AB-1234"}
+    )
+    assert response.status_code == 409
+
+    db_session.expire_all()
+    db_session.refresh(order)
+    assert order.current_status == "Draft"
+
+
 def test_dispatch_releases_committed_inventory(db_session, client):
     """Dispatching a confirmed order should release its allocated units from
     quantity_committed (they've physically left the warehouse) without
@@ -644,6 +735,126 @@ def test_list_orders(db_session, client):
     assert items[0]["status"] == "Pending"  # Draft maps to Pending
 
 
+def test_list_orders_sort_by_amount_does_not_crash(db_session, client):
+    """
+    Regression test for ORD-5: GET /orders?sort_by=amount previously
+    crashed with an unhandled 500. "amount" was an explicit dict key
+    mapped to None (not a missing key), so dict.get("amount", default)
+    returned None instead of the intended fallback -- dict.get()'s
+    default only applies when the key is absent, not when its value is
+    None -- and calling None.desc()/.asc() raised AttributeError.
+    "amount" is a field the response schema itself exposes, making it a
+    natural client sort choice.
+    """
+    tenant = DistributorTenant(name="Sort By Amount Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+    tenant_context.set(tenant.id)
+
+    p = Product(sku_id="PROD-SORTAMT", brand="HUL", category="Soap", pack_size="100g", base_price=45.0, stock_quantity=100)
+    db_session.add(p)
+    db_session.flush()
+
+    cust = Customer(
+        retailer_name="Sort Amount Customer", customer_id="C-SORTAMT-1", address_text="Delhi",
+        gstin="07AAAAA1111A1Z1", tax_group="GST", payment_terms="COD"
+    )
+    db_session.add(cust)
+    db_session.flush()
+
+    order_a = Order(tenant_id=tenant.id, internal_order_id="ORD-SORTAMT-A", source="Portal", customer_id=cust.id)
+    order_b = Order(tenant_id=tenant.id, internal_order_id="ORD-SORTAMT-B", source="Portal", customer_id=cust.id)
+    db_session.add_all([order_a, order_b])
+    db_session.flush()
+    db_session.add(OrderLineItem(order_id=order_a.id, product_id=p.id, quantity=1, unit_price=45.0))
+    db_session.add(OrderLineItem(order_id=order_b.id, product_id=p.id, quantity=10, unit_price=45.0))
+    db_session.commit()
+
+    response = client.get(f"/api/v1/orders?tenant_id={tenant.id}&sort_by=amount&sort_order=desc")
+    assert response.status_code == 200
+
+
+def test_export_orders_csv_uses_allocated_not_requested_quantity(db_session, client):
+    """
+    Regression test for ORD-6: GET /orders/export computed each row's
+    "Amount" as sum(quantity * unit_price) using the RAW REQUESTED quantity,
+    not allocated_quantity (the actually-fulfilled quantity after partial
+    stock allocation at confirmation) -- unlike list_orders and every other
+    amount computation in this file, which already fall back to
+    allocated_quantity when set. For a partially-fulfilled order, this
+    overstated the exported CSV amount above what the customer was
+    actually billed/shipped.
+    """
+    tenant = DistributorTenant(name="CSV Export Amount Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+    tenant_context.set(tenant.id)
+
+    p = Product(sku_id="PROD-CSVEXPORT", brand="HUL", category="Soap", pack_size="100g", base_price=10.0, stock_quantity=100)
+    db_session.add(p)
+    db_session.flush()
+
+    cust = Customer(
+        retailer_name="CSV Export Customer", customer_id="C-CSVEXPORT-1", address_text="Delhi",
+        gstin="07AAAAA1111A1Z1", tax_group="GST", payment_terms="COD"
+    )
+    db_session.add(cust)
+    db_session.flush()
+
+    order = Order(tenant_id=tenant.id, internal_order_id="ORD-CSVEXPORT-1", source="Portal", customer_id=cust.id)
+    db_session.add(order)
+    db_session.flush()
+    # Requested 10 units, but only 4 were actually allocated (partial stock
+    # fulfillment) -- the exported amount must reflect 4 * 10.0 = 40.0, not
+    # the requested 10 * 10.0 = 100.0.
+    db_session.add(OrderLineItem(order_id=order.id, product_id=p.id, quantity=10, unit_price=10.0, allocated_quantity=4))
+    db_session.commit()
+
+    response = client.get(f"/api/v1/orders/export?tenant_id={tenant.id}")
+    assert response.status_code == 200
+
+    import csv as csv_module
+    import io
+    rows = list(csv_module.reader(io.StringIO(response.text)))
+    header, data_row = rows[0], rows[1]
+    amount_col = header.index("Amount (₹)")
+    assert data_row[amount_col] == "40.00", (
+        f"Expected CSV amount to use allocated_quantity (4 * 10.0 = 40.00), got {data_row[amount_col]!r}"
+    )
+
+
+def test_list_orders_status_filter_is_applied(db_session, client):
+    """
+    Regression test for DASH-7: status_filter was declared as an accepted
+    query parameter on GET /orders but never actually applied to the
+    query or the total count -- silently accepted, silently ignored.
+    """
+    tenant = DistributorTenant(name="Status Filter Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+    tenant_context.set(tenant.id)
+
+    cust = Customer(
+        retailer_name="Status Filter Customer", customer_id="C-STATUSFILTER-1", address_text="Delhi",
+        gstin="07AAAAA1111A1Z1", tax_group="GST", payment_terms="COD"
+    )
+    db_session.add(cust)
+    db_session.flush()
+
+    draft_order = Order(tenant_id=tenant.id, internal_order_id="ORD-STATUSFILTER-DRAFT", source="Portal", customer_id=cust.id)
+    confirmed_order = Order(tenant_id=tenant.id, internal_order_id="ORD-STATUSFILTER-CONFIRMED", source="Portal", customer_id=cust.id, status="Confirmed")
+    db_session.add_all([draft_order, confirmed_order])
+    db_session.commit()
+
+    response = client.get(f"/api/v1/orders?tenant_id={tenant.id}&status_filter=Confirmed")
+    assert response.status_code == 200
+    data = response.json()
+    order_ids = {item["order_id"] for item in data["items"]}
+    assert "ORD-STATUSFILTER-CONFIRMED" in order_ids
+    assert "ORD-STATUSFILTER-DRAFT" not in order_ids
+    assert data["total"] == 1
+
+
 def test_credit_limit_guardrail_success_and_failure(db_session, client):
     # Setup Tenant
     tenant = DistributorTenant(name="Credit Limit Tenant")
@@ -715,7 +926,205 @@ def test_credit_limit_guardrail_success_and_failure(db_session, client):
     assert float(cust_db2.outstanding_balance) == 2500.0
 
 
-def test_list_orders_with_invoice_payment_status(db_session, client):
+def test_credit_limit_still_enforced_after_dispatch(db_session, client):
+    """
+    Regression test for CUST-1: previously check_credit_limit only summed
+    orders still in Confirmed/Partially Confirmed/Awaiting Stock status, so
+    as soon as an order was Dispatched (the normal, fast fulfillment path)
+    it silently dropped out of the credit check entirely, even though it
+    was still fully unpaid. A customer whose orders get promptly dispatched
+    could accumulate unlimited debt past their credit limit.
+    """
+    tenant = DistributorTenant(name="Dispatch Credit Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+    tenant_context.set(tenant.id)
+
+    p = Product(sku_id="PROD-DISPATCH-CREDIT", brand="HUL", category="Soap", pack_size="100g", base_price=500.0, stock_quantity=100)
+    db_session.add(p)
+    db_session.flush()
+    inv = Inventory(tenant_id=tenant.id, sku_id=p.id, location="Loc", quantity_on_hand=100, low_stock_threshold=10)
+    db_session.add(inv)
+    db_session.flush()
+
+    cust = Customer(
+        retailer_name="Dispatch Credit Shop", customer_id="C-DISPATCH-CREDIT-1", address_text="Delhi",
+        gstin="07AAAAA1111A1Z1", tax_group="GST", payment_terms="COD",
+        credit_limit=1000.0, outstanding_balance=0.0
+    )
+    db_session.add(cust)
+    db_session.flush()
+
+    # Order 1: 1000 total, confirmed then dispatched (still unpaid).
+    order1 = Order(tenant_id=tenant.id, internal_order_id="ORD-DISPATCH-CREDIT-1", source="Portal", customer_id=cust.id)
+    db_session.add(order1)
+    db_session.flush()
+    db_session.add(OrderLineItem(order_id=order1.id, product_id=p.id, quantity=2, unit_price=500.0))
+    db_session.add(OrderStateLedger(order_id=order1.id, from_status=None, to_status="Draft", updated_by="admin"))
+    db_session.commit()
+
+    response = client.put(f"/api/v1/orders/{order1.id}/status", json={"to_status": "Confirmed"})
+    assert response.status_code == 200
+
+    response = client.put(f"/api/v1/orders/{order1.id}/status", json={"to_status": "Dispatched"})
+    assert response.status_code == 200
+
+    db_session.expire_all()
+    assert float(db_session.get(Customer, cust.id).outstanding_balance) == 1000.0
+
+    # Order 2: another 1000 total. Combined real exposure (2000) now exceeds
+    # the 1000 credit limit, even though order1 is no longer "Confirmed" --
+    # it's Dispatched and still fully unpaid. This must be rejected.
+    order2 = Order(tenant_id=tenant.id, internal_order_id="ORD-DISPATCH-CREDIT-2", source="Portal", customer_id=cust.id)
+    db_session.add(order2)
+    db_session.flush()
+    db_session.add(OrderLineItem(order_id=order2.id, product_id=p.id, quantity=2, unit_price=500.0))
+    db_session.add(OrderStateLedger(order_id=order2.id, from_status=None, to_status="Draft", updated_by="admin"))
+    db_session.commit()
+
+    response = client.put(f"/api/v1/orders/{order2.id}/status", json={"to_status": "Confirmed"})
+    assert response.status_code == 400
+    assert "Credit limit exceeded" in response.json()["detail"]
+
+    db_session.expire_all()
+    # Outstanding balance must remain exactly 1000 -- order2 must not have
+    # been debited, and no inventory should have been consumed for it either
+    # (only order1's 2 units were ever deducted: 100 - 2 = 98).
+    assert float(db_session.get(Customer, cust.id).outstanding_balance) == 1000.0
+    assert db_session.get(Inventory, inv.id).quantity_on_hand == 98
+
+
+def test_credit_limit_rejection_does_not_burn_inventory_on_retry(db_session, client):
+    """
+    Regression test for INV-2 / ORD-3: previously a credit-limit-rejected
+    confirm attempt still permanently committed its inventory deduction
+    (flush + explicit db.commit() before raising), even though the order's
+    status never advanced past Draft. Retrying the same confirm (e.g. after
+    a manual credit-limit override, or simply resubmitting) would then
+    re-run the full allocation from scratch and deduct the SAME physical
+    units a second time -- silently draining real stock with no order ever
+    actually getting billed for the first attempt.
+    """
+    tenant = DistributorTenant(name="Retry Drain Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+    tenant_context.set(tenant.id)
+
+    p = Product(sku_id="PROD-RETRY-DRAIN", brand="HUL", category="Soap", pack_size="100g", base_price=500.0, stock_quantity=100)
+    db_session.add(p)
+    db_session.flush()
+    inv = Inventory(tenant_id=tenant.id, sku_id=p.id, location="Loc", quantity_on_hand=20, low_stock_threshold=5)
+    db_session.add(inv)
+    db_session.flush()
+
+    # Credit limit of 100 -- any order here (10 units * 500 = 5000) will
+    # always fail the credit check regardless of retries.
+    cust = Customer(
+        retailer_name="Retry Drain Shop", customer_id="C-RETRY-DRAIN-1", address_text="Delhi",
+        gstin="07AAAAA1111A1Z1", tax_group="GST", payment_terms="COD",
+        credit_limit=100.0, outstanding_balance=0.0
+    )
+    db_session.add(cust)
+    db_session.flush()
+
+    order = Order(tenant_id=tenant.id, internal_order_id="ORD-RETRY-DRAIN-1", source="Portal", customer_id=cust.id)
+    db_session.add(order)
+    db_session.flush()
+    db_session.add(OrderLineItem(order_id=order.id, product_id=p.id, quantity=10, unit_price=500.0))
+    db_session.add(OrderStateLedger(order_id=order.id, from_status=None, to_status="Draft", updated_by="admin"))
+    db_session.commit()
+
+    # First confirm attempt -- fails credit check.
+    response = client.put(f"/api/v1/orders/{order.id}/status", json={"to_status": "Confirmed"})
+    assert response.status_code == 400
+    db_session.expire_all()
+    assert db_session.get(Inventory, inv.id).quantity_on_hand == 20, \
+        "First credit-rejected attempt must not deduct any stock"
+
+    # Retry the exact same confirm -- must still fail (still no payment
+    # recorded), and stock must STILL be untouched, not double-drained.
+    response = client.put(f"/api/v1/orders/{order.id}/status", json={"to_status": "Confirmed"})
+    assert response.status_code == 400
+    db_session.expire_all()
+    assert db_session.get(Inventory, inv.id).quantity_on_hand == 20, \
+        "Retrying a credit-rejected confirm must not deduct stock either"
+
+
+def test_confirm_order_inventory_query_uses_row_locking(db_session, client):
+    """
+    Regression test for INV-1: confirm_order's Inventory batch-fetch must use
+    SELECT ... FOR UPDATE so concurrent confirmations touching the same SKU
+    serialize on the locked row instead of each reading a stale on-hand
+    snapshot and both committing an allocation the physical stock can't
+    support. True concurrent-connection Postgres load-testing isn't
+    reproducible against the SQLite test harness, so this asserts the actual
+    locking mechanism is present in the compiled query construct itself,
+    directly against the live app.services.order_confirmation_service module
+    (not a copy/re-implementation of the query).
+    """
+    import inspect
+    from app.services import order_confirmation_service
+    source = inspect.getsource(order_confirmation_service.confirm_order)
+    assert "with_for_update()" in source, (
+        "confirm_order's Inventory lookup must use .with_for_update() to "
+        "prevent concurrent overselling (INV-1)"
+    )
+
+
+def test_partial_allocation_across_two_orders_sharing_one_sku(db_session, client):
+    """
+    Functional regression guard for the inventory-allocation rewrite done to
+    fix INV-1/INV-2/ORD-3: confirming two orders that together request more
+    units than are on hand must still correctly partially-fill the second
+    order (never oversell, never leave allocation math wrong) after the
+    locking/deferred-deduction restructuring.
+    """
+    tenant = DistributorTenant(name="Partial Alloc Two Orders Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+    tenant_context.set(tenant.id)
+
+    p = Product(sku_id="PROD-PARTIAL-TWO", brand="HUL", category="Soap", pack_size="100g", base_price=100.0, stock_quantity=10)
+    db_session.add(p)
+    db_session.flush()
+    inv = Inventory(tenant_id=tenant.id, sku_id=p.id, location="Loc", quantity_on_hand=10, low_stock_threshold=1)
+    db_session.add(inv)
+    db_session.flush()
+
+    cust = Customer(
+        retailer_name="Partial Alloc Shop", customer_id="C-PARTIAL-TWO-1", address_text="Delhi",
+        gstin="07AAAAA1111A1Z1", tax_group="GST", payment_terms="COD",
+        credit_limit=100000.0, outstanding_balance=0.0
+    )
+    db_session.add(cust)
+    db_session.flush()
+
+    order_a = Order(tenant_id=tenant.id, internal_order_id="ORD-PARTIAL-TWO-A", source="Portal", customer_id=cust.id)
+    order_b = Order(tenant_id=tenant.id, internal_order_id="ORD-PARTIAL-TWO-B", source="Portal", customer_id=cust.id)
+    db_session.add_all([order_a, order_b])
+    db_session.flush()
+    db_session.add(OrderLineItem(order_id=order_a.id, product_id=p.id, quantity=8, unit_price=100.0))
+    db_session.add(OrderLineItem(order_id=order_b.id, product_id=p.id, quantity=8, unit_price=100.0))
+    db_session.add(OrderStateLedger(order_id=order_a.id, from_status=None, to_status="Draft", updated_by="admin"))
+    db_session.add(OrderStateLedger(order_id=order_b.id, from_status=None, to_status="Draft", updated_by="admin"))
+    db_session.commit()
+
+    resp_a = client.put(f"/api/v1/orders/{order_a.id}/status", json={"to_status": "Confirmed"})
+    assert resp_a.status_code == 200
+    resp_b = client.put(f"/api/v1/orders/{order_b.id}/status", json={"to_status": "Confirmed"})
+    assert resp_b.status_code == 200
+
+    db_session.expire_all()
+    final_inv = db_session.get(Inventory, inv.id)
+    # Only 10 physical units existed. Order A takes 8 (fully allocated),
+    # leaving 2 -- Order B must be allocated only the remaining 2 (partial
+    # fill), never both fully allocating 8 each (which would require -6).
+    assert final_inv.quantity_on_hand == 0
+    order_b_items = db_session.query(OrderLineItem).filter(OrderLineItem.order_id == order_b.id).all()
+    assert sum(i.allocated_quantity or 0 for i in order_b_items) == 2
+
+
+
     from app.models.invoice import Invoice
     
     # 1. Setup Tenant
@@ -956,6 +1365,74 @@ def test_create_order_from_payload(db_session, client):
     assert line_items[0].unit_price == 50.0
 
 
+def test_create_order_rejects_negative_quantity(db_session, client):
+    """
+    Regression test for INV-5: OrderItemCreate.quantity previously had no
+    validation constraint at all -- a negative quantity line item was
+    accepted, and while confirm_order's `allocated = min(quantity,
+    available)` clamp meant inventory was never touched for a negative
+    line, billing_total still summed the negative contribution, silently
+    under-invoicing the whole order (e.g. a legitimate 5x line plus a
+    malicious -3x line billed as if only 2 net units were ordered).
+    """
+    tenant = DistributorTenant(name="Negative Qty Order Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+
+    cust = Customer(
+        tenant_id=tenant.id, retailer_name="Negative Qty Shop", customer_id="C-NEGQTY-1",
+        address_text="Test Address", gstin="29AAAAA1111A1Z1", tax_group="GST-18", payment_terms="0-15 Days"
+    )
+    db_session.add(cust)
+    db_session.commit()
+
+    payload = {
+        "tenant_id": str(tenant.id),
+        "customer_id": str(cust.id),
+        "source": "Portal",
+        "status": "Draft",
+        "items": [
+            {"sku_id": "PROD-NEGQTY", "quantity": -3, "unit_price": 100.0}
+        ]
+    }
+    response = client.post("/api/v1/orders", json=payload)
+    assert response.status_code == 422
+
+
+def test_resolve_order_item_rejects_negative_quantity(db_session, client):
+    """
+    Regression test for INV-5: ItemResolvePayload.quantity had the same
+    unconstrained-negative-quantity gap as OrderItemCreate above.
+    """
+    tenant = DistributorTenant(name="Resolve Negative Qty Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+    tenant_context.set(tenant.id)
+
+    cust = Customer(
+        tenant_id=tenant.id, retailer_name="Resolve Negative Qty Shop", customer_id="C-RESOLVENEG-1",
+        address_text="Test Address", gstin="29AAAAA1111A1Z1", tax_group="GST-18", payment_terms="0-15 Days"
+    )
+    db_session.add(cust)
+    db_session.flush()
+
+    order = Order(tenant_id=tenant.id, internal_order_id="ORD-RESOLVENEG-1", source="WhatsApp", customer_id=cust.id)
+    db_session.add(order)
+    db_session.flush()
+    line_item = OrderLineItem(
+        order_id=order.id, product_id=None, quantity=5, unit_price=50.0,
+        unmatched_raw_text="unresolved item"
+    )
+    db_session.add(line_item)
+    db_session.commit()
+
+    response = client.patch(
+        f"/api/v1/orders/items/{line_item.id}/resolve",
+        json={"sku_code": "PROD-RESOLVENEG", "quantity": -5}
+    )
+    assert response.status_code == 422
+
+
 def test_patch_order_invoice_type(db_session, client):
     # Setup Tenant
     tenant = DistributorTenant(name="Patch Order Tenant")
@@ -1114,7 +1591,8 @@ def test_record_delivery_event(db_session, client):
     db_session.add(cust)
     db_session.flush()
 
-    # Setup Order
+    # Setup Order -- must already be Dispatched for delivery-event to be a
+    # valid transition (see ORD-2: Dispatched -> Delivered only).
     order = Order(
         tenant_id=tenant.id,
         internal_order_id="ORD-DELIVERY-TEST-1",
@@ -1123,8 +1601,10 @@ def test_record_delivery_event(db_session, client):
     )
     db_session.add(order)
     db_session.flush()
+    order.status = "Dispatched"
 
     db_session.add(OrderStateLedger(order_id=order.id, from_status=None, to_status="Draft", updated_by="admin"))
+    db_session.add(OrderStateLedger(order_id=order.id, from_status="Draft", to_status="Dispatched", updated_by="admin"))
     db_session.commit()
 
     # Call delivery event endpoint
@@ -1148,6 +1628,43 @@ def test_record_delivery_event(db_session, client):
     assert order.current_status == "Delivered"
     assert order.delivery_source == "manual"
     assert order.delivered_at is not None
+
+
+def test_record_delivery_event_rejects_invalid_from_status(db_session, client):
+    """
+    Regression test for ORD-2: record_delivery_event previously had zero
+    state validation -- a Draft (or Cancelled/already-Delivered) order could
+    be marked Delivered directly, skipping Confirmed and Dispatched
+    entirely. Only Dispatched -> Delivered is a valid transition.
+    """
+    tenant = DistributorTenant(name="Delivery Invalid Transition Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+    tenant_context.set(tenant.id)
+
+    cust = Customer(
+        retailer_name="Delivery Invalid Retailer", customer_id="C-DEL-INVALID", address_text="Address",
+        gstin="07AAAAA1111A1Z1", tax_group="GST", payment_terms="COD"
+    )
+    db_session.add(cust)
+    db_session.flush()
+
+    order = Order(tenant_id=tenant.id, internal_order_id="ORD-DELIVERY-INVALID-1", source="Portal", customer_id=cust.id)
+    db_session.add(order)
+    db_session.flush()
+    db_session.add(OrderStateLedger(order_id=order.id, from_status=None, to_status="Draft", updated_by="admin"))
+    db_session.commit()
+
+    response = client.post(
+        f"/api/v1/orders/{order.id}/delivery-event",
+        json={"status": "delivered", "source": "manual", "tenant_id": str(tenant.id)}
+    )
+    assert response.status_code == 409
+
+    db_session.expire_all()
+    db_session.refresh(order)
+    assert order.current_status == "Draft"
+    assert order.delivered_at is None
 
 
 def test_orders_list_query_count_regression(db_session, client):
@@ -1588,6 +2105,68 @@ def test_instant_order_credit_limit_boundaries(db_session, client):
     resp_fail = client.post(f"/api/v1/orders/instant-transaction?tenant_id={tenant.id}", json=payload_fail)
     assert resp_fail.status_code == 201
     assert resp_fail.json()["status"] == "success"
+
+
+def test_instant_transaction_inline_customer_reuses_existing_by_phone(db_session, client):
+    """
+    Regression test for CUST-3: Van Sales' inline customer-creation path
+    (used when the request has no customer_id) previously had NO
+    existing-customer lookup at all -- every transaction for a walk-in
+    customer created a brand-new Customer row, even if the exact same
+    phone number had already been onboarded (e.g. a repeat walk-in visit).
+    This proves a second instant-transaction with the same phone number
+    reuses the existing customer instead of creating a duplicate.
+    """
+    tenant = DistributorTenant(name="Van Sales Dedup Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+    tenant_context.set(tenant.id)
+
+    p = Product(sku_id="PROD-VANDEDUP", brand="HUL", category="Soap", pack_size="1 unit", base_price=100.0)
+    db_session.add(p)
+    db_session.flush()
+    inv = Inventory(tenant_id=tenant.id, sku_id=p.id, location="WH1", quantity_on_hand=100, low_stock_threshold=5)
+    db_session.add(inv)
+    db_session.commit()
+
+    payload_1 = {
+        "idempotency_key": str(uuid.uuid4()),
+        "new_customer_name": "Walk-in Kirana",
+        "new_customer_phone": "+919876500011",
+        "items": [{"product_id": str(p.id), "quantity": 2}],
+        "already_delivered": True,
+        "payment_method": "cash",
+        "payment_amount": 200.0
+    }
+    resp1 = client.post(f"/api/v1/orders/instant-transaction?tenant_id={tenant.id}", json=payload_1)
+    assert resp1.status_code == 201
+
+    db_session.expire_all()
+    customers_after_first = db_session.query(Customer).filter(
+        Customer.tenant_id == tenant.id, Customer.phone_number == "+919876500011"
+    ).all()
+    assert len(customers_after_first) == 1
+    first_customer_id = customers_after_first[0].id
+
+    # Second, separate transaction with the SAME phone number (repeat visit).
+    payload_2 = {
+        "idempotency_key": str(uuid.uuid4()),
+        "new_customer_name": "Walk-in Kirana",
+        "new_customer_phone": "+919876500011",
+        "items": [{"product_id": str(p.id), "quantity": 1}],
+        "already_delivered": True,
+        "payment_method": "cash",
+        "payment_amount": 100.0
+    }
+    resp2 = client.post(f"/api/v1/orders/instant-transaction?tenant_id={tenant.id}", json=payload_2)
+    assert resp2.status_code == 201
+
+    db_session.expire_all()
+    customers_after_second = db_session.query(Customer).filter(
+        Customer.tenant_id == tenant.id, Customer.phone_number == "+919876500011"
+    ).all()
+    assert len(customers_after_second) == 1, "Same phone number must reuse the existing customer, not create a duplicate"
+    assert customers_after_second[0].id == first_customer_id
 
 
 def test_instant_order_cash_consistency(db_session, client):

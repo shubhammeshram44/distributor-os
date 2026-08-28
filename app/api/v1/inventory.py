@@ -1,11 +1,12 @@
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Cookie, Header
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.database import get_db, tenant_context
 from app.models.tenant import DistributorTenant
 from app.models.product import Product
 from app.models.inventory import Inventory
+from app.services.tenant_service import resolve_tenant_id
 
 router = APIRouter(prefix="/inventory", tags=["Inventory"])
 
@@ -15,9 +16,19 @@ class InwardPayload(BaseModel):
     warehouse_location: str
 
 @router.post("/inward", status_code=200)
-def inward_stock(payload: InwardPayload, db: Session = Depends(get_db)):
-    tenant = db.query(DistributorTenant).first()
-    tenant_id = tenant.id if tenant else uuid.UUID("d3b07384-d113-4956-a5d2-64be7357c11d")
+def inward_stock(
+    payload: InwardPayload,
+    tenant_id: uuid.UUID | None = None,
+    access_token: str | None = Cookie(None),
+    authorization: str | None = Header(None),
+    db: Session = Depends(get_db)
+):
+    # Fix for TENANT-4: previously resolved "the tenant" via
+    # db.query(DistributorTenant).first() -- an arbitrary row, ignoring the
+    # caller's actual identity. In a real multi-tenant deployment, every
+    # tenant's stock-inward writes would silently land against whichever
+    # tenant happened to be first in the table.
+    tenant_id = resolve_tenant_id(tenant_id, access_token, authorization)
     tenant_context.set(tenant_id)
 
     # Look up product by sku_id
@@ -55,9 +66,14 @@ def inward_stock(payload: InwardPayload, db: Session = Depends(get_db)):
     return {"status": "success"}
 
 @router.get("/dashboard-grid", status_code=200)
-def get_inventory_dashboard_grid(db: Session = Depends(get_db)):
-    tenant = db.query(DistributorTenant).first()
-    tenant_id = tenant.id if tenant else uuid.UUID("d3b07384-d113-4956-a5d2-64be7357c11d")
+def get_inventory_dashboard_grid(
+    tenant_id: uuid.UUID | None = None,
+    access_token: str | None = Cookie(None),
+    authorization: str | None = Header(None),
+    db: Session = Depends(get_db)
+):
+    # Fix for TENANT-4: same arbitrary-first-tenant issue as inward_stock above.
+    tenant_id = resolve_tenant_id(tenant_id, access_token, authorization)
     tenant_context.set(tenant_id)
     
     # Outer join products to inventory

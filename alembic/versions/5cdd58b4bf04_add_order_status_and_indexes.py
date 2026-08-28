@@ -74,17 +74,29 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     """Downgrade schema."""
-    op.drop_index('ix_invoices_order_id', table_name='invoices')
-    op.drop_index('ix_order_line_items_order_id', table_name='order_line_items')
-    op.drop_index('ix_orders_created_at', table_name='orders')
-    op.drop_index('ix_order_state_ledger_order_id_timestamp', table_name='order_state_ledger')
-    
-    op.drop_index('ix_invoices_tenant_id', table_name='invoices')
-    op.drop_index('ix_products_tenant_id', table_name='products')
-    op.drop_index('ix_customers_tenant_id', table_name='customers')
-    op.drop_index('ix_order_state_ledger_tenant_id', table_name='order_state_ledger')
-    op.drop_index('ix_order_line_items_tenant_id', table_name='order_line_items')
-    op.drop_index('ix_orders_tenant_id', table_name='orders')
-    
-    with op.batch_alter_table('orders', schema=None) as batch_op:
-        batch_op.drop_column('status')
+    bind = op.get_bind()
+    if index_exists(bind, 'invoices', 'ix_invoices_order_id'):
+        op.drop_index('ix_invoices_order_id', table_name='invoices')
+    if index_exists(bind, 'order_line_items', 'ix_order_line_items_order_id'):
+        op.drop_index('ix_order_line_items_order_id', table_name='order_line_items')
+    if index_exists(bind, 'orders', 'ix_orders_created_at'):
+        op.drop_index('ix_orders_created_at', table_name='orders')
+    if index_exists(bind, 'order_state_ledger', 'ix_order_state_ledger_order_id_timestamp'):
+        op.drop_index('ix_order_state_ledger_order_id_timestamp', table_name='order_state_ledger')
+
+    if index_exists(bind, 'invoices', 'ix_invoices_tenant_id'):
+        op.drop_index('ix_invoices_tenant_id', table_name='invoices')
+    if index_exists(bind, 'products', 'ix_products_tenant_id'):
+        op.drop_index('ix_products_tenant_id', table_name='products')
+    if index_exists(bind, 'customers', 'ix_customers_tenant_id'):
+        op.drop_index('ix_customers_tenant_id', table_name='customers')
+    if index_exists(bind, 'order_state_ledger', 'ix_order_state_ledger_tenant_id'):
+        op.drop_index('ix_order_state_ledger_tenant_id', table_name='order_state_ledger')
+    if index_exists(bind, 'order_line_items', 'ix_order_line_items_tenant_id'):
+        op.drop_index('ix_order_line_items_tenant_id', table_name='order_line_items')
+    if index_exists(bind, 'orders', 'ix_orders_tenant_id'):
+        op.drop_index('ix_orders_tenant_id', table_name='orders')
+
+    if column_exists(bind, 'orders', 'status'):
+        with op.batch_alter_table('orders', schema=None) as batch_op:
+            batch_op.drop_column('status')

@@ -338,6 +338,48 @@ def test_razorpay_webhook_paid_event(db_session, client):
             assert float(invoice.amount_paid) == 600.0
             assert invoice.payment_status == "PAID"
 
+            # Regression test for PAY-1: simulates the actual race window --
+            # two concurrent webhook deliveries for the SAME razorpay
+            # payment can both read session.status != "PAID" before either
+            # commits (Razorpay retries on slow/ambiguous responses; this
+            # endpoint can also be hit twice by a manual "check status"
+            # action). We can't reproduce true concurrent transactions
+            # against the in-memory SQLite test DB, so this reproduces the
+            # END STATE of that race directly: a Payment for this
+            # razorpay_payment_id already exists, but this PaymentSession's
+            # own status was reset to simulate a second in-flight request
+            # that read the pre-update snapshot. The endpoint must detect
+            # the already-processed payment and refuse to create a second
+            # Payment record, even though session.status alone says "not
+            # yet PAID".
+            from app.models.payment import Payment
+            session_row = db_session.query(PaymentSession).filter(
+                PaymentSession.razorpay_payment_link_id == "plink_test789"
+            ).first()
+            session_row.status = "ACTIVE"  # simulate the pre-commit snapshot a racing request read
+            db_session.commit()
+
+            payments_before_race_retry = db_session.query(Payment).filter(
+                Payment.reference_number == "pay_test789"
+            ).count()
+            assert payments_before_race_retry == 1
+
+            race_retry_response = client.post(
+                "/api/v1/payments/razorpay-webhook",
+                headers={"X-Razorpay-Signature": "fake-sig"},
+                json=webhook_payload
+            )
+            assert race_retry_response.status_code == 200
+
+            db_session.expire_all()
+            payments_after_race_retry = db_session.query(Payment).filter(
+                Payment.reference_number == "pay_test789"
+            ).count()
+            assert payments_after_race_retry == 1, "A second webhook racing past the status check must not create a duplicate Payment"
+
+            invoice_after_race_retry = db_session.query(Invoice).filter(Invoice.order_id == order.id).first()
+            assert float(invoice_after_race_retry.amount_paid) == 600.0, "Racing webhook must not double-credit the invoice"
+
 
 def test_preferred_invoice_paid_first(db_session):
     from app.services.payment_service import process_payment

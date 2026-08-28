@@ -142,7 +142,8 @@ def test_evolution_disconnect_endpoint_success(monkeypatch, db_session):
         id=uuid.UUID("7e8bed10-8339-446f-b851-de96ab5f0cad"),
         name="Disconnect Test Tenant",
         whatsapp_phone_id="test-instance",
-        whatsapp_order_phone="+919078158448"
+        whatsapp_order_phone="+919078158448",
+        whatsapp_connection_status="connected",
     )
     db_session.add(tenant)
     db_session.commit()
@@ -171,6 +172,13 @@ def test_evolution_disconnect_endpoint_success(monkeypatch, db_session):
         updated_tenant = db_session.query(DistributorTenant).filter_by(id=tenant.id).one()
         assert updated_tenant.whatsapp_phone_id is None
         assert updated_tenant.whatsapp_order_phone is None
+        # Regression test for WA-5: disconnect must also update the
+        # connection-status fields, not just the phone/instance config --
+        # otherwise GET .../whatsapp-status keeps reporting "connected"
+        # even though the instance was just deleted on Evolution API.
+        assert updated_tenant.whatsapp_connection_status == "disconnected"
+        assert updated_tenant.whatsapp_disconnected_at is not None
+        assert updated_tenant.whatsapp_disconnect_reason == "manual_disconnect"
 
 
 def test_evolution_disconnect_endpoint_failure_stops_db_clear(monkeypatch, db_session):

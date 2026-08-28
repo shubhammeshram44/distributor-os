@@ -2,7 +2,7 @@ import uuid
 import secrets
 import hashlib
 from datetime import datetime, timezone, timedelta
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 import pytest
 import concurrent.futures
 from fastapi.testclient import TestClient
@@ -52,8 +52,23 @@ def test_refresh_session_creation_and_cookies(db_session):
     tenant, user = _seed_user_and_tenant(db_session)
     
     # 1. Login should create session and set cookies
-    with patch("firebase_admin.auth.verify_id_token") as mock_verify:
-        mock_verify.return_value = {"uid": "test-uid", "phone_number": user.phone_number}
+    # Fix: this test previously patched "firebase_admin.auth.verify_id_token"
+    # directly, but firebase_login() actually calls _get_firebase_app()
+    # first, which -- when no real Firebase app is registered and no
+    # FIREBASE_CREDENTIALS_PATH/FIREBASE_CREDENTIALS_JSON env var is set (as
+    # in this test environment/CI) -- raises RuntimeError before
+    # verify_id_token is ever reached, regardless of that mock. The
+    # unconditional 503 this produced was a genuine, unrelated Firebase-
+    # config error, not a signal this test was actually exercising the
+    # refresh-session/cookie logic it's meant to cover. Matching the
+    # working pattern already used throughout test_auth.py, patch
+    # _get_firebase_app() itself so the mock is actually on the path this
+    # endpoint uses.
+    with patch("app.api.v1.auth._get_firebase_app") as mock_get_firebase_app:
+        mock_fb_auth = MagicMock()
+        mock_fb_auth.verify_id_token.return_value = {"uid": "test-uid", "phone_number": user.phone_number}
+        mock_get_firebase_app.return_value = mock_fb_auth
+
         response = client.post(
             "/api/v1/auth/firebase-login",
             json={"firebase_token": "valid-id-token"}

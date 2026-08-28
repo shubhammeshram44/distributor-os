@@ -47,6 +47,10 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index('ix_shipments_created_at', table_name='shipments')
-    op.drop_index('ix_shipments_tenant_order', table_name='shipments')
-    op.drop_column('shipments', 'created_at')
+    bind = op.get_bind()
+    if index_exists(bind, 'shipments', 'ix_shipments_created_at'):
+        op.drop_index('ix_shipments_created_at', table_name='shipments')
+    if index_exists(bind, 'shipments', 'ix_shipments_tenant_order'):
+        op.drop_index('ix_shipments_tenant_order', table_name='shipments')
+    if column_exists(bind, 'shipments', 'created_at'):
+        op.drop_column('shipments', 'created_at')

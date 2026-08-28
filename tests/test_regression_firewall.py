@@ -9,6 +9,7 @@ from app.models.ledger import CustomerLedger
 from app.models.shipment import Shipment
 from app.models.tenant import DistributorTenant
 from app.models.customer import Customer
+from app.services.tenant_service import DEMO_TENANT_ID
 
 client = TestClient(app)
 
@@ -75,6 +76,62 @@ def test_whatsapp_webhook_decoupled_routing(db_session, setup_test_catalog):
     assert response.json().get("status") == "success"
 
 
+def test_whatsapp_content_duplicate_within_5_minutes_is_skipped(db_session, setup_test_catalog):
+    """
+    Regression test for WA-2: the spec requires deduplicating orders
+    received within 5 minutes from the same customer with identical
+    normalized content. Previously only an in-memory, message-ID-keyed
+    dedup existed (webhook-retry protection) -- a customer manually
+    resending the exact same text (a fresh message ID each time, e.g. a
+    retry from their own phone, or a WhatsApp client's own delivery retry
+    assigning a new id) created a second, fully independent duplicate order.
+    """
+    tenant = db_session.query(DistributorTenant).first()
+    tenant.whatsapp_order_phone = "+918888888888"
+    db_session.commit()
+
+    payload = {
+        "sender": "+919999888877",
+        "receiver": "+918888888888",
+        "message": "Bhaiya, send 5 packs of PatanjaliDantKanti"
+    }
+    first_response = client.post("/api/v1/whatsapp/webhook", json=payload)
+    assert first_response.status_code == 200
+    assert first_response.json().get("status") == "success"
+
+    orders_after_first = db_session.query(Order).filter(Order.source == "WhatsApp").count()
+    assert orders_after_first == 1
+
+    # Resend the EXACT same content (different casing/whitespace to prove
+    # normalization) within the 5-minute window -- must be skipped as a
+    # duplicate, not create a second order.
+    duplicate_payload = {
+        "sender": "+919999888877",
+        "receiver": "+918888888888",
+        "message": "  Bhaiya,  SEND 5 packs of PatanjaliDantKanti  "
+    }
+    second_response = client.post("/api/v1/whatsapp/webhook", json=duplicate_payload)
+    assert second_response.status_code == 200
+    assert second_response.json().get("status") == "duplicate"
+
+    orders_after_second = db_session.query(Order).filter(Order.source == "WhatsApp").count()
+    assert orders_after_second == 1, "Resending identical content within 5 minutes must not create a second order"
+
+    # A genuinely DIFFERENT message from the same customer must still go
+    # through normally (dedup must not be overly broad).
+    different_payload = {
+        "sender": "+919999888877",
+        "receiver": "+918888888888",
+        "message": "Bhaiya, send 20 packs of SurfExcel this time"
+    }
+    third_response = client.post("/api/v1/whatsapp/webhook", json=different_payload)
+    assert third_response.status_code == 200
+    assert third_response.json().get("status") == "success"
+
+    orders_after_third = db_session.query(Order).filter(Order.source == "WhatsApp").count()
+    assert orders_after_third == 2, "A genuinely different message must not be treated as a duplicate"
+
+
 # =====================================================================
 # 2. THE ORDER JOURNEY (ADDITION, CONFIRMATION, SHIPMENT)
 # =====================================================================
@@ -90,7 +147,7 @@ def test_order_addition_and_creation(db_session, setup_test_catalog):
             {"sku_id": "SKU-AASHIRVAAD-AATA", "quantity": 10, "price": 450.00}
         ]
     }
-    response = client.post("/api/v1/orders/create", json=order_payload)
+    response = client.post(f"/api/v1/orders/create?tenant_id={DEMO_TENANT_ID}", json=order_payload)
     assert response.status_code == 201
     
     order_id = response.json().get("order_id")
@@ -142,7 +199,7 @@ def test_order_create_fallback_product_gets_valid_uuid_and_inventory(db_session,
             {"sku_id": "SKU-BRAND-NEW-UNMAPPED", "quantity": 3, "price": 150.00}
         ]
     }
-    response = client.post("/api/v1/orders/create", json=order_payload)
+    response = client.post(f"/api/v1/orders/create?tenant_id={DEMO_TENANT_ID}", json=order_payload)
     assert response.status_code == 201
 
     order_id = response.json().get("order_id")
@@ -204,7 +261,7 @@ def test_inventory_stock_inward_addition(db_session, setup_test_catalog):
         "quantity_added": 50,
         "warehouse_location": "Bay-A1"
     }
-    response = client.post("/api/v1/inventory/inward", json=inward_payload)
+    response = client.post(f"/api/v1/inventory/inward?tenant_id={DEMO_TENANT_ID}", json=inward_payload)
     assert response.status_code == 200
     
     product = db_session.query(Product).filter_by(sku_id="SKU-AASHIRVAAD-AATA").first()
@@ -218,7 +275,7 @@ def test_inventory_grid_includes_zero_stock_items(db_session, setup_empty_catalo
     Catalog items with 0 physical stock must still show up on the frontend
     inventory panel instead of being dropped by strict INNER JOINs.
     """
-    response = client.get("/api/v1/inventory/dashboard-grid")
+    response = client.get(f"/api/v1/inventory/dashboard-grid?tenant_id={DEMO_TENANT_ID}")
     assert response.status_code == 200
     
     items = response.json().get("data", [])
@@ -241,7 +298,7 @@ def test_payment_voucher_logging(db_session, setup_test_catalog):
         "amount": 2000.00,
         "payment_mode": "Cash"
     }
-    response = client.post("/api/v1/payments/voucher", json=payload)
+    response = client.post(f"/api/v1/payments/voucher?tenant_id={DEMO_TENANT_ID}", json=payload)
     assert response.status_code == 201
 
     ledger_entry = db_session.query(CustomerLedger).filter(
@@ -267,7 +324,7 @@ def test_fifo_payment_cascade(db_session, setup_unpaid_orders):
         "amount": 700.00,
         "payment_mode": "UPI"
     }
-    response = client.post("/api/v1/payments/collect", json=payment_payload)
+    response = client.post(f"/api/v1/payments/collect?tenant_id={DEMO_TENANT_ID}", json=payment_payload)
     assert response.status_code == 200
     
     order_1 = db_session.query(Order).get(order_1_id)
@@ -713,3 +770,106 @@ def test_credit_limit_on_confirm_order_post(db_session, setup_test_catalog):
     assert gap_db.reason_code == "CREDIT_LIMIT"
     assert float(gap_db.revenue_at_risk) == 500.0
 
+
+
+def test_inventory_inward_rejects_wrong_tenant_and_requires_tenant_id(db_session, setup_test_catalog):
+    """
+    Regression test for TENANT-4: inward_stock previously resolved 'the
+    tenant' via db.query(DistributorTenant).first() -- an arbitrary row,
+    ignoring the caller's actual identity. In a real multi-tenant
+    deployment, this silently wrote every stock-inward request against
+    whichever tenant happened to be first in the table. Now requires an
+    explicit, resolvable tenant_id.
+    """
+    inward_payload = {
+        "sku_id": "SKU-AASHIRVAAD-AATA",
+        "quantity_added": 5,
+        "warehouse_location": "Bay-Z9"
+    }
+    # No tenant_id at all -> rejected, not silently applied to an arbitrary tenant.
+    response = client.post("/api/v1/inventory/inward", json=inward_payload)
+    assert response.status_code == 401
+
+
+def test_inventory_dashboard_grid_requires_tenant_id(db_session, setup_test_catalog):
+    """Regression test for TENANT-4 on get_inventory_dashboard_grid."""
+    response = client.get("/api/v1/inventory/dashboard-grid")
+    assert response.status_code == 401
+
+
+def test_payments_voucher_requires_tenant_id(db_session, setup_test_catalog):
+    """Regression test for TENANT-4 on record_voucher."""
+    customer = db_session.query(Customer).first()
+    payload = {"customer_id": str(customer.id), "amount": 100.00, "payment_mode": "Cash"}
+    response = client.post("/api/v1/payments/voucher", json=payload)
+    assert response.status_code == 401
+
+
+def test_payments_collect_requires_tenant_id(db_session, setup_test_catalog):
+    """Regression test for TENANT-4 on collect_payment."""
+    customer = db_session.query(Customer).first()
+    payload = {"customer_id": str(customer.id), "amount": 100.00, "payment_mode": "UPI"}
+    response = client.post("/api/v1/payments/collect", json=payload)
+    assert response.status_code == 401
+
+
+def test_orders_create_requires_tenant_id(db_session, setup_test_catalog):
+    """Regression test for TENANT-4 on create_order_generic."""
+    order_payload = {
+        "customer_id": 1,
+        "items": [{"sku_id": "SKU-AASHIRVAAD-AATA", "quantity": 1, "price": 450.00}]
+    }
+    response = client.post("/api/v1/orders/create", json=order_payload)
+    assert response.status_code == 401
+
+
+def test_payments_voucher_updates_outstanding_balance(db_session, setup_test_catalog):
+    """
+    Regression test for PAY-2: record_voucher previously inserted a
+    CustomerLedger row directly instead of going through record_transaction(),
+    leaving customer.outstanding_balance permanently stale.
+    """
+    customer = db_session.query(Customer).first()
+    # Give the customer a real existing DEBIT balance first -- without this,
+    # a fresh customer starts at 0.0, and outstanding_balance is floored at
+    # 0.0 either way (with or without the fix), which would mask the bug
+    # this test exists to catch.
+    from app.services.ledger_service import record_transaction
+    record_transaction(
+        db=db_session, tenant_id=customer.tenant_id, customer_id=customer.id,
+        type="DEBIT", amount=2000.0, reference_id="PRE-EXISTING-DEBIT",
+        description="Pre-existing balance for PAY-2 regression test"
+    )
+    db_session.commit()
+    db_session.refresh(customer)
+    balance_before = float(customer.outstanding_balance or 0.0)
+    assert balance_before == 2000.0
+
+    payload = {"customer_id": str(customer.id), "amount": 500.00, "payment_mode": "Cash"}
+    response = client.post(f"/api/v1/payments/voucher?tenant_id={DEMO_TENANT_ID}", json=payload)
+    assert response.status_code == 201
+
+    db_session.expire_all()
+    db_session.refresh(customer)
+    # A CREDIT voucher reduces outstanding balance.
+    assert float(customer.outstanding_balance) == balance_before - 500.00
+
+
+def test_payments_collect_updates_outstanding_balance(db_session, setup_unpaid_orders):
+    """
+    Regression test for PAY-2: collect_payment previously inserted a
+    CustomerLedger row directly instead of going through record_transaction(),
+    leaving customer.outstanding_balance permanently stale.
+    """
+    from app.models.customer import Customer as CustomerModel
+    customer_id = setup_unpaid_orders["customer_id"]
+    customer = db_session.get(CustomerModel, customer_id)
+    balance_before = float(customer.outstanding_balance or 0.0)
+
+    payload = {"customer_id": str(customer_id), "amount": 300.00, "payment_mode": "UPI"}
+    response = client.post(f"/api/v1/payments/collect?tenant_id={DEMO_TENANT_ID}", json=payload)
+    assert response.status_code == 200
+
+    db_session.expire_all()
+    customer_after = db_session.get(CustomerModel, customer_id)
+    assert float(customer_after.outstanding_balance) == max(0.0, balance_before - 300.00)

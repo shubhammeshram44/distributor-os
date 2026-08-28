@@ -145,6 +145,47 @@ def test_signup_already_registered(db_session):
     assert db_session.query(User).count() == 1
 
 
+def test_signup_concurrent_race_returns_409_not_500(db_session, monkeypatch):
+    """
+    Regression test for AUTH-5: complete_signup's existing-user checks are a
+    plain check-then-insert with no lock -- a classic TOCTOU race. This
+    simulates the race directly by monkeypatching both pre-checks to always
+    report "no existing user found" (as if a concurrent request's insert
+    hadn't committed yet when this request's SELECTs ran), then verifies the
+    request still cannot succeed in creating a genuine duplicate: the
+    DB-level unique constraint on users.firebase_uid must catch it and the
+    endpoint must convert that into a clean 409 instead of an unhandled 500.
+    """
+    tenant, existing_user = _seed_existing_user(db_session)
+    # Give the pre-existing user the firebase_uid the race will collide on,
+    # so the eventual insert genuinely violates the unique constraint.
+    existing_user.firebase_uid = MOCK_UID
+    db_session.commit()
+
+    from sqlalchemy.orm import Query
+    original_first = Query.first
+
+    def _patched_first(self):
+        if self.column_descriptions and self.column_descriptions[0]["entity"] is User:
+            return None
+        return original_first(self)
+
+    monkeypatch.setattr(Query, "first", _patched_first)
+
+    signup_token = _make_signup_token()
+    response = client.post(
+        "/api/v1/auth/signup",
+        json={"signup_token": signup_token, "full_name": "Racing Distributor"},
+    )
+
+    assert response.status_code == 409
+    db_session.expire_all()
+    assert db_session.query(User).filter(User.firebase_uid == MOCK_UID).count() == 1, (
+        "The race must not result in two users with the same firebase_uid"
+    )
+
+
+
 # ---------------------------------------------------------------------------
 # POST /auth/firebase-login — new user path
 # ---------------------------------------------------------------------------

@@ -1,17 +1,25 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import String, ForeignKey, Integer, Numeric, DateTime, JSON, select, desc, Text, event
+from sqlalchemy import String, ForeignKey, Integer, Numeric, DateTime, JSON, select, desc, Text, event, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship, object_session, Session
 from sqlalchemy.ext.hybrid import hybrid_property
 from app.database import Base, TenantMixin
 
 class Order(Base, TenantMixin):
     __tablename__ = "orders"
+    __table_args__ = (
+        # DB-3: dashboard.py consistently filters tenant_id + created_at and
+        # tenant_id + status together; the single-column ix_orders_tenant_id /
+        # ix_orders_created_at indexes force Postgres to pick only one and
+        # filter the rest of a tenant's order set row-by-row at scale.
+        Index("ix_orders_tenant_created_at", "tenant_id", "created_at"),
+        Index("ix_orders_tenant_status", "tenant_id", "status"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     internal_order_id: Mapped[str] = mapped_column(String(100), nullable=False)
     source: Mapped[str] = mapped_column(String(50), nullable=False) # "WhatsApp", "Portal", "ERP"
-    customer_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("customers.id", ondelete="CASCADE"), nullable=False)
+    customer_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("customers.id", ondelete="RESTRICT"), nullable=False)
     invoice_type: Mapped[str] = mapped_column(String(50), nullable=False, default="UNSPECIFIED")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

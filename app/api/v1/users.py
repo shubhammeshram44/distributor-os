@@ -7,23 +7,88 @@ from app.database import get_db, tenant_context
 from app.models.user import User
 from app.models.tenant import DistributorTenant
 from app.utils.security import hash_password, verify_jwt
+from app.services.tenant_service import resolve_tenant_id
 
 router = APIRouter(prefix="/users", tags=["Users"])
+
+
+def get_current_admin_user(
+    access_token: str | None = Cookie(None),
+    authorization: str | None = Header(None),
+    db: Session = Depends(get_db),
+) -> User:
+    """
+    Requires a valid, authenticated SUPER_ADMIN session. Unlike
+    resolve_tenant_id(), this performs NO fallback to a client-supplied
+    tenant_id/query param — user-management mutations (inviting new staff,
+    changing roles, activating/deactivating accounts) must always be backed
+    by a real, verified session belonging to an admin of that same tenant.
+    Mirrors app/api/v1/admin.py::get_current_admin_user.
+    """
+    token = None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ")[1]
+    if not token:
+        token = access_token
+
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+        )
+
+    payload = verify_jwt(token)
+    if not payload or "user_id" not in payload:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid session token",
+        )
+
+    user = db.get(User, uuid.UUID(payload["user_id"]))
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found",
+        )
+
+    # Fix for AUTH-2: a deactivated admin's still-valid JWT previously
+    # retained full team-management capability for the token's entire
+    # lifetime (up to 24h) after being deactivated.
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Account has been deactivated",
+        )
+
+    if user.role != "SUPER_ADMIN":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient permissions. Only SUPER_ADMIN can manage team members.",
+        )
+
+    return user
+
 
 @router.get("")
 def get_users(
     role: str | None = None,
     tenant_id: uuid.UUID | None = None,
+    access_token: str | None = Cookie(None),
+    authorization: str | None = Header(None),
     db: Session = Depends(get_db)
 ):
-    if tenant_id:
-        tenant_context.set(tenant_id)
+    # Resolve tenant strictly from the caller's own authenticated session
+    # (JWT header/cookie), falling back to the query param only when no
+    # token is present at all (matching the codebase-wide resolve_tenant_id
+    # convention used everywhere else). Previously this endpoint applied NO
+    # filter whatsoever when tenant_id was omitted, returning every user
+    # across every tenant to any caller — see AUTH-1.
+    resolved_tenant_id = resolve_tenant_id(tenant_id, access_token, authorization)
+    tenant_context.set(resolved_tenant_id)
 
     query = db.query(User)
-    filters = []
-    
-    if tenant_id:
-        filters.append(User.tenant_id == tenant_id)
+    filters = [User.tenant_id == resolved_tenant_id]
+
     if role:
         # Case-insensitive mapping to maintain driver dropdown compatibility
         if role.upper() == "DRIVER":
@@ -31,8 +96,7 @@ def get_users(
         else:
             filters.append(User.role == role)
         
-    if filters:
-        query = query.filter(and_(*filters))
+    query = query.filter(and_(*filters))
         
     users = query.all()
     return [
@@ -57,8 +121,17 @@ class UserInvitePayload(BaseModel):
 def invite_user(
     payload: UserInvitePayload,
     tenant_id: uuid.UUID,
+    current_user: User = Depends(get_current_admin_user),
     db: Session = Depends(get_db)
 ):
+    # The tenant_id query param must match the authenticated admin's own
+    # tenant — otherwise a valid admin of Tenant A could invite/create users
+    # inside Tenant B just by changing the query param. See AUTH-1.
+    if tenant_id != current_user.tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot manage users outside your own tenant."
+        )
     tenant_context.set(tenant_id)
     
     valid_roles = {"SUPER_ADMIN", "FINANCE", "OPERATOR", "DRIVER"}
@@ -113,15 +186,25 @@ def update_user(
     user_id: uuid.UUID,
     payload: UserUpdatePayload,
     tenant_id: uuid.UUID,
+    current_user: User = Depends(get_current_admin_user),
     db: Session = Depends(get_db)
 ):
     """
     Modifies user roles and status parameters strictly under tenant context.
     """
+    # The tenant_id query param must match the authenticated admin's own
+    # tenant, and the target user must actually belong to that tenant --
+    # otherwise a valid admin of Tenant A could escalate/deactivate a user
+    # in Tenant B just by passing Tenant B's id and that user's id. See AUTH-1.
+    if tenant_id != current_user.tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot manage users outside your own tenant."
+        )
     tenant_context.set(tenant_id)
     
     user = db.get(User, user_id)
-    if not user:
+    if not user or user.tenant_id != tenant_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found"
@@ -185,6 +268,14 @@ def get_me(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found"
+        )
+
+    # Fix for AUTH-2: same is_active gap as auth.py::get_me and
+    # get_current_admin_user above.
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Account has been deactivated"
         )
         
     tenant = db.get(DistributorTenant, user.tenant_id)
