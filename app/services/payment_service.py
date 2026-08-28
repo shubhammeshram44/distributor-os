@@ -8,6 +8,15 @@ from app.models.invoice import Invoice
 
 def allocate_payment_fifo(db: Session, customer_id: uuid.UUID, payment_id: uuid.UUID, total_amount: float, tenant_id: uuid.UUID):
     # 1. Fetch all unpaid or partially paid invoices for this customer, oldest first
+    # Fix for PAY-5: uses SELECT ... FOR UPDATE so concurrent payments for
+    # the same customer (e.g. a cash voucher recorded while a Razorpay
+    # webhook lands, or two staff members double-clicking "record payment")
+    # serialize on these locked invoice rows instead of each reading the
+    # same pre-payment amount_paid snapshot and both committing an absolute
+    # (not atomic-increment) write -- a lost-update race that could leave
+    # invoice.amount_paid under-reporting actual collections while
+    # PaymentInvoiceLink rows (created unconditionally below) over-report
+    # them.
     open_invoices = (
         db.query(Invoice)
         .filter(
@@ -15,7 +24,8 @@ def allocate_payment_fifo(db: Session, customer_id: uuid.UUID, payment_id: uuid.
             Invoice.tenant_id == tenant_id,
             Invoice.payment_status.in_(["UNPAID", "PARTIALLY_PAID"])
         )
-        .order_by(Invoice.created_at.asc())
+        .order_by(Invoice.created_at.asc(), Invoice.id.asc())
+        .with_for_update()
         .all()
     )
     
