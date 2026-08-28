@@ -5,7 +5,7 @@ import typing
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status, Cookie, Header, BackgroundTasks
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func, and_, select as sa_select, update as sa_update
 from sqlalchemy.orm import Session, aliased, joinedload
 from app.database import get_db, tenant_context
@@ -613,7 +613,12 @@ def restore_inventory_for_order(db: Session, order: Order) -> None:
 
 class ItemResolvePayload(BaseModel):
     sku_code: str
-    quantity: int
+    # Fix for INV-5: previously an unconstrained int -- a negative quantity
+    # here was clamped to 0 by confirm_order's `allocated = min(quantity,
+    # available)` guard (so inventory was never touched), but
+    # billing_total still summed the negative contribution, silently
+    # under-invoicing the whole order.
+    quantity: int = Field(..., gt=0)
     save_as_permanent_alias: bool | None = False
 
 @router.patch("/items/{item_id}/resolve", status_code=status.HTTP_200_OK)
@@ -1326,8 +1331,10 @@ def get_order_by_id(
 
 class OrderItemCreate(BaseModel):
     sku_id: str
-    quantity: int
-    unit_price: float
+    # Fix for INV-5: same negative-quantity under-invoicing issue as
+    # ItemResolvePayload above -- see that comment for the full mechanism.
+    quantity: int = Field(..., gt=0)
+    unit_price: float = Field(..., ge=0)
 
 
 class OrderCreatePayload(BaseModel):
@@ -1498,8 +1505,10 @@ from app.models.shipment import Shipment
 
 class IngestionOrderItem(BaseModel):
     sku_id: str
-    quantity: int
-    price: float
+    # Fix for INV-5: same negative-quantity under-invoicing issue as
+    # ItemResolvePayload above -- see that comment for the full mechanism.
+    quantity: int = Field(..., gt=0)
+    price: float = Field(..., ge=0)
 
 class IngestionOrderPayload(BaseModel):
     customer_id: Any

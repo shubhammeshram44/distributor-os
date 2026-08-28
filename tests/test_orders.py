@@ -1245,6 +1245,74 @@ def test_create_order_from_payload(db_session, client):
     assert line_items[0].unit_price == 50.0
 
 
+def test_create_order_rejects_negative_quantity(db_session, client):
+    """
+    Regression test for INV-5: OrderItemCreate.quantity previously had no
+    validation constraint at all -- a negative quantity line item was
+    accepted, and while confirm_order's `allocated = min(quantity,
+    available)` clamp meant inventory was never touched for a negative
+    line, billing_total still summed the negative contribution, silently
+    under-invoicing the whole order (e.g. a legitimate 5x line plus a
+    malicious -3x line billed as if only 2 net units were ordered).
+    """
+    tenant = DistributorTenant(name="Negative Qty Order Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+
+    cust = Customer(
+        tenant_id=tenant.id, retailer_name="Negative Qty Shop", customer_id="C-NEGQTY-1",
+        address_text="Test Address", gstin="29AAAAA1111A1Z1", tax_group="GST-18", payment_terms="0-15 Days"
+    )
+    db_session.add(cust)
+    db_session.commit()
+
+    payload = {
+        "tenant_id": str(tenant.id),
+        "customer_id": str(cust.id),
+        "source": "Portal",
+        "status": "Draft",
+        "items": [
+            {"sku_id": "PROD-NEGQTY", "quantity": -3, "unit_price": 100.0}
+        ]
+    }
+    response = client.post("/api/v1/orders", json=payload)
+    assert response.status_code == 422
+
+
+def test_resolve_order_item_rejects_negative_quantity(db_session, client):
+    """
+    Regression test for INV-5: ItemResolvePayload.quantity had the same
+    unconstrained-negative-quantity gap as OrderItemCreate above.
+    """
+    tenant = DistributorTenant(name="Resolve Negative Qty Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+    tenant_context.set(tenant.id)
+
+    cust = Customer(
+        tenant_id=tenant.id, retailer_name="Resolve Negative Qty Shop", customer_id="C-RESOLVENEG-1",
+        address_text="Test Address", gstin="29AAAAA1111A1Z1", tax_group="GST-18", payment_terms="0-15 Days"
+    )
+    db_session.add(cust)
+    db_session.flush()
+
+    order = Order(tenant_id=tenant.id, internal_order_id="ORD-RESOLVENEG-1", source="WhatsApp", customer_id=cust.id)
+    db_session.add(order)
+    db_session.flush()
+    line_item = OrderLineItem(
+        order_id=order.id, product_id=None, quantity=5, unit_price=50.0,
+        unmatched_raw_text="unresolved item"
+    )
+    db_session.add(line_item)
+    db_session.commit()
+
+    response = client.patch(
+        f"/api/v1/orders/items/{line_item.id}/resolve",
+        json={"sku_code": "PROD-RESOLVENEG", "quantity": -5}
+    )
+    assert response.status_code == 422
+
+
 def test_patch_order_invoice_type(db_session, client):
     # Setup Tenant
     tenant = DistributorTenant(name="Patch Order Tenant")
