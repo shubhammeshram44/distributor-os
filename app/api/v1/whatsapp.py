@@ -41,6 +41,36 @@ def _check_and_mark_msg_id(msg_id: str) -> bool:
     return False
 
 
+def _sender_belongs_to_claimed_tenant(db: Session, sender_phone: str, claimed_tenant_id: uuid.UUID) -> bool:
+    """
+    Fix for WA-1: verifies a client-supplied tenant_id claim (an
+    unauthenticated field in the raw webhook JSON body -- there is no
+    signature/API-key verification on this endpoint) actually corresponds
+    to a real, registered customer of THAT specific tenant, before it is
+    ever trusted to route/create an order. Without this check, a caller
+    could inject a spoofed tenant_id in the payload and have orders created
+    against a tenant they have no relationship with whatsoever (as long as
+    they know or can guess/enumerate a phone number that happens to be a
+    registered customer of the victim tenant -- the same residual risk the
+    Layer-5 customer whitelist in ingestion_service.py already accepts, but
+    at least now scoped to the CLAIMED tenant rather than any tenant).
+    """
+    if not sender_phone or not claimed_tenant_id:
+        return False
+    clean_phone = sender_phone.split("@")[0] if "@" in sender_phone else sender_phone
+    phone_variants = get_phone_number_variants(clean_phone)
+    match = db.query(Customer).join(CustomerAlias).filter(
+        Customer.tenant_id == claimed_tenant_id,
+        CustomerAlias.alias_value.in_(phone_variants)
+    ).first()
+    if not match:
+        match = db.query(Customer).filter(
+            Customer.tenant_id == claimed_tenant_id,
+            Customer.phone_number.in_(phone_variants)
+        ).first()
+    return match is not None
+
+
 # Module-level singleton: GeminiService is expensive to initialise (configures API key, loads model).
 _gemini_service_instance: GeminiService | None = None
 
@@ -151,7 +181,14 @@ def process_whatsapp_webhook_payload(
             if tenant:
                 resolved_tenant_id = tenant.id
             else:
-                if canonical_msg.tenant_id:
+                # Fix for WA-1: previously trusted canonical_msg.tenant_id
+                # (a raw, unauthenticated field from the request body) the
+                # moment the supplied instance/instanceId didn't match any
+                # known tenant -- letting a caller inject orders into any
+                # tenant they could name. Now requires the sender's phone
+                # to actually be a registered customer of THAT claimed
+                # tenant before trusting the claim at all.
+                if canonical_msg.tenant_id and _sender_belongs_to_claimed_tenant(db, phone, canonical_msg.tenant_id):
                     resolved_tenant_id = canonical_msg.tenant_id
                 else:
                     logger.warning("[Ingestion - %s] Webhook message dropped: No tenant found with whatsapp_phone_id=%s", correlation_id, bot_phone_id)
@@ -183,7 +220,11 @@ def process_whatsapp_webhook_payload(
                 logger.info("[Ingestion - %s] Resolved tenant ID via matching User record: %s", correlation_id, resolved_tenant_id)
             
             if not resolved_tenant_id:
-                resolved_tenant_id = canonical_msg.tenant_id
+                # Fix for WA-1: same unauthenticated-tenant-claim issue as
+                # above -- require the sender's phone to actually be a
+                # registered customer of the claimed tenant before trusting it.
+                if canonical_msg.tenant_id and _sender_belongs_to_claimed_tenant(db, phone, canonical_msg.tenant_id):
+                    resolved_tenant_id = canonical_msg.tenant_id
                 if not resolved_tenant_id and receiver_phone:
                     tenant = db.query(DistributorTenant).filter(DistributorTenant.whatsapp_order_phone == receiver_phone).first()
                     if tenant:
