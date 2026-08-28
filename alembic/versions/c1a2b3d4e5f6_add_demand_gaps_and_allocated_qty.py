@@ -103,8 +103,14 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index("ix_demand_gaps_tenant_customer", table_name="demand_gaps")
-    op.drop_index("ix_demand_gaps_reason", table_name="demand_gaps")
-    op.drop_index("ix_demand_gaps_tenant_created", table_name="demand_gaps")
-    op.drop_table("demand_gaps")
-    op.drop_column("order_line_items", "allocated_quantity")
+    bind = op.get_bind()
+    if index_exists(bind, "demand_gaps", "ix_demand_gaps_tenant_customer"):
+        op.drop_index("ix_demand_gaps_tenant_customer", table_name="demand_gaps")
+    if index_exists(bind, "demand_gaps", "ix_demand_gaps_reason"):
+        op.drop_index("ix_demand_gaps_reason", table_name="demand_gaps")
+    if index_exists(bind, "demand_gaps", "ix_demand_gaps_tenant_created"):
+        op.drop_index("ix_demand_gaps_tenant_created", table_name="demand_gaps")
+    if table_exists(bind, "demand_gaps"):
+        op.drop_table("demand_gaps")
+    if column_exists(bind, "order_line_items", "allocated_quantity"):
+        op.drop_column("order_line_items", "allocated_quantity")

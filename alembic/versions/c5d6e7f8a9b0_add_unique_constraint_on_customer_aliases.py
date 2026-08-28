@@ -29,7 +29,7 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 
-from app.utils.migration_helpers import index_exists
+from app.utils.migration_helpers import index_exists, unique_constraint_exists, drop_unique_index_or_constraint
 
 # revision identifiers, used by Alembic.
 revision: str = 'c5d6e7f8a9b0'
@@ -40,7 +40,8 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     bind = op.get_bind()
-    if not index_exists(bind, 'customer_aliases', 'uq_customer_aliases_tenant_alias_value'):
+    if not index_exists(bind, 'customer_aliases', 'uq_customer_aliases_tenant_alias_value') and \
+       not unique_constraint_exists(bind, 'customer_aliases', 'uq_customer_aliases_tenant_alias_value'):
         op.create_index(
             'uq_customer_aliases_tenant_alias_value',
             'customer_aliases',
@@ -51,5 +52,4 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     bind = op.get_bind()
-    if index_exists(bind, 'customer_aliases', 'uq_customer_aliases_tenant_alias_value'):
-        op.drop_index('uq_customer_aliases_tenant_alias_value', table_name='customer_aliases')
+    drop_unique_index_or_constraint(bind, 'customer_aliases', 'uq_customer_aliases_tenant_alias_value')

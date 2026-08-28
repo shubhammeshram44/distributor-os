@@ -65,6 +65,10 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index("ix_payment_promises_tenant_status", table_name="payment_promises")
-    op.drop_index("ix_payment_promises_customer_id", table_name="payment_promises")
-    op.drop_table("payment_promises")
+    bind = op.get_bind()
+    if index_exists(bind, "payment_promises", "ix_payment_promises_tenant_status"):
+        op.drop_index("ix_payment_promises_tenant_status", table_name="payment_promises")
+    if index_exists(bind, "payment_promises", "ix_payment_promises_customer_id"):
+        op.drop_index("ix_payment_promises_customer_id", table_name="payment_promises")
+    if table_exists(bind, "payment_promises"):
+        op.drop_table("payment_promises")

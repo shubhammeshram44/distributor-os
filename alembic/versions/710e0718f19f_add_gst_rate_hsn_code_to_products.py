@@ -87,10 +87,15 @@ def downgrade() -> None:
         op.drop_index('ix_invoices_tenant_invoice_number', table_name='invoices')
 
     with op.batch_alter_table('invoices') as batch_op:
-        batch_op.drop_column('invoice_number')
-        batch_op.drop_column('sgst_amount')
-        batch_op.drop_column('cgst_amount')
+        if column_exists(bind, 'invoices', 'invoice_number'):
+            batch_op.drop_column('invoice_number')
+        if column_exists(bind, 'invoices', 'sgst_amount'):
+            batch_op.drop_column('sgst_amount')
+        if column_exists(bind, 'invoices', 'cgst_amount'):
+            batch_op.drop_column('cgst_amount')
 
     with op.batch_alter_table('products') as batch_op:
-        batch_op.drop_column('hsn_code')
-        batch_op.drop_column('gst_rate')
+        if column_exists(bind, 'products', 'hsn_code'):
+            batch_op.drop_column('hsn_code')
+        if column_exists(bind, 'products', 'gst_rate'):
+            batch_op.drop_column('gst_rate')

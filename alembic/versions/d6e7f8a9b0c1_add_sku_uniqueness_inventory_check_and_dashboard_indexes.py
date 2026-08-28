@@ -51,7 +51,7 @@ import logging
 from alembic import op
 import sqlalchemy as sa
 
-from app.utils.migration_helpers import index_exists
+from app.utils.migration_helpers import index_exists, unique_constraint_exists, drop_unique_index_or_constraint
 
 logger = logging.getLogger("alembic.runtime.migration")
 
@@ -70,7 +70,8 @@ def upgrade() -> None:
     inspector = sa.inspect(bind)
 
     # ── INV-6: unique (tenant_id, sku_id) on products ───────────────────────
-    if not index_exists(bind, 'products', _PRODUCTS_SKU_INDEX):
+    if not index_exists(bind, 'products', _PRODUCTS_SKU_INDEX) and \
+       not unique_constraint_exists(bind, 'products', _PRODUCTS_SKU_INDEX):
         duplicate_count = bind.execute(sa.text(
             "SELECT COUNT(*) FROM ("
             "  SELECT tenant_id, sku_id FROM products "
@@ -125,8 +126,9 @@ def downgrade() -> None:
     if index_exists(bind, 'orders', 'ix_orders_tenant_created_at'):
         op.drop_index('ix_orders_tenant_created_at', table_name='orders')
 
-    if index_exists(bind, 'products', _PRODUCTS_SKU_INDEX):
-        op.drop_index(_PRODUCTS_SKU_INDEX, table_name='products')
+    if index_exists(bind, 'products', _PRODUCTS_SKU_INDEX) or \
+       unique_constraint_exists(bind, 'products', _PRODUCTS_SKU_INDEX):
+        drop_unique_index_or_constraint(bind, 'products', _PRODUCTS_SKU_INDEX)
 
     existing_checks = {c['name'] for c in inspector.get_check_constraints('inventory')} if 'inventory' in inspector.get_table_names() else set()
     if _INVENTORY_NONNEG_CHECK in existing_checks:
