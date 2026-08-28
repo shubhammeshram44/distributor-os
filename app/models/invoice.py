@@ -15,7 +15,7 @@ class Invoice(Base, TenantMixin):
     qr_code_status: Mapped[str] = mapped_column(String(50), default="Pending")
 
     # Payment allocation columns
-    customer_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("customers.id", ondelete="CASCADE"), nullable=True)
+    customer_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("customers.id", ondelete="RESTRICT"), nullable=True)
     payment_status: Mapped[str] = mapped_column(String(50), default="UNPAID", nullable=False)
     amount_paid: Mapped[float] = mapped_column(Numeric(10, 2), default=0.0, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)

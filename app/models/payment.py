@@ -8,7 +8,7 @@ class Payment(Base, TenantMixin):
     __tablename__ = "payments"
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    customer_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("customers.id", ondelete="CASCADE"), nullable=False)
+    customer_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("customers.id", ondelete="RESTRICT"), nullable=False)
     amount: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
     method: Mapped[str] = mapped_column(String(50), nullable=False)
     reference_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
