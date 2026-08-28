@@ -735,6 +735,77 @@ def test_list_orders(db_session, client):
     assert items[0]["status"] == "Pending"  # Draft maps to Pending
 
 
+def test_list_orders_sort_by_amount_does_not_crash(db_session, client):
+    """
+    Regression test for ORD-5: GET /orders?sort_by=amount previously
+    crashed with an unhandled 500. "amount" was an explicit dict key
+    mapped to None (not a missing key), so dict.get("amount", default)
+    returned None instead of the intended fallback -- dict.get()'s
+    default only applies when the key is absent, not when its value is
+    None -- and calling None.desc()/.asc() raised AttributeError.
+    "amount" is a field the response schema itself exposes, making it a
+    natural client sort choice.
+    """
+    tenant = DistributorTenant(name="Sort By Amount Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+    tenant_context.set(tenant.id)
+
+    p = Product(sku_id="PROD-SORTAMT", brand="HUL", category="Soap", pack_size="100g", base_price=45.0, stock_quantity=100)
+    db_session.add(p)
+    db_session.flush()
+
+    cust = Customer(
+        retailer_name="Sort Amount Customer", customer_id="C-SORTAMT-1", address_text="Delhi",
+        gstin="07AAAAA1111A1Z1", tax_group="GST", payment_terms="COD"
+    )
+    db_session.add(cust)
+    db_session.flush()
+
+    order_a = Order(tenant_id=tenant.id, internal_order_id="ORD-SORTAMT-A", source="Portal", customer_id=cust.id)
+    order_b = Order(tenant_id=tenant.id, internal_order_id="ORD-SORTAMT-B", source="Portal", customer_id=cust.id)
+    db_session.add_all([order_a, order_b])
+    db_session.flush()
+    db_session.add(OrderLineItem(order_id=order_a.id, product_id=p.id, quantity=1, unit_price=45.0))
+    db_session.add(OrderLineItem(order_id=order_b.id, product_id=p.id, quantity=10, unit_price=45.0))
+    db_session.commit()
+
+    response = client.get(f"/api/v1/orders?tenant_id={tenant.id}&sort_by=amount&sort_order=desc")
+    assert response.status_code == 200
+
+
+def test_list_orders_status_filter_is_applied(db_session, client):
+    """
+    Regression test for DASH-7: status_filter was declared as an accepted
+    query parameter on GET /orders but never actually applied to the
+    query or the total count -- silently accepted, silently ignored.
+    """
+    tenant = DistributorTenant(name="Status Filter Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+    tenant_context.set(tenant.id)
+
+    cust = Customer(
+        retailer_name="Status Filter Customer", customer_id="C-STATUSFILTER-1", address_text="Delhi",
+        gstin="07AAAAA1111A1Z1", tax_group="GST", payment_terms="COD"
+    )
+    db_session.add(cust)
+    db_session.flush()
+
+    draft_order = Order(tenant_id=tenant.id, internal_order_id="ORD-STATUSFILTER-DRAFT", source="Portal", customer_id=cust.id)
+    confirmed_order = Order(tenant_id=tenant.id, internal_order_id="ORD-STATUSFILTER-CONFIRMED", source="Portal", customer_id=cust.id, status="Confirmed")
+    db_session.add_all([draft_order, confirmed_order])
+    db_session.commit()
+
+    response = client.get(f"/api/v1/orders?tenant_id={tenant.id}&status_filter=Confirmed")
+    assert response.status_code == 200
+    data = response.json()
+    order_ids = {item["order_id"] for item in data["items"]}
+    assert "ORD-STATUSFILTER-CONFIRMED" in order_ids
+    assert "ORD-STATUSFILTER-DRAFT" not in order_ids
+    assert data["total"] == 1
+
+
 def test_credit_limit_guardrail_success_and_failure(db_session, client):
     # Setup Tenant
     tenant = DistributorTenant(name="Credit Limit Tenant")

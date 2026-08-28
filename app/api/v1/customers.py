@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from app.database import get_db, tenant_context
@@ -12,7 +12,12 @@ from app.models.payment import Payment
 router = APIRouter(prefix="/customers", tags=["Customers"])
 
 class CustomerUpdatePayload(BaseModel):
-    credit_limit: float
+    # Fix for CUST-8: previously an unconstrained float -- only the
+    # frontend enforced credit_limit >= 0. The API itself accepted
+    # negative values, which would make check_credit_limit's
+    # `combined > credit_limit` comparison always true, silently locking
+    # the customer out of ordering entirely.
+    credit_limit: float = Field(..., ge=0)
     billing_terms: str
 
 @router.patch("/{customer_id}", status_code=status.HTTP_200_OK)
@@ -57,7 +62,9 @@ class CustomerCreatePayload(BaseModel):
     store_name: str
     contact_number: str
     delivery_address: str
-    credit_limit: float
+    # Fix for CUST-8: same unconstrained-credit_limit gap as
+    # CustomerUpdatePayload above.
+    credit_limit: float = Field(..., ge=0)
     billing_terms: str
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -150,9 +157,20 @@ def list_customers(
 
     if search:
         term = f"%{search.lower()}%"
+        # Fix for CUST-6: search previously only matched Customer.retailer_name
+        # / Customer.phone_number -- a customer with an additional identity in
+        # customer_aliases (e.g. a second WhatsApp number, which the ingestion
+        # whitelist in ingestion_service.py DOES check via CustomerAlias) was
+        # invisible to this staff-facing search even though the customer
+        # genuinely exists. Join in matching aliases as an additional match path.
+        alias_customer_ids = db.query(CustomerAlias.customer_id).filter(
+            CustomerAlias.tenant_id == tenant_id,
+            CustomerAlias.alias_value.ilike(term)
+        ).subquery()
         query = query.filter(
             Customer.retailer_name.ilike(term) |
-            Customer.phone_number.ilike(term)
+            Customer.phone_number.ilike(term) |
+            Customer.id.in_(alias_customer_ids)
         )
 
     _sort_col = {
@@ -160,13 +178,29 @@ def list_customers(
         "outstanding_balance": Customer.outstanding_balance,
         "credit_limit": Customer.credit_limit,
     }.get(sort_by, Customer.retailer_name)
-    query = query.order_by(_sort_col.desc() if sort_order == "desc" else _sort_col.asc())
+    # Fix for CUST-7: sorting by a non-unique column (retailer_name,
+    # outstanding_balance, credit_limit -- the latter two often share a
+    # common default value like 100000.0 across many customers) with only
+    # .offset/.limit and no secondary tiebreaker can reorder/duplicate/skip
+    # rows across pages whenever values tie, since SQL does not guarantee
+    # stable ordering for ties without an explicit tiebreaker column.
+    # Customer.id is unique, so appending it as a secondary sort key makes
+    # pagination deterministic and stable across repeated requests.
+    if sort_order == "desc":
+        query = query.order_by(_sort_col.desc(), Customer.id.desc())
+    else:
+        query = query.order_by(_sort_col.asc(), Customer.id.asc())
 
     total_count = query.count()
     records = query.offset(skip).limit(limit).all()
 
     response_payload = []
     for customer in records:
+        # Fix for CUST-7 (phone-fallback nondeterminism): customer.aliases
+        # is an unordered lazy-loaded collection -- picking aliases[0]
+        # directly could return a different alias between requests. Sort
+        # by id for a stable, reproducible choice.
+        fallback_alias = min(customer.aliases, key=lambda a: a.id) if customer.aliases else None
         response_payload.append({
             "id": str(customer.id),
             "customer_id": customer.customer_id,
@@ -177,7 +211,7 @@ def list_customers(
             "payment_terms": customer.payment_terms if customer.payment_terms else "Net 30",
             "credit_limit": float(customer.credit_limit) if customer.credit_limit else 0.0,
             "outstanding_balance": float(customer.outstanding_balance) if customer.outstanding_balance else 0.0,
-            "phone": customer.phone_number if customer.phone_number else (customer.aliases[0].alias_value if customer.aliases else "N/A"),
+            "phone": customer.phone_number if customer.phone_number else (fallback_alias.alias_value if fallback_alias else "N/A"),
             "whatsapp_notifications_enabled": customer.whatsapp_notifications_enabled
         })
 

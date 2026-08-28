@@ -132,10 +132,25 @@ def list_orders(
             (Order.customer_id.in_(customer_ids_matching))
         )
 
+    # Fix for DASH-7: status_filter was declared as an accepted query
+    # parameter but never actually applied to the query or the total
+    # count -- silently accepted and silently ignored.
+    if status_filter:
+        filters.append(Order.status == status_filter)
+
     # Sorting
+    # Fix for ORD-5: "amount" was an explicit dict key mapped to None (not
+    # missing), so dict.get("amount", Order.created_at) returned None
+    # instead of the intended fallback -- dict.get()'s default only
+    # applies when the key is ABSENT, not when its value is None. Calling
+    # None.desc()/.asc() below then raised an unhandled AttributeError
+    # (500) for any client requesting ?sort_by=amount, a documented sort
+    # option the response schema itself exposes. Sort by the joined
+    # Invoice.total_amount (coalesced to 0 for orders with no invoice yet)
+    # instead of a null placeholder.
     _sort_col = {
         "created_at": Order.created_at,
-        "amount": None,  # computed, handled below
+        "amount": func.coalesce(Invoice.total_amount, 0),
     }.get(sort_by, Order.created_at)
 
     order_clause = _sort_col.desc() if sort_order == "desc" else _sort_col.asc()
