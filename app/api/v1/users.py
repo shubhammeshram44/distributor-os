@@ -51,6 +51,15 @@ def get_current_admin_user(
             detail="User not found",
         )
 
+    # Fix for AUTH-2: a deactivated admin's still-valid JWT previously
+    # retained full team-management capability for the token's entire
+    # lifetime (up to 24h) after being deactivated.
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Account has been deactivated",
+        )
+
     if user.role != "SUPER_ADMIN":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -259,6 +268,14 @@ def get_me(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found"
+        )
+
+    # Fix for AUTH-2: same is_active gap as auth.py::get_me and
+    # get_current_admin_user above.
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Account has been deactivated"
         )
         
     tenant = db.get(DistributorTenant, user.tenant_id)

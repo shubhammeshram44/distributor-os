@@ -71,3 +71,85 @@ def test_get_me_endpoints(db_session, client):
     resp_cookie = client.get("/api/v1/auth/me")
     assert resp_cookie.status_code == 200
     assert resp_cookie.json()["id"] == str(user_id)
+
+
+def test_get_me_rejects_deactivated_user(db_session, client):
+    """
+    Regression test for AUTH-2: /auth/me and /users/me previously never
+    checked user.is_active -- a still-valid JWT (issued before deactivation,
+    default 24h lifetime, no revocation list) continued to work for the
+    rest of its lifetime even after an admin deactivated the account. This
+    proves both endpoints now reject a deactivated user's still-valid token.
+    """
+    tenant_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+
+    tenant = DistributorTenant(id=tenant_id, name="Deactivation Test Tenant", category="FMCG")
+    db_session.add(tenant)
+    db_session.flush()
+
+    user = User(
+        id=user_id,
+        tenant_id=tenant_id,
+        full_name="Deactivated Dan",
+        phone_number="+1234567891",
+        email_or_phone="dan@example.com",
+        hashed_password=None,
+        role="SUPER_ADMIN",
+        is_active=True
+    )
+    db_session.add(user)
+    db_session.commit()
+
+    token = sign_jwt({"user_id": str(user_id), "tenant_id": str(tenant_id), "role": "SUPER_ADMIN"})
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # While active, the token works normally.
+    resp_active = client.get("/api/v1/auth/me", headers=headers)
+    assert resp_active.status_code == 200
+
+    # Admin deactivates the user -- the JWT itself is untouched/still valid
+    # (no revocation list exists), simulating the real-world "disable this
+    # account" action.
+    user.is_active = False
+    db_session.commit()
+
+    resp_deactivated_auth_me = client.get("/api/v1/auth/me", headers=headers)
+    assert resp_deactivated_auth_me.status_code == 401
+
+    resp_deactivated_users_me = client.get("/api/v1/users/me", headers=headers)
+    assert resp_deactivated_users_me.status_code == 401
+
+
+def test_admin_action_rejects_deactivated_super_admin(db_session, client):
+    """
+    Regression test for AUTH-2: get_current_admin_user (gating
+    /admin/payment-reminders/run) previously never checked is_active either
+    -- a deactivated SUPER_ADMIN's still-valid token could keep executing
+    admin-only actions.
+    """
+    tenant_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+
+    tenant = DistributorTenant(id=tenant_id, name="Admin Deactivation Tenant", category="FMCG")
+    db_session.add(tenant)
+    db_session.flush()
+
+    admin_user = User(
+        id=user_id,
+        tenant_id=tenant_id,
+        full_name="Deactivated Admin",
+        phone_number="+1234567892",
+        email_or_phone="deactivated-admin@example.com",
+        hashed_password=None,
+        role="SUPER_ADMIN",
+        is_active=False
+    )
+    db_session.add(admin_user)
+    db_session.commit()
+
+    token = sign_jwt({"user_id": str(user_id), "tenant_id": str(tenant_id), "role": "SUPER_ADMIN"})
+    headers = {"Authorization": f"Bearer {token}"}
+
+    resp = client.post("/api/v1/admin/payment-reminders/run", headers=headers)
+    assert resp.status_code == 401

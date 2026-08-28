@@ -290,6 +290,14 @@ def get_me(access_token: str | None = Cookie(None), authorization: str | None = 
     user = db.get(User, uuid.UUID(token_payload["user_id"]))
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
+    # Fix for AUTH-2: previously the still-valid JWT alone was sufficient
+    # for the rest of the token's lifetime (up to 24h), even after an admin
+    # deactivated the user -- is_active was never re-checked here, unlike
+    # /auth/refresh (see below) which already does. /auth/me is the exact
+    # endpoint the frontend's dashboard auth guard calls on every fresh
+    # page/tab load, so this is the most consequential place to close it.
+    if not user.is_active:
+        raise HTTPException(status_code=401, detail="Account has been deactivated")
     tenant = db.get(DistributorTenant, user.tenant_id)
     return {"id": str(user.id), "full_name": user.full_name,
             "phone_number": user.phone_number or "", "role": user.role,
