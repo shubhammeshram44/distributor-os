@@ -819,7 +819,25 @@ class IngestionService:
                 unmatched_raw_text=item["unmatched_raw_text"]
             ))
 
-        order_status = "pending_review" if has_unmatched else "Draft"
+        # Fix for WA-3: per spec, a parse with confidence < 0.75 must never
+        # auto-confirm -- route to the triage queue instead. This gate only
+        # applies when Gemini actually ran (gemini_service.enabled): the
+        # regex fallback (see gemini_service.py::_fallback_regex_parser) has
+        # no genuine model confidence to report and is already logged with
+        # a conservative fixed score for audit purposes, but changing its
+        # order-routing behavior wholesale is a much larger, riskier change
+        # than this pass is scoped for (it would flip the status of every
+        # regex-parsed order in any deployment where GEMINI_API_KEY happens
+        # to be unset/invalid, which is also this project's default/test
+        # configuration) -- flagging this explicitly rather than silently
+        # expanding scope.
+        low_confidence = gemini_service.enabled and parsed_order.confidence < 0.75
+        if low_confidence:
+            logger.info(
+                "IngestionService: routing to triage due to low Gemini confidence (%.2f < 0.75) for order text: '%s'",
+                parsed_order.confidence, message_text[:200]
+            )
+        order_status = "pending_review" if (has_unmatched or low_confidence) else "Draft"
         new_order.status = order_status
 
         # Record state transition in ledger

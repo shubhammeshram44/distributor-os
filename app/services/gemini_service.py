@@ -25,6 +25,16 @@ class ParsedOrderItem(BaseModel):
 class AntigravityParsedOrder(BaseModel):
     items: List[ParsedOrderItem]
     extracted_invoice_preference: typing.Literal["GST_TAX_INVOICE", "RETAIL_INVOICE", "UNSPECIFIED"]
+    # Fix for WA-3: the spec requires routing any parse with confidence
+    # < 0.75 to the triage queue instead of auto-confirming -- but no
+    # confidence signal existed anywhere in the parsing pipeline at all.
+    # For a Gemini-parsed result this is the model's own self-reported
+    # confidence (0.0-1.0) in its extraction; for a regex-fallback result
+    # (see _fallback_regex_parser) it's a conservative heuristic since
+    # regex matching has no genuine model confidence to report. Defaults
+    # to 1.0 only for the truly-empty-message short-circuit case (no
+    # items to be uncertain about).
+    confidence: float = 1.0
 
 # Preserved for backward compatibility with your other imports
 class ParsedOrder(BaseModel):
@@ -77,6 +87,10 @@ class GeminiService:
                 "- If the message contains expressions like 'GST lagana', 'tax invoice', 'GST bill', 'with tax', 'Company ka bill', 'GST number', set extracted_invoice_preference to 'GST_TAX_INVOICE'.\n"
                 "- If the message contains expressions like 'normal bill', 'cash bill', 'bina tax', 'kachha bill', 'bina GST', 'kachha', set extracted_invoice_preference to 'RETAIL_INVOICE'.\n"
                 "- If no specific invoice preference is requested, set extracted_invoice_preference to 'UNSPECIFIED'.\n"
+                "Also set `confidence` to a number between 0.0 and 1.0 reflecting how confident you are "
+                "in this extraction overall -- lower it for ambiguous phrasing, unclear quantities, "
+                "unusual abbreviations, or any product name you are guessing at rather than reading "
+                "explicitly. Use 1.0 only when every item and quantity is unambiguous.\n"
                 "Return the data strictly as JSON matching the schema."
             )
 
@@ -96,7 +110,19 @@ class GeminiService:
                     parsed_json = json.loads(response.text)
                     if "extracted_invoice_preference" not in parsed_json:
                         parsed_json["extracted_invoice_preference"] = "UNSPECIFIED"
-                    return AntigravityParsedOrder(**parsed_json)
+                    if "confidence" not in parsed_json or parsed_json["confidence"] is None:
+                        # Model didn't populate this field for some reason --
+                        # treat as low-confidence rather than silently
+                        # defaulting to 1.0, so it still routes to triage
+                        # per the spec (never auto-confirm on an unknown
+                        # confidence signal).
+                        parsed_json["confidence"] = 0.5
+                    result = AntigravityParsedOrder(**parsed_json)
+                    logger.info(
+                        "Gemini parse result: text='%s' confidence=%.2f items=%d",
+                        text[:200], result.confidence, len(result.items)
+                    )
+                    return result
 
                 except (google_exceptions.InternalServerError, 
                         google_exceptions.ServiceUnavailable, 
@@ -262,4 +288,20 @@ class GeminiService:
             if len(item_name) >= 3:
                 items.append(ParsedOrderItem(raw_product_name=item_name, quantity=qty))
 
-        return AntigravityParsedOrder(items=items, extracted_invoice_preference=extracted_pref)
+        # Fix for WA-3: the regex fallback has no genuine model confidence to
+        # report -- it's a fixed-pattern token match with no semantic
+        # understanding, deliberately used only as a last resort when Gemini
+        # is unavailable/disabled (per the spec: "Gemini AI first, regex
+        # fallback second"). Assign a conservative confidence BELOW the
+        # spec's 0.75 auto-confirm threshold whenever it matched anything at
+        # all, so regex-parsed orders always route to triage for human
+        # review rather than silently auto-confirming a lower-fidelity
+        # parse. An empty match (no items found at all) is scored at 0.0 --
+        # there's nothing to have any confidence in.
+        confidence = 0.6 if items else 0.0
+        logger.info(
+            "Regex fallback parse result: text='%s' confidence=%.2f items=%d",
+            text[:200], confidence, len(items)
+        )
+
+        return AntigravityParsedOrder(items=items, extracted_invoice_preference=extracted_pref, confidence=confidence)
