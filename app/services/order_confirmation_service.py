@@ -203,9 +203,17 @@ def confirm_order(db: Session, order: Order, updated_by: str, bypass_credit_limi
     # Only now, after the credit-limit check has passed, do we actually
     # decrement on-hand stock -- computed with the FOR UPDATE-locked rows from
     # step 3, so this reflects a consistent, race-free snapshot.
+    from app.services.inventory_ledger_service import record_inventory_movement
     for inv_record, allocated in _pending_deductions:
         inv_record.quantity_on_hand -= allocated
         inv_record.quantity_committed = (inv_record.quantity_committed or 0) + allocated
+        # Fix for INV-3: log this deduction to the append-only audit trail
+        # so "why does this SKU have this many units" is answerable later.
+        record_inventory_movement(
+            db=db, tenant_id=order.tenant_id, sku_id=inv_record.sku_id,
+            quantity_delta=-allocated, quantity_on_hand_after=inv_record.quantity_on_hand,
+            movement_type="ORDER_CONFIRMED", reference_id=order.internal_order_id,
+        )
     if _pending_deductions:
         db.flush()
 

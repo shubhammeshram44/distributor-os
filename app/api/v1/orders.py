@@ -355,6 +355,7 @@ def cancel_order(
             # partially-allocated order). Fetched and mutated via the ORM
             # (rather than a raw SQL clamp) since a portable 2-arg "greatest"
             # expression doesn't exist across SQLite (tests) and Postgres (prod).
+            from app.services.inventory_ledger_service import record_inventory_movement
             for item in items:
                 restored_qty = item.allocated_quantity if item.allocated_quantity is not None else item.quantity
                 if restored_qty <= 0:
@@ -366,6 +367,12 @@ def cancel_order(
                 if inv_record:
                     inv_record.quantity_on_hand = (inv_record.quantity_on_hand or 0) + restored_qty
                     inv_record.quantity_committed = max(0, (inv_record.quantity_committed or 0) - restored_qty)
+                    # Fix for INV-3: audit-log the restock caused by cancellation.
+                    record_inventory_movement(
+                        db=db, tenant_id=order.tenant_id, sku_id=item.product_id,
+                        quantity_delta=restored_qty, quantity_on_hand_after=inv_record.quantity_on_hand,
+                        movement_type="ORDER_CANCELLED", reference_id=order.internal_order_id,
+                    )
 
             # Reverse customer outstanding balance via ledger service.
             # Use invoice.total_amount (actual billed amount at confirmation),
@@ -1427,6 +1434,14 @@ def create_order(
                 quantity_committed=0,
                 low_stock_threshold=10
             ))
+            # Fix for INV-3: audit-log the starting stock for this
+            # auto-created fallback product.
+            from app.services.inventory_ledger_service import record_inventory_movement
+            record_inventory_movement(
+                db=db, tenant_id=payload.tenant_id, sku_id=product.id,
+                quantity_delta=item.quantity, quantity_on_hand_after=item.quantity,
+                movement_type="INITIAL_STOCK", reference_id=item.sku_id,
+            )
             db.flush()
 
         db.add(OrderLineItem(
@@ -1628,6 +1643,14 @@ def create_order_generic(
                 quantity_committed=0,
                 low_stock_threshold=10
             ))
+            # Fix for INV-3: audit-log the starting stock for this
+            # auto-created fallback product.
+            from app.services.inventory_ledger_service import record_inventory_movement
+            record_inventory_movement(
+                db=db, tenant_id=tenant_id, sku_id=product.id,
+                quantity_delta=item.quantity, quantity_on_hand_after=item.quantity,
+                movement_type="INITIAL_STOCK", reference_id=item.sku_id,
+            )
             db.flush()
 
         db.add(OrderLineItem(

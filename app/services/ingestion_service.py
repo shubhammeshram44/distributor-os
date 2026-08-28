@@ -326,9 +326,28 @@ class IngestionService:
                         low_stock_threshold=10
                     )
                     db.add(inventory)
+                    # Fix for INV-3: audit-log the starting stock this
+                    # bulk-import row establishes for a brand-new Inventory row.
+                    from app.services.inventory_ledger_service import record_inventory_movement
+                    record_inventory_movement(
+                        db=db, tenant_id=tenant_id, sku_id=product.id,
+                        quantity_delta=qty, quantity_on_hand_after=qty,
+                        movement_type="CSV_IMPORT_SYNC", reference_id=str(job.id),
+                    )
                 else:
+                    # Fix for INV-3: this is a direct overwrite (not a delta)
+                    # -- audit-log the actual resulting change in on-hand
+                    # quantity so a bulk sync's effect is traceable, not just
+                    # the fact that a sync happened.
+                    from app.services.inventory_ledger_service import record_inventory_movement
+                    previous_qty = inventory.quantity_on_hand or 0
                     inventory.quantity_on_hand = qty
                     inventory.quantity_committed = committed
+                    record_inventory_movement(
+                        db=db, tenant_id=tenant_id, sku_id=product.id,
+                        quantity_delta=qty - previous_qty, quantity_on_hand_after=qty,
+                        movement_type="CSV_IMPORT_SYNC", reference_id=str(job.id),
+                    )
 
                 # Save Staging State
                 staging.status = "Validated"

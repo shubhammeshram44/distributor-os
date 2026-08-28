@@ -8,6 +8,7 @@ from app.database import get_db, tenant_context
 from app.models.product import Product, ProductAlias
 from app.models.inventory import Inventory
 from app.services.inventory_service import InventoryService
+from app.services.inventory_ledger_service import record_inventory_movement
 
 router = APIRouter(prefix="/products", tags=["Products"])
 
@@ -82,6 +83,13 @@ def create_product(
         low_stock_threshold=10
     )
     db.add(inv)
+    # Fix for INV-3: log the starting stock so the audit trail has a
+    # baseline to reconcile every later movement against.
+    record_inventory_movement(
+        db=db, tenant_id=tenant_id, sku_id=new_product.id,
+        quantity_delta=new_product.stock_quantity, quantity_on_hand_after=new_product.stock_quantity,
+        movement_type="INITIAL_STOCK", reference_id=new_product.sku_id,
+    )
 
     db.commit()
     return {
@@ -118,6 +126,12 @@ def adjust_stock(
     inv = db.query(Inventory).filter(Inventory.sku_id == product.id).first()
     if inv:
         inv.quantity_on_hand += payload.quantity_received
+        # Fix for INV-3: audit-log this manual restock.
+        record_inventory_movement(
+            db=db, tenant_id=tenant_id, sku_id=product.id,
+            quantity_delta=payload.quantity_received, quantity_on_hand_after=inv.quantity_on_hand,
+            movement_type="MANUAL_RESTOCK", reference_id=product.sku_id,
+        )
     else:
         inv = Inventory(
             tenant_id=tenant_id,
@@ -128,6 +142,11 @@ def adjust_stock(
             low_stock_threshold=10
         )
         db.add(inv)
+        record_inventory_movement(
+            db=db, tenant_id=tenant_id, sku_id=product.id,
+            quantity_delta=product.stock_quantity, quantity_on_hand_after=inv.quantity_on_hand,
+            movement_type="MANUAL_RESTOCK", reference_id=product.sku_id,
+        )
 
     db.commit()
     
@@ -468,6 +487,15 @@ def import_products_csv(
                         low_stock_threshold=10
                     )
                     db.add(inv)
+                    # Fix for INV-3: audit-log the starting stock (0, per
+                    # the INV-4 fix above, until a distributor explicitly
+                    # sets real stock) for this newly bulk-imported SKU.
+                    record_inventory_movement(
+                        db=db, tenant_id=tenant_id, sku_id=new_product.id,
+                        quantity_delta=new_product.stock_quantity,
+                        quantity_on_hand_after=new_product.stock_quantity,
+                        movement_type="INITIAL_STOCK", reference_id=sku_id,
+                    )
                     inserted_skus.append(sku_id)
 
                 success_count += 1

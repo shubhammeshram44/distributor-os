@@ -148,6 +148,15 @@ def approve_pending_allocation(db: Session, tenant_id, demand_gap_id) -> dict:
     # Move units: on-hand -> committed, mirroring confirm_order's original allocation logic.
     inv_record.quantity_on_hand -= newly_allocated
     inv_record.quantity_committed = (inv_record.quantity_committed or 0) + newly_allocated
+    # Fix for INV-3: audit-log the allocation-queue deduction.
+    from app.services.inventory_ledger_service import record_inventory_movement
+    order_for_ref = db.get(Order, gap.order_id)
+    record_inventory_movement(
+        db=db, tenant_id=tenant_id, sku_id=gap.product_id,
+        quantity_delta=-newly_allocated, quantity_on_hand_after=inv_record.quantity_on_hand,
+        movement_type="ALLOCATION_APPROVED",
+        reference_id=order_for_ref.internal_order_id if order_for_ref else str(gap.order_id),
+    )
 
     line_item.allocated_quantity = (line_item.allocated_quantity or 0) + newly_allocated
 

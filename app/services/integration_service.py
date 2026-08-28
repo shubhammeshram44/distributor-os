@@ -48,6 +48,7 @@ class IntegrationService:
                 # Find/Create Inventory record
                 inv_stmt = select(Inventory).where(Inventory.sku_id == product.id)
                 inv = db.execute(inv_stmt).scalar_one_or_none()
+                from app.services.inventory_ledger_service import record_inventory_movement
                 if not inv:
                     inv = Inventory(
                         tenant_id=tenant_id,
@@ -58,9 +59,25 @@ class IntegrationService:
                         low_stock_threshold=10
                     )
                     db.add(inv)
+                    # Fix for INV-3: audit-log the starting stock this ERP
+                    # sync establishes for a brand-new Inventory row.
+                    record_inventory_movement(
+                        db=db, tenant_id=tenant_id, sku_id=product.id,
+                        quantity_delta=on_hand, quantity_on_hand_after=on_hand,
+                        movement_type="ERP_SYNC", reference_id=sku,
+                    )
                 else:
+                    # Fix for INV-3: this is a direct overwrite (not a delta)
+                    # -- audit-log the actual resulting change so an ERP
+                    # sync's effect on stock is traceable after the fact.
+                    previous_on_hand = inv.quantity_on_hand or 0
                     inv.quantity_on_hand = on_hand
                     inv.quantity_committed = committed
+                    record_inventory_movement(
+                        db=db, tenant_id=tenant_id, sku_id=product.id,
+                        quantity_delta=on_hand - previous_on_hand, quantity_on_hand_after=on_hand,
+                        movement_type="ERP_SYNC", reference_id=sku,
+                    )
                 
                 synced_count += 1
 

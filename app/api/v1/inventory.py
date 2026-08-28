@@ -47,6 +47,7 @@ def inward_stock(
         db.flush()
 
     # Look up or create Inventory record
+    from app.services.inventory_ledger_service import record_inventory_movement
     inventory = db.query(Inventory).filter_by(sku_id=product.id).first()
     if not inventory:
         inventory = Inventory(
@@ -61,6 +62,12 @@ def inward_stock(
     else:
         inventory.quantity_on_hand += payload.quantity_added
         inventory.location = payload.warehouse_location
+    # Fix for INV-3: audit-log this stock-inward movement.
+    record_inventory_movement(
+        db=db, tenant_id=tenant_id, sku_id=product.id,
+        quantity_delta=payload.quantity_added, quantity_on_hand_after=inventory.quantity_on_hand,
+        movement_type="MANUAL_RESTOCK", reference_id=payload.sku_id,
+    )
 
     db.commit()
     return {"status": "success"}
