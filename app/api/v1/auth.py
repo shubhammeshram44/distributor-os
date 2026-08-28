@@ -126,6 +126,7 @@ def _create_refresh_session(db: Session, user_id: uuid.UUID) -> str:
     token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
     now = datetime.now(timezone.utc)
     db.add(RefreshSession(id=uuid.uuid4(), user_id=user_id, token_hash=token_hash,
+                          previous_token_hash=None, previous_token_valid_until=None,
                           created_at=now, last_used_at=now,
                           expires_at=now + timedelta(days=7),
                           absolute_expires_at=now + timedelta(days=30), revoked_at=None))
@@ -326,9 +327,18 @@ def refresh_session(request: Request, response: Response,
         return _unauthorized_response("Refresh token is missing. Please log in again.")
     token_hash = hashlib.sha256(refresh_token.encode("utf-8")).hexdigest()
     now = datetime.now(timezone.utc)
-    session_row = db.query(RefreshSession).filter(RefreshSession.token_hash == token_hash).with_for_update().first()
+    
+    # Lookup by current token_hash or previous_token_hash
+    session_row = db.query(RefreshSession).filter(
+        or_(
+            RefreshSession.token_hash == token_hash,
+            RefreshSession.previous_token_hash == token_hash
+        )
+    ).with_for_update().first()
+    
     if not session_row:
         return _unauthorized_response("Invalid refresh session context.")
+        
     is_expired = (_ensure_utc(session_row.expires_at) < now or
                   _ensure_utc(session_row.absolute_expires_at) < now)
     if session_row.revoked_at is not None or is_expired:
@@ -336,14 +346,41 @@ def refresh_session(request: Request, response: Response,
             session_row.revoked_at = now
             db.commit()
         return _unauthorized_response("Session has expired or has been revoked. Please verify your phone to continue.")
+        
     user = db.get(User, session_row.user_id)
     if not user or not user.is_active:
         return _unauthorized_response("Authenticated user is inactive or not found.")
+        
+    matched_previous = (session_row.previous_token_hash == token_hash)
+    if matched_previous:
+        # Check if the previous token's grace window is still valid
+        grace_valid = (session_row.previous_token_valid_until is not None and
+                       _ensure_utc(session_row.previous_token_valid_until) >= now)
+        if not grace_valid:
+            return _unauthorized_response("Previous refresh token has expired. Please log in again.")
+        
+        # CRITICAL CONCURRENCY FIX: Do NOT rotate the token again.
+        # Return a new access token, and do NOT set/overwrite the refresh_token cookie.
+        new_access_token = sign_jwt({"user_id": str(user.id),
+                                     "tenant_id": str(user.tenant_id) if user.tenant_id else None,
+                                     "sub": user.email_or_phone, "role": user.role})
+        _is_prod = os.getenv("ENVIRONMENT", "development") == "production"
+        response.set_cookie(key="access_token", value=new_access_token, httponly=True, secure=_is_prod,
+                            samesite="none" if _is_prod else "lax", max_age=3600 * 24, path="/")
+        return {"status": "success", "token": new_access_token,
+                "access_token": new_access_token, "token_type": "bearer"}
+            
     new_raw_token = secrets.token_urlsafe(32)
-    session_row.token_hash = hashlib.sha256(new_raw_token.encode("utf-8")).hexdigest()
+    new_hash = hashlib.sha256(new_raw_token.encode("utf-8")).hexdigest()
+    
+    # Shift current token to previous, and set grace period
+    session_row.previous_token_hash = session_row.token_hash
+    session_row.previous_token_valid_until = now + timedelta(seconds=60)
+    session_row.token_hash = new_hash
     session_row.last_used_at = now
     session_row.expires_at = min(now + timedelta(days=7), _ensure_utc(session_row.absolute_expires_at))
     db.commit()
+    
     new_access_token = sign_jwt({"user_id": str(user.id),
                                  "tenant_id": str(user.tenant_id) if user.tenant_id else None,
                                  "sub": user.email_or_phone, "role": user.role})
@@ -361,7 +398,12 @@ def logout(request: Request, response: Response,
     _validate_origin(request)
     if refresh_token:
         token_hash = hashlib.sha256(refresh_token.encode("utf-8")).hexdigest()
-        session_row = db.query(RefreshSession).filter(RefreshSession.token_hash == token_hash).with_for_update().first()
+        session_row = db.query(RefreshSession).filter(
+            or_(
+                RefreshSession.token_hash == token_hash,
+                RefreshSession.previous_token_hash == token_hash
+            )
+        ).with_for_update().first()
         if session_row and session_row.revoked_at is None:
             session_row.revoked_at = datetime.now(timezone.utc)
             db.commit()
