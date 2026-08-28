@@ -44,7 +44,7 @@ def test_dashboard_api_endpoints(db_session, client, seed_demo_data):
 
     # Test order detail endpoint using the latest order id
     order_uuid = latest_order["id"]
-    resp_details = client.get(f"/api/v1/dashboard/order-details/{order_uuid}")
+    resp_details = client.get(f"/api/v1/dashboard/order-details/{order_uuid}?tenant_id={demo_tenant_id}")
     assert resp_details.status_code == 200
     details = resp_details.json()
     assert len(details) == 1
@@ -140,6 +140,43 @@ def test_dashboard_tenant_validation_guardrails(client):
     resp = client.get("/api/v1/dashboard/metrics?tenant_id=")
     assert resp.status_code == 401
     assert "Session expired or token missing" in resp.json()["detail"]
+
+
+def test_order_details_cross_tenant_is_rejected(db_session, client):
+    """
+    Regression test for TENANT-2: GET /dashboard/order-details/{order_id}
+    previously had NO tenant scoping at all -- it never resolved/validated a
+    tenant_id, so db.get(Order, order_id) returned any tenant's order to any
+    caller who could enumerate/guess an order_id. This proves a caller
+    scoped to Tenant B cannot read Tenant A's order details by id.
+    """
+    tenant_a = DistributorTenant(name="Order Details Tenant A")
+    tenant_b = DistributorTenant(name="Order Details Tenant B")
+    db_session.add_all([tenant_a, tenant_b])
+    db_session.commit()
+
+    cust = Customer(
+        tenant_id=tenant_a.id, retailer_name="Order Details Shop", customer_id="C-ORDDETAILS-1",
+        address_text="Delhi", gstin="07AAAAA1111A1Z1", tax_group="GST", payment_terms="COD"
+    )
+    db_session.add(cust)
+    db_session.flush()
+
+    order = Order(tenant_id=tenant_a.id, internal_order_id="ORD-DETAILS-XTENANT-1", source="Portal", customer_id=cust.id)
+    db_session.add(order)
+    db_session.commit()
+
+    # No tenant_id at all -> must be rejected outright, not silently return the order.
+    resp_no_tenant = client.get(f"/api/v1/dashboard/order-details/{order.id}")
+    assert resp_no_tenant.status_code == 401
+
+    # Wrong tenant supplied -> must 404, not disclose Tenant A's order.
+    resp_wrong_tenant = client.get(f"/api/v1/dashboard/order-details/{order.id}?tenant_id={tenant_b.id}")
+    assert resp_wrong_tenant.status_code == 404
+
+    # Correct tenant -> succeeds.
+    resp_correct_tenant = client.get(f"/api/v1/dashboard/order-details/{order.id}?tenant_id={tenant_a.id}")
+    assert resp_correct_tenant.status_code == 200
 
 
 def test_dashboard_overview_endpoint(db_session, client, seed_demo_data):

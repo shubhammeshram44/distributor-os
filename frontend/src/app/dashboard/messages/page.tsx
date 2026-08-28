@@ -151,7 +151,7 @@ export default function MessagesPage() {
     setLoadingTriageDetails(true);
     try {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-      const resp = await fetch(`${apiBase}/api/v1/dashboard/order-details/${orderId}`, {
+      const resp = await fetch(`${apiBase}/api/v1/dashboard/order-details/${orderId}?tenant_id=${activeTenantId}`, {
         credentials: "include"
       });
       if (resp.ok) {

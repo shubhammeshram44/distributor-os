@@ -342,7 +342,7 @@ export default function OrdersPage() {
       // Line items and order/payment data are independent — fetch them concurrently
       // instead of one-after-another to cut the drawer's load time roughly in half.
       const [detailsResp, orderResp] = await Promise.all([
-        fetch(`${apiBase}/api/v1/dashboard/order-details/${orderId}`, { credentials: "include" }),
+        fetch(`${apiBase}/api/v1/dashboard/order-details/${orderId}?tenant_id=${activeTenantId}`, { credentials: "include" }),
         fetch(`${apiBase}/api/v1/orders/${orderId}`, { credentials: "include" }),
       ]);
 

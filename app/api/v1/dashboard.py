@@ -672,12 +672,24 @@ def get_dashboard_overview(
 @router.get("/order-details/{order_id}")
 def get_order_details(
     order_id: uuid.UUID,
+    tenant_id: uuid.UUID | None = None,
+    access_token: str | None = Cookie(None),
+    authorization: str | None = Header(None),
     db: Session = Depends(get_db)
 ):
     """
     Surfaces row-level OrderLineItem details for a specific order.
     """
-    order = db.get(Order, order_id)
+    # Fix for TENANT-2: this endpoint previously had NO tenant scoping at
+    # all -- it never called resolve_tenant_id or tenant_context.set(), so
+    # db.get(Order, order_id) returned any tenant's order to any caller who
+    # could enumerate/guess an order_id, a direct cross-tenant IDOR.
+    resolved_tenant_id = resolve_tenant_id(tenant_id, access_token, authorization)
+    tenant_context.set(resolved_tenant_id)
+
+    order = db.query(Order).filter(
+        Order.id == order_id, Order.tenant_id == resolved_tenant_id
+    ).first()
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
 
