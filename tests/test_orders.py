@@ -774,6 +774,55 @@ def test_list_orders_sort_by_amount_does_not_crash(db_session, client):
     assert response.status_code == 200
 
 
+def test_export_orders_csv_uses_allocated_not_requested_quantity(db_session, client):
+    """
+    Regression test for ORD-6: GET /orders/export computed each row's
+    "Amount" as sum(quantity * unit_price) using the RAW REQUESTED quantity,
+    not allocated_quantity (the actually-fulfilled quantity after partial
+    stock allocation at confirmation) -- unlike list_orders and every other
+    amount computation in this file, which already fall back to
+    allocated_quantity when set. For a partially-fulfilled order, this
+    overstated the exported CSV amount above what the customer was
+    actually billed/shipped.
+    """
+    tenant = DistributorTenant(name="CSV Export Amount Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+    tenant_context.set(tenant.id)
+
+    p = Product(sku_id="PROD-CSVEXPORT", brand="HUL", category="Soap", pack_size="100g", base_price=10.0, stock_quantity=100)
+    db_session.add(p)
+    db_session.flush()
+
+    cust = Customer(
+        retailer_name="CSV Export Customer", customer_id="C-CSVEXPORT-1", address_text="Delhi",
+        gstin="07AAAAA1111A1Z1", tax_group="GST", payment_terms="COD"
+    )
+    db_session.add(cust)
+    db_session.flush()
+
+    order = Order(tenant_id=tenant.id, internal_order_id="ORD-CSVEXPORT-1", source="Portal", customer_id=cust.id)
+    db_session.add(order)
+    db_session.flush()
+    # Requested 10 units, but only 4 were actually allocated (partial stock
+    # fulfillment) -- the exported amount must reflect 4 * 10.0 = 40.0, not
+    # the requested 10 * 10.0 = 100.0.
+    db_session.add(OrderLineItem(order_id=order.id, product_id=p.id, quantity=10, unit_price=10.0, allocated_quantity=4))
+    db_session.commit()
+
+    response = client.get(f"/api/v1/orders/export?tenant_id={tenant.id}")
+    assert response.status_code == 200
+
+    import csv as csv_module
+    import io
+    rows = list(csv_module.reader(io.StringIO(response.text)))
+    header, data_row = rows[0], rows[1]
+    amount_col = header.index("Amount (₹)")
+    assert data_row[amount_col] == "40.00", (
+        f"Expected CSV amount to use allocated_quantity (4 * 10.0 = 40.00), got {data_row[amount_col]!r}"
+    )
+
+
 def test_list_orders_status_filter_is_applied(db_session, client):
     """
     Regression test for DASH-7: status_filter was declared as an accepted

@@ -501,7 +501,17 @@ def export_orders_csv(
     ])
     for o in orders:
         cust = custs.get(o.customer_id)
-        amount = sum(float(i.quantity * i.unit_price) for i in o.line_items)
+        # Fix for ORD-6: use allocated_quantity (the actually-fulfilled qty
+        # after partial-stock allocation), falling back to the requested
+        # quantity only when never allocated -- matching the same pattern
+        # already used everywhere else amounts are computed from line items
+        # (list_orders, Order.total_amount, dispatch/cancel restock, etc.).
+        # Using the raw requested quantity here overstated the CSV amount
+        # for any order that was only partially fulfilled.
+        amount = sum(
+            float((i.allocated_quantity if i.allocated_quantity is not None else i.quantity) * i.unit_price)
+            for i in o.line_items
+        )
         writer.writerow([
             o.internal_order_id,
             cust.retailer_name if cust else "Unknown",
