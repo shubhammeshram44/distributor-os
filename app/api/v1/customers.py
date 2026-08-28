@@ -3,6 +3,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from app.database import get_db, tenant_context
 from app.models.customer import Customer, CustomerAlias
 from app.models.ledger import CustomerLedger
@@ -104,8 +105,22 @@ def onboard_customer(
         alias_value=payload.contact_number
     )
     db.add(new_alias)
-    
-    db.commit()
+
+    # Fix for CUST-3: the existence check above is a plain check-then-insert
+    # with no lock -- a classic TOCTOU race. Two near-simultaneous requests
+    # for the same real-world customer could both pass that check before
+    # either commits. The DB-level unique constraint on
+    # customer_aliases(tenant_id, alias_value) is the actual backstop; catch
+    # the resulting IntegrityError here and turn it into the same clean,
+    # friendly 409 response instead of an unhandled 500.
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Customer with contact number '{payload.contact_number}' already registered."
+        )
 
     return {
         "status": "success",

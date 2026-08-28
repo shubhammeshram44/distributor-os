@@ -180,6 +180,68 @@ def test_onboard_customer_duplicate(db_session, client):
     assert "already registered" in response.json()["detail"]
 
 
+def test_onboard_customer_race_condition_caught_by_db_constraint(db_session, client, monkeypatch):
+    """
+    Regression test for CUST-3: onboard_customer's existing-alias check was
+    a plain check-then-insert with no lock -- a classic TOCTOU race. This
+    simulates the race directly by monkeypatching the pre-check to always
+    report "no existing alias found" (as if a concurrent request's insert
+    hadn't committed yet when this request's SELECT ran), then verifies the
+    request still cannot succeed in creating a genuine duplicate: the
+    DB-level unique constraint on customer_aliases(tenant_id, alias_value)
+    must catch it and the endpoint must convert that into a clean 409
+    instead of an unhandled 500.
+    """
+    tenant = DistributorTenant(name="Race Condition Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+    tenant_context.set(tenant.id)
+
+    from app.models.customer import CustomerAlias
+    cust = Customer(
+        tenant_id=tenant.id,
+        retailer_name="Race Condition Store", customer_id="C-RACE-1", address_text="Race St",
+        gstin="07AAAAA1111A1Z1", tax_group="GST", payment_terms="COD",
+        credit_limit=50000.0, outstanding_balance=0.0
+    )
+    db_session.add(cust)
+    db_session.flush()
+    db_session.add(CustomerAlias(tenant_id=tenant.id, customer_id=cust.id, alias_value="+919888222233"))
+    db_session.commit()
+
+    # Force the pre-check to report "no existing alias" (simulating the
+    # race window), so the request proceeds straight to the insert -- which
+    # must then be caught by the DB constraint, not silently succeed.
+    import app.api.v1.customers as customers_module
+    from sqlalchemy.orm import Query
+    original_first = Query.first
+
+    def _patched_first(self):
+        if self.column_descriptions and self.column_descriptions[0]["entity"] is CustomerAlias:
+            return None
+        return original_first(self)
+
+    monkeypatch.setattr(Query, "first", _patched_first)
+
+    response = client.post(
+        f"/api/v1/customers?tenant_id={tenant.id}",
+        json={
+            "store_name": "Race Condition Duplicate Store",
+            "contact_number": "+919888222233",
+            "delivery_address": "Somewhere Else",
+            "credit_limit": 10000.0,
+            "billing_terms": "COD"
+        }
+    )
+    assert response.status_code == 409
+
+    db_session.expire_all()
+    alias_count = db_session.query(CustomerAlias).filter(
+        CustomerAlias.tenant_id == tenant.id, CustomerAlias.alias_value == "+919888222233"
+    ).count()
+    assert alias_count == 1, "The race must not result in two aliases with the same value"
+
+
 def test_customer_statement(db_session, client):
     # Setup Tenant
     tenant = DistributorTenant(name="Statement Tenant")

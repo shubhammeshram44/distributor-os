@@ -2433,17 +2433,56 @@ def create_instant_transaction(
                     status_code=400,
                     detail="Either customer_id or new_customer_name is required"
                 )
-            customer = Customer(
-                id=uuid.uuid4(),
-                tenant_id=resolved_tenant_id,
-                retailer_name=payload.new_customer_name,
-                phone_number=payload.new_customer_phone,
-                credit_limit=0.0,  # ₹0 credit by default for new inline customers
-                outstanding_balance=0.0,
-                payment_terms="Net 0"
-            )
-            db.add(customer)
-            db.flush()
+            # Fix for CUST-3: this path previously had NO existing-customer
+            # lookup at all -- every Van Sales transaction for a walk-in
+            # customer with no customer_id created a brand-new Customer row,
+            # even if the exact same phone number had already been onboarded
+            # (e.g. a repeat walk-in visit, or the same customer served by a
+            # different salesman). Look up by phone first and reuse the
+            # existing customer instead of always creating a duplicate.
+            customer = None
+            if payload.new_customer_phone:
+                from app.utils.phone import normalize_phone_number, get_phone_number_variants
+                phone_variants = get_phone_number_variants(payload.new_customer_phone)
+                from app.models.customer import CustomerAlias
+                customer = db.query(Customer).join(CustomerAlias).filter(
+                    Customer.tenant_id == resolved_tenant_id,
+                    CustomerAlias.alias_value.in_(phone_variants)
+                ).first()
+                if not customer:
+                    customer = db.query(Customer).filter(
+                        Customer.tenant_id == resolved_tenant_id,
+                        Customer.phone_number.in_(phone_variants)
+                    ).first()
+
+            if not customer:
+                customer = Customer(
+                    id=uuid.uuid4(),
+                    tenant_id=resolved_tenant_id,
+                    retailer_name=payload.new_customer_name,
+                    phone_number=payload.new_customer_phone,
+                    credit_limit=0.0,  # ₹0 credit by default for new inline customers
+                    outstanding_balance=0.0,
+                    payment_terms="Net 0"
+                )
+                db.add(customer)
+                try:
+                    db.flush()
+                except IntegrityError:
+                    # Defense-in-depth for the same TOCTOU race
+                    # onboard_customer guards against (see CUST-3): if a
+                    # concurrent request just registered this same phone
+                    # number under this tenant, fall back to it instead of
+                    # a raw 500.
+                    db.rollback()
+                    if payload.new_customer_phone:
+                        phone_variants = get_phone_number_variants(payload.new_customer_phone)
+                        customer = db.query(Customer).filter(
+                            Customer.tenant_id == resolved_tenant_id,
+                            Customer.phone_number.in_(phone_variants)
+                        ).first()
+                    if not customer:
+                        raise
 
         # ── STEP 2: VALIDATE ITEMS ────────────────────────────────────────────
         if not payload.items:

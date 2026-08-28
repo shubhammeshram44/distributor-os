@@ -1987,6 +1987,68 @@ def test_instant_order_credit_limit_boundaries(db_session, client):
     assert resp_fail.json()["status"] == "success"
 
 
+def test_instant_transaction_inline_customer_reuses_existing_by_phone(db_session, client):
+    """
+    Regression test for CUST-3: Van Sales' inline customer-creation path
+    (used when the request has no customer_id) previously had NO
+    existing-customer lookup at all -- every transaction for a walk-in
+    customer created a brand-new Customer row, even if the exact same
+    phone number had already been onboarded (e.g. a repeat walk-in visit).
+    This proves a second instant-transaction with the same phone number
+    reuses the existing customer instead of creating a duplicate.
+    """
+    tenant = DistributorTenant(name="Van Sales Dedup Tenant")
+    db_session.add(tenant)
+    db_session.commit()
+    tenant_context.set(tenant.id)
+
+    p = Product(sku_id="PROD-VANDEDUP", brand="HUL", category="Soap", pack_size="1 unit", base_price=100.0)
+    db_session.add(p)
+    db_session.flush()
+    inv = Inventory(tenant_id=tenant.id, sku_id=p.id, location="WH1", quantity_on_hand=100, low_stock_threshold=5)
+    db_session.add(inv)
+    db_session.commit()
+
+    payload_1 = {
+        "idempotency_key": str(uuid.uuid4()),
+        "new_customer_name": "Walk-in Kirana",
+        "new_customer_phone": "+919876500011",
+        "items": [{"product_id": str(p.id), "quantity": 2}],
+        "already_delivered": True,
+        "payment_method": "cash",
+        "payment_amount": 200.0
+    }
+    resp1 = client.post(f"/api/v1/orders/instant-transaction?tenant_id={tenant.id}", json=payload_1)
+    assert resp1.status_code == 201
+
+    db_session.expire_all()
+    customers_after_first = db_session.query(Customer).filter(
+        Customer.tenant_id == tenant.id, Customer.phone_number == "+919876500011"
+    ).all()
+    assert len(customers_after_first) == 1
+    first_customer_id = customers_after_first[0].id
+
+    # Second, separate transaction with the SAME phone number (repeat visit).
+    payload_2 = {
+        "idempotency_key": str(uuid.uuid4()),
+        "new_customer_name": "Walk-in Kirana",
+        "new_customer_phone": "+919876500011",
+        "items": [{"product_id": str(p.id), "quantity": 1}],
+        "already_delivered": True,
+        "payment_method": "cash",
+        "payment_amount": 100.0
+    }
+    resp2 = client.post(f"/api/v1/orders/instant-transaction?tenant_id={tenant.id}", json=payload_2)
+    assert resp2.status_code == 201
+
+    db_session.expire_all()
+    customers_after_second = db_session.query(Customer).filter(
+        Customer.tenant_id == tenant.id, Customer.phone_number == "+919876500011"
+    ).all()
+    assert len(customers_after_second) == 1, "Same phone number must reuse the existing customer, not create a duplicate"
+    assert customers_after_second[0].id == first_customer_id
+
+
 def test_instant_order_cash_consistency(db_session, client):
     """
     Verifies that creating an instant delivered order with CASH payment produces identical

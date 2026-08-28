@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import String, ForeignKey, Float, Numeric, Boolean, event, select
+from sqlalchemy import String, ForeignKey, Float, Numeric, Boolean, event, select, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 from app.database import Base, TenantMixin
 from app.utils.phone import normalize_phone_number
@@ -44,6 +44,14 @@ class Customer(Base, TenantMixin):
 
 class CustomerAlias(Base, TenantMixin):
     __tablename__ = "customer_aliases"
+    __table_args__ = (
+        # Fix for CUST-3: within a single tenant, one alias value must map
+        # to exactly one customer -- prevents the TOCTOU race in
+        # onboard_customer (two near-simultaneous requests for the same
+        # real-world customer creating two permanently split Customer
+        # records) at the database level, not just the application layer.
+        UniqueConstraint("tenant_id", "alias_value", name="uq_customer_aliases_tenant_alias_value"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     customer_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("customers.id", ondelete="CASCADE"), nullable=False)
