@@ -1506,10 +1506,19 @@ class IngestionOrderPayload(BaseModel):
     items: list[IngestionOrderItem]
 
 @router.post("/create", status_code=201)
-def create_order_generic(payload: IngestionOrderPayload, db: Session = Depends(get_db)):
-    # 1. Resolve tenant_id: use first tenant or DEMO_TENANT_ID
-    tenant = db.query(DistributorTenant).first()
-    tenant_id = tenant.id if tenant else DEMO_TENANT_ID
+def create_order_generic(
+    payload: IngestionOrderPayload,
+    tenant_id: uuid.UUID | None = None,
+    access_token: str | None = Cookie(None),
+    authorization: str | None = Header(None),
+    db: Session = Depends(get_db)
+):
+    # Fix for TENANT-4: previously resolved "the tenant" via
+    # db.query(DistributorTenant).first() -- an arbitrary row, ignoring the
+    # caller's actual identity. In a real multi-tenant deployment this
+    # would create every order against whichever tenant happened to be
+    # first in the table, regardless of who actually submitted it.
+    tenant_id = resolve_tenant_id(tenant_id, access_token, authorization)
     tenant_context.set(tenant_id)
 
     # 2. Resolve customer
