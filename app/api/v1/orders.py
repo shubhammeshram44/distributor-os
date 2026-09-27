@@ -136,7 +136,12 @@ def list_orders(
     # parameter but never actually applied to the query or the total
     # count -- silently accepted and silently ignored.
     if status_filter:
-        filters.append(Order.status == status_filter)
+        if status_filter == "Pending":
+            filters.append(Order.status.in_(["Draft", "Pending"]))
+        elif status_filter in ("Needs Review", "pending_review", "NEEDS_REVIEW"):
+            filters.append(Order.status.in_(["Needs Review", "pending_review", "NEEDS_REVIEW"]))
+        else:
+            filters.append(Order.status == status_filter)
 
     # Sorting
     # Fix for ORD-5: "amount" was an explicit dict key mapped to None (not
@@ -477,6 +482,14 @@ def export_orders_csv(
             (func.lower(Order.internal_order_id).like(search_term)) |
             (Order.customer_id.in_(customer_ids))
         )
+
+    if status_filter:
+        if status_filter == "Pending":
+            filters.append(Order.status.in_(["Draft", "Pending"]))
+        elif status_filter in ("Needs Review", "pending_review", "NEEDS_REVIEW"):
+            filters.append(Order.status.in_(["Needs Review", "pending_review", "NEEDS_REVIEW"]))
+        else:
+            filters.append(Order.status == status_filter)
 
     orders = (
         db.execute(

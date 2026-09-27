@@ -6,6 +6,35 @@ export const InvoiceTypes = {
 
 export type InvoiceType = typeof InvoiceTypes[keyof typeof InvoiceTypes];
 
+export interface LifecycleStage {
+  id: string;
+  name: string;
+  sequence: number;
+  shortName?: string;
+  description?: string;
+}
+
+export interface OrderLifecycle {
+  id: string;
+  name: string;
+  stages: LifecycleStage[];
+}
+
+export interface OrderProgress {
+  lifecycleId: string;
+  currentStageId: string;
+  completedStageIds: string[];
+}
+
+export type ExceptionSeverity = "warning" | "error" | "info" | "none";
+
+export interface OperationalException {
+  severity: ExceptionSeverity;
+  label: string;
+  actionHint?: string;
+  suggestedAction?: "confirm" | "deliver" | "invoice" | "review" | "details";
+}
+
 export interface Order {
   id: string;
   order_id: string;
@@ -19,6 +48,8 @@ export interface Order {
   amount_paid: number;
   invoice_type: InvoiceType;
   raw_source_text?: string;
+  lifecycle?: OrderProgress;
+  exception?: OperationalException;
 }
 
 export interface OrderLineItem {
