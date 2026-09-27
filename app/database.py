@@ -26,18 +26,29 @@ except ImportError:
 # Context variable to hold tenant ID of the current request/session
 tenant_context: contextvars.ContextVar[uuid.UUID | None] = contextvars.ContextVar("tenant_id", default=None)
 
-# 1. Capture environment targets defensively across multi-case properties
-DATABASE_URL = os.getenv("DATABASE_URL") or os.getenv("database_url")
+def normalize_database_url(url: str | None) -> str:
+    """
+    Normalizes database connection strings for production resilience:
+    - Normalizes 'postgres://' or 'postgresql://' prefixes to explicit 'postgresql+psycopg2://'
+      to guarantee that SQLAlchemy uses the installed psycopg2 driver across all SQLAlchemy
+      versions (including 2.1+ where bare 'postgresql://' defaults to psycopg3/psycopg).
+    - Preserves existing explicit driver specifications (e.g. 'postgresql+psycopg2://')
+      and SQLite URLs intact.
+    - Falls back to a local SQLite stub if the URL is empty or None.
+    """
+    if not url or not url.strip():
+        return "sqlite:///./fallback_local_stub.db"
+    url = url.strip()
+    if url.startswith("postgres://"):
+        return url.replace("postgres://", "postgresql+psycopg2://", 1)
+    if url.startswith("postgresql://"):
+        return url.replace("postgresql://", "postgresql+psycopg2://", 1)
+    return url
 
-# 2. Production fail-safe: Ensure the string is never None during boot evaluation
-if not DATABASE_URL:
-    # Use a localized fallback tracking database so the container completes initialization safely
-    DATABASE_URL = "sqlite:///./fallback_local_stub.db"
+# 1. Capture environment targets defensively across multi-case properties and normalize
+DATABASE_URL = normalize_database_url(os.getenv("DATABASE_URL") or os.getenv("database_url"))
 
-if DATABASE_URL.startswith("postgres://"):
-    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
-
-# 3. Compile connection parameters defensively
+# 2. Compile connection parameters defensively
 connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
 
 # 4. Configure pooling parameters dynamically for high-throughput scaling
