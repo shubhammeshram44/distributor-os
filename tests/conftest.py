@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
-from app.database import Base, tenant_context, get_db
+from app.database import Base, tenant_context, get_db, normalize_database_url
 
 # Register all models
 from app.models.tenant import DistributorTenant
@@ -39,6 +39,7 @@ def _shared_postgres_engine():
     if not database_url:
         yield None
         return
+    database_url = normalize_database_url(database_url)
     engine = create_engine(database_url, pool_size=5, max_overflow=2)
     Base.metadata.create_all(bind=engine, checkfirst=True)
     yield engine
