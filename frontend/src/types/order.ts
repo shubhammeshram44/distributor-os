@@ -65,3 +65,63 @@ export interface OrderLineItem {
   raw_source_text?: string;
   product_id?: string | null;
 }
+
+export type StageStatus = "on_track" | "attention" | "blocked" | "completed";
+
+export interface PreviewStage {
+  id: string;
+  name: string;
+  sequence: number;
+  status: StageStatus;
+  shortName?: string;
+  description?: string;
+}
+
+export interface PreviewException {
+  type: string;
+  severity: "info" | "warning" | "critical";
+  title: string;
+  description?: string;
+  age?: string;
+}
+
+export interface PreviewOwner {
+  id?: string;
+  name?: string;
+  role?: string;
+}
+
+export interface PreviewNextAction {
+  label: string;
+  description?: string;
+  action: "confirm" | "deliver" | "invoice" | "review" | "details" | string;
+  enabled?: boolean;
+}
+
+export interface PreviewContextItem {
+  label: string;
+  value: string;
+}
+
+export interface OrderHoverPreviewData {
+  orderId: string;
+  internalId: string;
+  customer: string;
+  amount: number;
+  channel: string;
+  createdOn: string;
+  paymentStatus: string;
+  amountPaid: number;
+  currentStage?: PreviewStage;
+  exception?: PreviewException;
+  owner?: PreviewOwner;
+  explanation?: string;
+  relevantContext: PreviewContextItem[];
+  nextAction?: PreviewNextAction;
+  lifecycle: {
+    stages: LifecycleStage[];
+    currentStageId: string;
+    completedStageIds: string[];
+  };
+  isCancelled: boolean;
+}
