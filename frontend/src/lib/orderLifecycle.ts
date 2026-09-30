@@ -13,27 +13,31 @@ import {
 } from "@/types/order";
 
 /**
- * Default standard lifecycle for DistroOS orders.
- * In the future, this can be loaded per-tenant from the backend,
- * while the UI components consume this exact same interface.
+ * Standard business lifecycle for DistroOS orders.
+ * Follows the real distributor operations workflow:
+ * 1. Pending Review: Order captured; requires SKU mapping or triage review.
+ * 2. Pending Confirmation: All SKUs matched, stock allocated; awaiting confirmation.
+ * 3. Confirmed: Inventory committed, invoice created, ready for loading/dispatch.
+ * 4. Dispatched: In-transit with delivery carrier or van.
+ * 5. Delivered: Successfully delivered to retailer; payment settlement pending/complete.
  */
 export const DEFAULT_ORDER_LIFECYCLE: OrderLifecycle = {
   id: "default_distribution_lifecycle",
   name: "Standard Distribution Lifecycle",
   stages: [
     {
-      id: "received",
-      name: "Received",
+      id: "pending_review",
+      name: "Pending Review",
       sequence: 1,
-      shortName: "REC",
-      description: "Order captured via WhatsApp or Portal",
+      shortName: "REV",
+      description: "Order captured; requires SKU mapping or triage review",
     },
     {
-      id: "review",
-      name: "Review",
+      id: "pending_confirmation",
+      name: "Pending Confirmation",
       sequence: 2,
-      shortName: "REV",
-      description: "SKU mapping and inventory allocation review",
+      shortName: "PEND",
+      description: "SKUs matched and stock allocated; awaiting confirmation",
     },
     {
       id: "confirmed",
@@ -47,7 +51,7 @@ export const DEFAULT_ORDER_LIFECYCLE: OrderLifecycle = {
       name: "Dispatched",
       sequence: 4,
       shortName: "DSP",
-      description: "Order dispatched with carrier or van",
+      description: "Order dispatched with carrier or delivery van",
     },
     {
       id: "delivered",
@@ -69,10 +73,84 @@ export interface AdaptedOrderLifecycle {
 }
 
 /**
+ * Normalizes an order status string into canonical lowercase form.
+ */
+export function normalizeOrderStatus(status?: string): string {
+  if (!status) return "draft";
+  return status.trim().toLowerCase().replace(/[\s-]+/g, "_");
+}
+
+/**
+ * Checks if an order status is within the actionable pre-confirmation path
+ * (either Pending Review or Pending Confirmation).
+ * Matches: Draft, Pending, Needs Review, pending_review, NEEDS_REVIEW, Pending Review.
+ */
+export function isOrderConfirmable(status?: string): boolean {
+  if (!status) return false;
+  const s = normalizeOrderStatus(status);
+  return (
+    s === "draft" ||
+    s === "pending" ||
+    s === "needs_review" ||
+    s === "pending_review"
+  );
+}
+
+/**
+ * Checks if an order requires SKU mapping or operator triage review.
+ */
+export function isOrderPendingReview(order: any): boolean {
+  if (!order) return false;
+  const s = normalizeOrderStatus(order.status);
+  if (s === "needs_review" || s === "pending_review") {
+    return true;
+  }
+  const lineItems = order.line_items || [];
+  return lineItems.some(
+    (i: any) =>
+      i.sku_id === "UNMATCHED_SKU" ||
+      i.sku_id === "UNMATCHED_TRIAGE_SKU" ||
+      !i.product_id
+  );
+}
+
+/**
+ * Returns the canonical primary action for an order in the listing / preview.
+ * - "review": Order requires catalog SKU mapping or triage.
+ * - "confirm": Order is ready for dispatcher confirmation.
+ * - "invoice": Order is confirmed; invoice ready for download/dispatch.
+ * - "deliver": Order is dispatched; ready to record proof of delivery.
+ * - null: Order has reached terminal or non-actionable state (Delivered, Cancelled).
+ */
+export function getOrderPrimaryAction(
+  order: any
+): "review" | "confirm" | "invoice" | "deliver" | null {
+  if (!order) return null;
+  const isCancelled =
+    order.status === "Cancelled" ||
+    order.status?.toLowerCase() === "cancelled";
+  if (isCancelled) return null;
+
+  const s = normalizeOrderStatus(order.status);
+  if (s === "delivered") return null;
+  if (s === "dispatched") return "deliver";
+  if (s === "confirmed" || s === "partially_confirmed") return "invoice";
+
+  if (isOrderPendingReview(order)) {
+    return "review";
+  }
+
+  if (isOrderConfirmable(order.status)) {
+    return "confirm";
+  }
+
+  return null;
+}
+
+/**
  * Lifecycle Adapter
- * Bridges existing Order models / API responses into the generic OrderLifecycle domain.
- * When the backend supports tenant-customized lifecycles, this adapter seamlessly
- * prioritizes API-provided lifecycle definitions while falling back cleanly.
+ * Bridges existing Order models / API responses into the canonical OrderLifecycle domain.
+ * When backend tenant lifecycles are provided, honors them directly.
  */
 export function adaptOrderToLifecycle(
   order: any,
@@ -131,12 +209,12 @@ export function adaptOrderToLifecycle(
     }
   }
 
-  let currentStageId = "received";
+  let currentStageId = "pending_review";
   let completedStageIds: string[] = [];
   let exception: OperationalException | null = null;
 
   if (isCancelled) {
-    currentStageId = "received";
+    currentStageId = "pending_review";
     completedStageIds = [];
     exception = {
       severity: "none",
@@ -144,21 +222,28 @@ export function adaptOrderToLifecycle(
       actionHint: "Order cancelled",
     };
   } else {
-    const status = order.status || "Draft";
+    const s = normalizeOrderStatus(order.status);
 
-    if (status === "Draft" || status === "Pending") {
-      if (hasUnmatchedSku) {
-        currentStageId = "review";
-        completedStageIds = ["received"];
-        exception = {
-          severity: "warning",
-          label: "Unmatched SKU",
-          actionHint: "Map SKU in Details",
-          suggestedAction: "review",
-        };
-      } else if (hasShortfall) {
-        currentStageId = "review";
-        completedStageIds = ["received"];
+    // 1. Stage: Pending Review (unmatched items or triage required)
+    if (
+      hasUnmatchedSku ||
+      s === "needs_review" ||
+      s === "pending_review"
+    ) {
+      currentStageId = "pending_review";
+      completedStageIds = [];
+      exception = {
+        severity: "warning",
+        label: hasUnmatchedSku ? "Unmatched SKU" : "Needs Review",
+        actionHint: hasUnmatchedSku ? "Map SKU in Details" : "Resolution required",
+        suggestedAction: "review",
+      };
+    }
+    // 2. Stage: Pending Confirmation (SKUs matched, awaiting confirmation)
+    else if (s === "draft" || s === "pending") {
+      currentStageId = "pending_confirmation";
+      completedStageIds = ["pending_review"];
+      if (hasShortfall) {
         exception = {
           severity: "warning",
           label: `Shortfall (${totalAllocated}/${totalRequested})`,
@@ -166,35 +251,30 @@ export function adaptOrderToLifecycle(
           suggestedAction: "confirm",
         };
       } else if (ageHours >= 24) {
-        currentStageId = "received";
-        completedStageIds = [];
         exception = {
           severity: "info",
           label: `Pending ${Math.round(ageHours)}h`,
           actionHint: "Awaiting confirmation",
           suggestedAction: "confirm",
         };
-      } else {
-        currentStageId = "received";
-        completedStageIds = [];
       }
-    } else if (
-      status === "Needs Review" ||
-      status === "pending_review" ||
-      status === "NEEDS_REVIEW"
+    }
+    // 3. Stage: Confirmed (Confirmed, Partially Confirmed, or Awaiting Stock)
+    else if (
+      s === "confirmed" ||
+      s === "partially_confirmed" ||
+      s === "awaiting_stock"
     ) {
-      currentStageId = "review";
-      completedStageIds = ["received"];
-      exception = {
-        severity: "warning",
-        label: hasUnmatchedSku ? "Unmatched SKU" : "Needs Review",
-        actionHint: "Resolution required",
-        suggestedAction: "review",
-      };
-    } else if (status === "Confirmed") {
       currentStageId = "confirmed";
-      completedStageIds = ["received", "review"];
-      if (hasShortfall) {
+      completedStageIds = ["pending_review", "pending_confirmation"];
+      if (s === "awaiting_stock") {
+        exception = {
+          severity: "error",
+          label: "Awaiting Stock (0 alloc.)",
+          actionHint: "Stock arrival required",
+          suggestedAction: "details",
+        };
+      } else if (hasShortfall) {
         exception = {
           severity: "warning",
           label: `Shortfall (${totalAllocated}/${totalRequested} alloc.)`,
@@ -202,28 +282,45 @@ export function adaptOrderToLifecycle(
           suggestedAction: "invoice",
         };
       }
-    } else if (status === "Dispatched") {
+    }
+    // 4. Stage: Dispatched
+    else if (s === "dispatched") {
       currentStageId = "dispatched";
-      completedStageIds = ["received", "review", "confirmed"];
-    } else if (status === "Delivered") {
+      completedStageIds = [
+        "pending_review",
+        "pending_confirmation",
+        "confirmed",
+      ];
+    }
+    // 5. Stage: Delivered
+    else if (s === "delivered") {
       currentStageId = "delivered";
       completedStageIds = [
-        "received",
-        "review",
+        "pending_review",
+        "pending_confirmation",
         "confirmed",
         "dispatched",
         "delivered",
       ];
-    } else {
-      // Graceful fallback for unknown status
-      currentStageId = lifecycle.stages[0]?.id || "received";
+      if (order.payment_status && order.payment_status !== "PAID") {
+        exception = {
+          severity: "info",
+          label: "Payment Pending",
+          actionHint: "Payment collection pending",
+          suggestedAction: "details",
+        };
+      }
+    }
+    // Fallback for unknown statuses
+    else {
+      currentStageId = lifecycle.stages[0]?.id || "pending_review";
       completedStageIds = [];
     }
   }
 
-  const currentStage = lifecycle.stages.find((s) => s.id === currentStageId);
+  const currentStage = lifecycle.stages.find((stage) => stage.id === currentStageId);
   const currentStageIndex = lifecycle.stages.findIndex(
-    (s) => s.id === currentStageId
+    (stage) => stage.id === currentStageId
   );
 
   return {
@@ -264,14 +361,13 @@ function formatRelativeTime(dateStr?: string): string {
 
 /**
  * Derives rich, contextual OrderHoverPreviewData from an Order.
- * Consumes the generic OrderLifecycle domain model so tenant-specific lifecycle
- * rules from the backend can easily plug in without changing any UI presentation code.
+ * Consumes the canonical OrderLifecycle domain model so all surfaces
+ * remain strictly synchronized.
  */
 export function getOrderHoverPreview(
   order: any,
   lifecycle: OrderLifecycle = DEFAULT_ORDER_LIFECYCLE
 ): OrderHoverPreviewData {
-  // If backend or future tenant runtime already supplied preview data, respect it directly
   if (order.hover_preview || order.preview) {
     return order.hover_preview || order.preview;
   }
@@ -313,7 +409,7 @@ export function getOrderHoverPreview(
     }
   }
 
-  const status = order.status || "Draft";
+  const s = normalizeOrderStatus(order.status);
   const relativeAge = formatRelativeTime(order.created_on);
   const totalAmount = order.amount || 0;
   const amountPaid = order.amount_paid || 0;
@@ -322,18 +418,19 @@ export function getOrderHoverPreview(
   let stageStatus: StageStatus = "on_track";
   if (isCancelled) {
     stageStatus = "blocked";
-  } else if (status === "Delivered") {
+  } else if (progress.currentStageId === "delivered") {
     stageStatus = "completed";
   } else if (
-    hasUnmatchedSku ||
+    progress.currentStageId === "pending_review" ||
     hasShortfall ||
-    (status in ["Pending", "Draft"] && ageHours >= 24)
+    s === "awaiting_stock" ||
+    (progress.currentStageId === "pending_confirmation" && ageHours >= 24)
   ) {
     stageStatus = "attention";
   }
 
   const previewStage: PreviewStage = {
-    id: currentStage?.id || "received",
+    id: currentStage?.id || "pending_review",
     name: isCancelled ? "Cancelled" : currentStage?.name || "Processing",
     sequence: currentStage?.sequence || 1,
     status: stageStatus,
@@ -369,138 +466,199 @@ export function getOrderHoverPreview(
       action: "details",
       enabled: true,
     };
-  } else if (hasUnmatchedSku) {
+  } else if (progress.currentStageId === "pending_review") {
     owner = { role: "Catalog Manager", name: "Operations" };
-    exception = {
-      type: "unmatched_sku",
-      severity: "warning",
-      title: `Unmatched SKU (${unmatchedItems.length})`,
-      description: "Items requiring catalog resolution.",
-      age: relativeAge,
-    };
-    explanation = `${unmatchedItems.length} ${
-      unmatchedItems.length === 1 ? "item" : "items"
-    } received via ${order.channel || "WhatsApp"} could not be mapped to catalog SKUs.`;
-    relevantContext = [
-      {
-        label: "Unmapped SKUs",
-        value: `${unmatchedItems.length} of ${lineItems.length} line items`,
-      },
-      { label: "Order Channel", value: order.channel || "WhatsApp" },
-      { label: "Captured", value: relativeAge },
-      { label: "Order Value", value: formatCurrencyINR(totalAmount) },
-    ];
-    nextAction = {
-      label: "Review & Map SKUs",
-      description: "Map unmapped items to catalog products in Order Details.",
-      action: "review",
-      enabled: true,
-    };
-  } else if (hasShortfall) {
-    owner = { role: "Inventory Dispatcher", name: "Warehouse" };
-    exception = {
-      type: "stock_shortfall",
-      severity: "warning",
-      title: `Stock Shortfall (${totalAllocated}/${totalRequested})`,
-      description: "Stock shortage for full order.",
-      age: relativeAge,
-    };
-    explanation = `Requested units (${totalRequested}) exceed available warehouse stock (${totalAllocated}). ${shortfallUnits} units unallocated.`;
-    relevantContext = [
-      { label: "Allocated Units", value: `${totalAllocated} / ${totalRequested}` },
-      { label: "Fulfillment Rate", value: `${fulfillmentRate}%` },
-      { label: "Shortfall Gap", value: `${shortfallUnits} units` },
-      { label: "Order Value", value: formatCurrencyINR(totalAmount) },
-    ];
-    nextAction =
-      status === "Confirmed"
-        ? {
-            label: "Download Invoice",
-            description: "Print B2B invoice with allocated stock for dispatch.",
-            action: "invoice",
-            enabled: true,
-          }
-        : {
-            label: "Confirm Partial Allocation",
-            description: "Proceed with partial stock or wait for replenishment.",
-            action: "confirm",
-            enabled: true,
-          };
-  } else if (ageHours >= 24 && (status === "Draft" || status === "Pending")) {
-    owner = { role: "Sales Manager", name: "Dispatcher" };
-    exception = {
-      type: "pending_sla",
-      severity: "info",
-      title: `Pending Confirmation (${Math.round(ageHours)}h)`,
-      description: "Order awaiting approval over 24 hours.",
-      age: relativeAge,
-    };
-    explanation = `Order captured ${Math.round(
-      ageHours
-    )} hours ago and has not yet been confirmed for fulfillment.`;
-    relevantContext = [
-      { label: "Order Age", value: `${Math.round(ageHours)} hours` },
-      {
-        label: "Units to Pack",
-        value: `${totalAllocated} units (${lineItems.length} items)`,
-      },
-      { label: "Channel", value: order.channel || "WhatsApp" },
-      { label: "Order Value", value: formatCurrencyINR(totalAmount) },
-    ];
-    nextAction = {
-      label: "Review & Confirm Order",
-      description: "Confirm inventory allocations to generate invoice.",
-      action: "confirm",
-      enabled: true,
-    };
-  } else if (status === "Draft" || status === "Pending") {
-    owner = { role: "Sales Manager", name: "Dispatcher" };
-    explanation = "Order received from retailer. Stock is allocated and awaiting confirmation.";
-    relevantContext = [
-      {
-        label: "Units to Pack",
-        value: `${totalAllocated} units (${lineItems.length} items)`,
-      },
-      { label: "Fulfillment Rate", value: "100%" },
-      { label: "Channel", value: order.channel || "WhatsApp" },
-      { label: "Received", value: relativeAge },
-    ];
-    nextAction = {
-      label: "Confirm Order",
-      description: "Lock allocations and generate B2B invoice.",
-      action: "confirm",
-      enabled: true,
-    };
-  } else if (status === "Confirmed") {
+    if (hasUnmatchedSku) {
+      exception = {
+        type: "unmatched_sku",
+        severity: "warning",
+        title: `Unmatched SKU (${unmatchedItems.length})`,
+        description: "Items requiring catalog resolution.",
+        age: relativeAge,
+      };
+      explanation = `${unmatchedItems.length} ${
+        unmatchedItems.length === 1 ? "item" : "items"
+      } received via ${order.channel || "WhatsApp"} could not be mapped to catalog SKUs.`;
+      relevantContext = [
+        {
+          label: "Unmapped SKUs",
+          value: `${unmatchedItems.length} of ${lineItems.length} line items`,
+        },
+        { label: "Order Channel", value: order.channel || "WhatsApp" },
+        { label: "Captured", value: relativeAge },
+        { label: "Order Value", value: formatCurrencyINR(totalAmount) },
+      ];
+      nextAction = {
+        label: "Review & Map SKUs",
+        description: "Map unmapped items to catalog products in Order Details.",
+        action: "review",
+        enabled: true,
+      };
+    } else {
+      exception = {
+        type: "needs_review",
+        severity: "warning",
+        title: "Needs Review",
+        description: "Order requires operator triage review.",
+        age: relativeAge,
+      };
+      explanation = "Order requires triage review before stock allocation can be confirmed.";
+      relevantContext = [
+        { label: "Line Items", value: `${lineItems.length} items` },
+        { label: "Order Channel", value: order.channel || "WhatsApp" },
+        { label: "Captured", value: relativeAge },
+        { label: "Order Value", value: formatCurrencyINR(totalAmount) },
+      ];
+      nextAction = {
+        label: "Review Order",
+        description: "Inspect and resolve order items in Order Details.",
+        action: "review",
+        enabled: true,
+      };
+    }
+  } else if (progress.currentStageId === "pending_confirmation") {
+    if (hasShortfall) {
+      owner = { role: "Inventory Dispatcher", name: "Warehouse" };
+      exception = {
+        type: "stock_shortfall",
+        severity: "warning",
+        title: `Stock Shortfall (${totalAllocated}/${totalRequested})`,
+        description: "Stock shortage for full order.",
+        age: relativeAge,
+      };
+      explanation = `Requested units (${totalRequested}) exceed available warehouse stock (${totalAllocated}). ${shortfallUnits} units unallocated.`;
+      relevantContext = [
+        { label: "Allocated Units", value: `${totalAllocated} / ${totalRequested}` },
+        { label: "Fulfillment Rate", value: `${fulfillmentRate}%` },
+        { label: "Shortfall Gap", value: `${shortfallUnits} units` },
+        { label: "Order Value", value: formatCurrencyINR(totalAmount) },
+      ];
+      nextAction = {
+        label: "Confirm Partial Allocation",
+        description: "Proceed with partial stock or wait for replenishment.",
+        action: "confirm",
+        enabled: true,
+      };
+    } else if (ageHours >= 24) {
+      owner = { role: "Sales Manager", name: "Dispatcher" };
+      exception = {
+        type: "pending_sla",
+        severity: "info",
+        title: `Pending Confirmation (${Math.round(ageHours)}h)`,
+        description: "Order awaiting approval over 24 hours.",
+        age: relativeAge,
+      };
+      explanation = `Order captured ${Math.round(
+        ageHours
+      )} hours ago and has not yet been confirmed for fulfillment.`;
+      relevantContext = [
+        { label: "Order Age", value: `${Math.round(ageHours)} hours` },
+        {
+          label: "Units to Pack",
+          value: `${totalAllocated} units (${lineItems.length} items)`,
+        },
+        { label: "Channel", value: order.channel || "WhatsApp" },
+        { label: "Order Value", value: formatCurrencyINR(totalAmount) },
+      ];
+      nextAction = {
+        label: "Confirm Order",
+        description: "Confirm inventory allocations to generate invoice.",
+        action: "confirm",
+        enabled: true,
+      };
+    } else {
+      owner = { role: "Sales Manager", name: "Dispatcher" };
+      explanation = "Order captured and all SKUs matched. Stock is allocated and awaiting confirmation.";
+      relevantContext = [
+        {
+          label: "Units to Pack",
+          value: `${totalAllocated} units (${lineItems.length} items)`,
+        },
+        { label: "Fulfillment Rate", value: "100%" },
+        { label: "Channel", value: order.channel || "WhatsApp" },
+        { label: "Received", value: relativeAge },
+      ];
+      nextAction = {
+        label: "Confirm Order",
+        description: "Lock allocations and generate B2B invoice.",
+        action: "confirm",
+        enabled: true,
+      };
+    }
+  } else if (progress.currentStageId === "confirmed") {
     owner = { role: "Warehouse & Logistics", name: "Dispatcher" };
-    explanation = "Order confirmed and invoice ready. Awaiting vehicle loading and dispatch.";
-    relevantContext = [
-      {
-        label: "Invoice Type",
-        value:
-          order.invoice_type === "GST_TAX_INVOICE"
-            ? "GST Tax Invoice"
-            : order.invoice_type || "Standard Invoice",
-      },
-      { label: "Packed Units", value: `${totalAllocated} units` },
-      {
-        label: "Payment Status",
-        value:
-          order.payment_status === "PAID"
-            ? "Paid"
-            : order.payment_status === "PARTIALLY_PAID"
-            ? "Partial"
-            : "Unpaid",
-      },
-      { label: "Retailer", value: order.customer || "-" },
-    ];
-    nextAction = {
-      label: "Download Invoice",
-      description: "Print B2B invoice copy for delivery van loading.",
-      action: "invoice",
-      enabled: true,
-    };
-  } else if (status === "Dispatched") {
+    if (s === "awaiting_stock") {
+      exception = {
+        type: "stock_shortfall",
+        severity: "critical",
+        title: "Awaiting Stock (0 Allocated)",
+        description: "Stock replenishment required before dispatch.",
+        age: relativeAge,
+      };
+      explanation = "Order is confirmed but 0 units could be allocated from inventory. Stock arrival needed.";
+      relevantContext = [
+        { label: "Allocated Units", value: `0 / ${totalRequested}` },
+        { label: "Fulfillment Rate", value: "0%" },
+        { label: "Retailer", value: order.customer || "-" },
+        { label: "Order Value", value: formatCurrencyINR(totalAmount) },
+      ];
+      nextAction = {
+        label: "View Allocations",
+        description: "Inspect inventory demand gap in Order Details.",
+        action: "details",
+        enabled: true,
+      };
+    } else if (hasShortfall) {
+      exception = {
+        type: "stock_shortfall",
+        severity: "warning",
+        title: `Partial Allocation (${totalAllocated}/${totalRequested})`,
+        description: "Partial stock allocation for dispatch.",
+        age: relativeAge,
+      };
+      explanation = `Order confirmed with partial stock. ${shortfallUnits} unallocated units recorded as demand gap.`;
+      relevantContext = [
+        { label: "Allocated Units", value: `${totalAllocated} / ${totalRequested}` },
+        { label: "Fulfillment Rate", value: `${fulfillmentRate}%` },
+        { label: "Packed Units", value: `${totalAllocated} units` },
+        { label: "Retailer", value: order.customer || "-" },
+      ];
+      nextAction = {
+        label: "Download Invoice",
+        description: "Print B2B invoice copy with allocated stock for delivery van loading.",
+        action: "invoice",
+        enabled: true,
+      };
+    } else {
+      explanation = "Order confirmed and invoice ready. Awaiting vehicle loading and dispatch.";
+      relevantContext = [
+        {
+          label: "Invoice Type",
+          value:
+            order.invoice_type === "GST_TAX_INVOICE"
+              ? "GST Tax Invoice"
+              : order.invoice_type || "Standard Invoice",
+        },
+        { label: "Packed Units", value: `${totalAllocated} units` },
+        {
+          label: "Payment Status",
+          value:
+            order.payment_status === "PAID"
+              ? "Paid"
+              : order.payment_status === "PARTIALLY_PAID"
+              ? "Partial"
+              : "Unpaid",
+        },
+        { label: "Retailer", value: order.customer || "-" },
+      ];
+      nextAction = {
+        label: "Download Invoice",
+        description: "Print B2B invoice copy for delivery van loading.",
+        action: "invoice",
+        enabled: true,
+      };
+    }
+  } else if (progress.currentStageId === "dispatched") {
     owner = { role: "Delivery Personnel", name: "Van Driver" };
     explanation = "Order dispatched with delivery personnel. En route to retailer store.";
     relevantContext = [
@@ -515,7 +673,7 @@ export function getOrderHoverPreview(
       action: "deliver",
       enabled: true,
     };
-  } else if (status === "Delivered") {
+  } else if (progress.currentStageId === "delivered") {
     if (order.payment_status !== "PAID") {
       owner = { role: "Collections Agent", name: "Accounts" };
       exception = {
@@ -557,13 +715,12 @@ export function getOrderHoverPreview(
       };
     }
   } else {
-    // Graceful default fallback for any unmapped status
     owner = { role: "Operations", name: "Dispatcher" };
-    explanation = `Order is in ${status} status.`;
+    explanation = `Order is in ${order.status || "Unknown"} status.`;
     relevantContext = [
       { label: "Retailer", value: order.customer || "-" },
       { label: "Order Value", value: formatCurrencyINR(totalAmount) },
-      { label: "Status", value: status },
+      { label: "Status", value: order.status || "-" },
       { label: "Channel", value: order.channel || "Portal" },
     ];
     nextAction = {

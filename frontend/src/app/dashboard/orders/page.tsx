@@ -14,7 +14,14 @@ import PlaceOrderModal from "@/components/PlaceOrderModal";
 import PendingAllocationsCard from "@/components/PendingAllocationsCard";
 import VanSalesModal from "@/components/VanSalesModal";
 import { useDebounce, fetchWithTimeout } from "@/lib/debounce";
-import { adaptOrderToLifecycle, getOrderHoverPreview, DEFAULT_ORDER_LIFECYCLE } from "@/lib/orderLifecycle";
+import {
+  adaptOrderToLifecycle,
+  getOrderHoverPreview,
+  DEFAULT_ORDER_LIFECYCLE,
+  isOrderConfirmable,
+  isOrderPendingReview,
+  getOrderPrimaryAction,
+} from "@/lib/orderLifecycle";
 import OrderLifecycleProgress from "@/components/orders/OrderLifecycleProgress";
 import OrderCurrentStage from "@/components/orders/OrderCurrentStage";
 import OrderHoverPreview from "@/components/orders/OrderHoverPreview";
@@ -23,6 +30,7 @@ import {
   Loader2,
   RefreshCw,
   AlertCircle,
+  CheckCircle2,
   X,
   MessageSquare,
   Globe,
@@ -260,6 +268,19 @@ export default function OrdersPage() {
       });
     }
   }, [selectedOrder]);
+
+  // Checks if the currently open order has any line item that still lacks a matched product_id
+  const hasUnresolvedItems = Boolean(
+    editedLineItems &&
+    editedLineItems.length > 0 &&
+    editedLineItems.some(
+      (item) =>
+        (item.sku_id === "UNMATCHED_SKU" ||
+         item.sku_id === "UNMATCHED_TRIAGE_SKU" ||
+         !item.product_id) &&
+        !item.product_id
+    )
+  );
 
   const showToast = (message: string, type: "success" | "error") => {
     toastQueue[type](message);
@@ -604,15 +625,15 @@ export default function OrdersPage() {
         item.id === itemId
           ? {
             ...item,
-            product_id: selectedProductId,
-            unmatched_raw_text: null,
-            sku_id: targetProduct ? targetProduct.sku_id : item.sku_id,
+            product_id: selectedProductId || null,
+            unmatched_raw_text: item.unmatched_raw_text || item.brand,
+            sku_id: targetProduct ? targetProduct.sku_id : "UNMATCHED_SKU",
             brand: targetProduct ? targetProduct.brand : item.brand,
             category: targetProduct ? targetProduct.category : item.category,
             pack_size: targetProduct ? targetProduct.pack_size : item.pack_size,
             unit_price: targetProduct ? targetProduct.base_price : item.unit_price,
             total_price: targetProduct ? item.quantity * targetProduct.base_price : item.total_price,
-            isResolvedLocally: true,
+            isResolvedLocally: Boolean(targetProduct),
             resolvedSkuCode: targetProduct ? targetProduct.sku_id : undefined,
           }
           : item
@@ -750,19 +771,22 @@ export default function OrdersPage() {
 
   // Status Filter Counts
   const countAll = selectedStatus === "All" ? total : orders.length;
-  const countPending = orders.filter(o => o.status === "Pending" || o.status === "Draft").length;
-  const countConfirmed = orders.filter(o => o.status === "Confirmed").length;
-  const countNeedsReview = orders.filter(o => o.status === "Needs Review" || o.status === "pending_review" || o.status === "NEEDS_REVIEW").length;
+  const countNeedsReview = orders.filter(o => isOrderPendingReview(o)).length;
+  const countPending = orders.filter(o => (o.status === "Pending" || o.status === "Draft") && !isOrderPendingReview(o)).length;
+  const countConfirmed = orders.filter(o => o.status === "Confirmed" || o.status === "Partially Confirmed").length;
 
   // Filter and Search Logic
   // Since search and status_filter are applied server-side on the entire dataset,
   // orders holds the paginated matches. We maintain a fallback client filter for instant feedback.
   const filteredOrders = orders.filter(o => {
-    const matchesStatus =
-      selectedStatus === "All" ||
-      o.status === selectedStatus ||
-      (selectedStatus === "Pending" && o.status === "Draft") ||
-      (selectedStatus === "Needs Review" && (o.status === "pending_review" || o.status === "NEEDS_REVIEW"));
+    let matchesStatus = true;
+    if (selectedStatus === "Needs Review") {
+      matchesStatus = isOrderPendingReview(o);
+    } else if (selectedStatus === "Pending") {
+      matchesStatus = (o.status === "Pending" || o.status === "Draft") && !isOrderPendingReview(o);
+    } else if (selectedStatus === "Confirmed") {
+      matchesStatus = o.status === "Confirmed" || o.status === "Partially Confirmed";
+    }
     const matchesSearch =
       !debouncedSearchQuery.trim() ||
       o.order_id.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
@@ -1054,6 +1078,7 @@ export default function OrdersPage() {
                         order,
                         DEFAULT_ORDER_LIFECYCLE
                       );
+                      const primaryAction = getOrderPrimaryAction(order);
 
                       return (
                         <tr key={order.id} className="hover:bg-slate-50/70 dark:hover:bg-white/5 transition-colors group">
@@ -1137,7 +1162,7 @@ export default function OrdersPage() {
                           </td>
                           <td className="py-3.5 px-4 text-right whitespace-nowrap">
                             <div className="flex items-center justify-end gap-1.5">
-                              {order.status === "Dispatched" && (
+                              {primaryAction === "deliver" && (
                                 <button
                                   onClick={() => handleOrderIdClick(order)}
                                   className="px-2 py-1 text-[11px] font-bold rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-700 border border-teal-200 dark:bg-teal-500/10 dark:hover:bg-teal-500/20 dark:text-teal-400 dark:border-teal-500/20 transition-all cursor-pointer shadow-2xs"
@@ -1146,7 +1171,7 @@ export default function OrdersPage() {
                                   Deliver
                                 </button>
                               )}
-                              {order.status === "Confirmed" && (
+                              {primaryAction === "invoice" && (
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
@@ -1159,11 +1184,20 @@ export default function OrdersPage() {
                                   Invoice
                                 </button>
                               )}
-                              {(order.status === "Pending" || order.status === "Needs Review" || order.status === "Draft" || order.status === "pending_review") && (
+                              {primaryAction === "confirm" && (
                                 <button
                                   onClick={() => handleOrderIdClick(order)}
                                   className="px-2 py-1 text-[11px] font-bold rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/10 dark:hover:bg-emerald-500/20 dark:text-emerald-400 dark:border-emerald-500/20 transition-all cursor-pointer shadow-2xs"
                                   title="Review & Confirm order"
+                                >
+                                  Confirm
+                                </button>
+                              )}
+                              {primaryAction === "review" && (
+                                <button
+                                  onClick={() => handleOrderIdClick(order)}
+                                  className="px-2 py-1 text-[11px] font-bold rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 dark:bg-amber-500/10 dark:hover:bg-amber-500/20 dark:text-amber-400 dark:border-amber-500/20 transition-all cursor-pointer shadow-2xs"
+                                  title="Review & map unmatched SKUs"
                                 >
                                   Review
                                 </button>
@@ -1234,6 +1268,14 @@ export default function OrdersPage() {
                       <span className="text-xs font-bold text-slate-700 dark:text-slate-300 capitalize">{selectedOrder?.channel}</span>
                     </div>
                     <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-400 uppercase tracking-wider font-semibold">Lifecycle Stage</span>
+                      <OrderCurrentStage
+                        stage={selectedOrder ? adaptOrderToLifecycle(selectedOrder).currentStage : undefined}
+                        exception={selectedOrder ? adaptOrderToLifecycle(selectedOrder).exception : null}
+                        isCancelled={selectedOrder ? adaptOrderToLifecycle(selectedOrder).isCancelled : false}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
                       <span className="text-xs font-bold text-slate-400 uppercase tracking-wider font-semibold">Invoice Type</span>
                       <div className="flex items-center gap-2">
                         {isEditingInvoiceType ? (
@@ -1277,7 +1319,11 @@ export default function OrdersPage() {
 
                   <h4 className="font-bold text-slate-800 dark:text-slate-100 text-sm border-b pb-2 mb-3">Line Items</h4>
                   {editedLineItems.map((item, idx) => {
-                    const isUnmatched = item.sku_id === "UNMATCHED_SKU" || item.sku_id === "UNMATCHED_TRIAGE_SKU";
+                    const isUnmatched =
+                      item.sku_id === "UNMATCHED_SKU" ||
+                      item.sku_id === "UNMATCHED_TRIAGE_SKU" ||
+                      Boolean(item.isResolvedLocally) ||
+                      !item.product_id;
                     // Line total = allocated_quantity * unit_price (not full quantity)
                     const displayQty = item.allocated_quantity ?? item.quantity;
                     const lineTotal = displayQty * item.unit_price;
@@ -1287,18 +1333,31 @@ export default function OrdersPage() {
                           <div className="flex-1 pr-4">
                             {isUnmatched ? (
                               <div className="space-y-2">
-                                <p className="font-bold text-sm text-rose-600 dark:text-rose-400 flex items-center gap-1.5 animate-pulse">
-                                  <AlertCircle className="w-4 h-4 shrink-0" />
-                                  <span>Unmatched Line Item</span>
+                                <p className={`font-bold text-sm flex items-center gap-1.5 ${item.isResolvedLocally ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400 animate-pulse"}`}>
+                                  {item.isResolvedLocally ? (
+                                    <>
+                                      <CheckCircle2 className="w-4 h-4 shrink-0" />
+                                      <span>Mapped: {item.brand} ({item.sku_id})</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <AlertCircle className="w-4 h-4 shrink-0" />
+                                      <span>Unmatched Line Item</span>
+                                    </>
+                                  )}
                                 </p>
                                 <p className="text-[11px] text-slate-400 font-semibold mb-1">
-                                  Original Text: <span className="italic">"{item.brand} SKU"</span>
+                                  Original Text: <span className="italic">"{item.raw_source_text || item.brand} SKU"</span>
                                 </p>
                                 <label className="block text-[10px] font-bold text-slate-400 uppercase">Map to Catalog SKU</label>
                                 <select
                                   value={item.product_id || ""}
                                   onChange={(e) => handleProductChange(item.id, e.target.value)}
-                                  className="w-full mt-1 p-2 border border-rose-200 dark:border-rose-500/20 rounded-lg text-xs bg-white dark:bg-dashboard-card text-slate-700 dark:text-slate-300 font-semibold focus:outline-none focus:ring-1 focus:ring-rose-500 cursor-pointer animate-pulse"
+                                  className={`w-full mt-1 p-2 border rounded-lg text-xs bg-white dark:bg-dashboard-card text-slate-700 dark:text-slate-300 font-semibold focus:outline-none focus:ring-1 cursor-pointer ${
+                                    item.isResolvedLocally
+                                      ? "border-emerald-300 dark:border-emerald-500/30 focus:ring-emerald-500"
+                                      : "border-rose-200 dark:border-rose-500/20 focus:ring-rose-500 animate-pulse"
+                                  }`}
                                 >
                                   <option value="">-- Select SKU --</option>
                                   {productsList.map((p) => (
@@ -1458,7 +1517,7 @@ export default function OrdersPage() {
               )}
 
               <div className="flex items-center justify-between gap-3 w-full">
-                {selectedOrder && (selectedOrder.status === "Draft" || selectedOrder.status === "Pending" || selectedOrder.status === "Confirmed") && (
+                {selectedOrder && (isOrderConfirmable(selectedOrder.status) || selectedOrder.status === "Confirmed" || selectedOrder.status === "Partially Confirmed") && (
                   <button
                     onClick={() => setIsCancelDialogOpen(true)}
                     className="px-4 py-2.5 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 text-rose-700 dark:text-rose-400 hover:bg-rose-100 text-sm font-bold rounded-lg transition-all cursor-pointer"
@@ -1466,21 +1525,30 @@ export default function OrdersPage() {
                     Cancel Order
                   </button>
                 )}
-                {selectedOrder && (selectedOrder.status === "Pending" || selectedOrder.status === "Needs Review") && (
-                  <button
-                    onClick={handleConfirmOrder}
-                    disabled={isConfirming}
-                    className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white text-sm font-bold rounded-lg transition-all flex items-center gap-2 cursor-pointer"
-                  >
-                    {isConfirming ? (
-                      <>
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        <span>Confirming...</span>
-                      </>
-                    ) : (
-                      <span>Confirm Order</span>
+                {selectedOrder && isOrderConfirmable(selectedOrder.status) && (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      onClick={handleConfirmOrder}
+                      disabled={isConfirming || hasUnresolvedItems}
+                      className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 dark:disabled:bg-white/10 disabled:text-slate-500 dark:disabled:text-slate-400 disabled:cursor-not-allowed text-white text-sm font-bold rounded-lg transition-all flex items-center gap-2 cursor-pointer shadow-sm"
+                      title={hasUnresolvedItems ? "Map all unmatched line items to confirm order" : "Confirm order and lock allocations"}
+                    >
+                      {isConfirming ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>Confirming...</span>
+                        </>
+                      ) : (
+                        <span>Confirm Order</span>
+                      )}
+                    </button>
+                    {hasUnresolvedItems && (
+                      <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                        <span>Map SKUs above to enable</span>
+                      </span>
                     )}
-                  </button>
+                  </div>
                 )}
 
                 <div className="flex gap-2 flex-wrap">
