@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import Sidebar from "@/components/Sidebar";
 import DashboardHeader from "@/components/DashboardHeader";
-import { InvoiceTypes, InvoiceType, OrderProgress, OperationalException } from "@/types/order";
+import { InvoiceTypes, InvoiceType, OrderProgress, OperationalException, OrderHoverPreviewData } from "@/types/order";
 import Pagination from "@/components/ui/Pagination";
 import { formatDateTime } from "@/utils/datetime";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
@@ -13,9 +14,10 @@ import PlaceOrderModal from "@/components/PlaceOrderModal";
 import PendingAllocationsCard from "@/components/PendingAllocationsCard";
 import VanSalesModal from "@/components/VanSalesModal";
 import { useDebounce, fetchWithTimeout } from "@/lib/debounce";
-import { adaptOrderToLifecycle, DEFAULT_ORDER_LIFECYCLE } from "@/lib/orderLifecycle";
+import { adaptOrderToLifecycle, getOrderHoverPreview, DEFAULT_ORDER_LIFECYCLE } from "@/lib/orderLifecycle";
 import OrderLifecycleProgress from "@/components/orders/OrderLifecycleProgress";
 import OrderCurrentStage from "@/components/orders/OrderCurrentStage";
+import OrderHoverPreview from "@/components/orders/OrderHoverPreview";
 import {
   Search,
   Loader2,
@@ -118,6 +120,125 @@ export default function OrdersPage() {
   const [isVanSalesOpen, setIsVanSalesOpen] = useState(false);
 
   const { toasts, toast: toastQueue, removeToast } = useToast();
+
+  // Hover Preview States
+  const [activePreview, setActivePreview] = useState<{
+    data: OrderHoverPreviewData;
+    position: { top: number; left: number };
+    order: OrderRow;
+  } | null>(null);
+  const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const closeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isHoveringPreviewRef = useRef<boolean>(false);
+  const [isMounted, setIsMounted] = useState(false);
+
+  const closePreview = useCallback(() => {
+    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+    if (closeTimeoutRef.current) clearTimeout(closeTimeoutRef.current);
+    isHoveringPreviewRef.current = false;
+    setActivePreview(null);
+  }, []);
+
+  useEffect(() => {
+    setIsMounted(true);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        closePreview();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [closePreview]);
+
+  const handleTriggerMouseEnter = (
+    e: React.MouseEvent<HTMLElement> | React.FocusEvent<HTMLElement>,
+    order: OrderRow
+  ) => {
+    if (closeTimeoutRef.current) {
+      clearTimeout(closeTimeoutRef.current);
+      closeTimeoutRef.current = null;
+    }
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+    }
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    hoverTimeoutRef.current = setTimeout(() => {
+      const previewData = getOrderHoverPreview(order, DEFAULT_ORDER_LIFECYCLE);
+      const cardWidth = 380;
+      const cardHeight = 440;
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+
+      let left = rect.left;
+      if (left + cardWidth > viewportWidth - 16) {
+        left = Math.max(16, viewportWidth - cardWidth - 16);
+      }
+
+      let top = rect.bottom + 8;
+      if (top + cardHeight > viewportHeight - 16) {
+        if (rect.top - cardHeight - 8 > 16) {
+          top = rect.top - cardHeight - 8;
+        } else {
+          top = Math.max(16, viewportHeight - cardHeight - 16);
+        }
+      }
+
+      setActivePreview({
+        data: previewData,
+        position: { top, left },
+        order,
+      });
+    }, 150);
+  };
+
+  const handleTriggerMouseLeave = () => {
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+      hoverTimeoutRef.current = null;
+    }
+    closeTimeoutRef.current = setTimeout(() => {
+      if (!isHoveringPreviewRef.current) {
+        setActivePreview(null);
+      }
+    }, 200);
+  };
+
+  const handlePreviewMouseEnter = () => {
+    isHoveringPreviewRef.current = true;
+    if (closeTimeoutRef.current) {
+      clearTimeout(closeTimeoutRef.current);
+      closeTimeoutRef.current = null;
+    }
+  };
+
+  const handlePreviewMouseLeave = () => {
+    isHoveringPreviewRef.current = false;
+    closeTimeoutRef.current = setTimeout(() => {
+      setActivePreview(null);
+    }, 150);
+  };
+
+  const handlePreviewAction = (action: string, orderId: string) => {
+    const targetOrder = activePreview?.order || orders.find(o => o.id === orderId);
+    closePreview();
+    if (!targetOrder) return;
+
+    if (action === "invoice") {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      window.open(`${apiBase}/api/v1/orders/${targetOrder.id}/invoice`, "_blank");
+    } else {
+      handleOrderIdClick(targetOrder);
+    }
+  };
+
+  const handlePreviewViewDetails = (orderId: string) => {
+    const targetOrder = activePreview?.order || orders.find(o => o.id === orderId);
+    closePreview();
+    if (targetOrder) {
+      handleOrderIdClick(targetOrder);
+    }
+  };
 
   const foundOrder = orders.find(o => o.id === selectedOrderId);
   const selectedOrder = foundOrder
@@ -936,13 +1057,23 @@ export default function OrdersPage() {
 
                       return (
                         <tr key={order.id} className="hover:bg-slate-50/70 dark:hover:bg-white/5 transition-colors group">
-                          <td className="py-3.5 px-4 sm:px-6 font-bold text-brand-blue hover:underline whitespace-nowrap">
-                            <button
-                              onClick={() => handleOrderIdClick(order)}
-                              className="cursor-pointer font-bold text-left focus:outline-none"
+                          <td className="py-3.5 px-4 sm:px-6 whitespace-nowrap">
+                            <div
+                              className="inline-flex items-center gap-1.5 cursor-pointer"
+                              onMouseEnter={(e) => handleTriggerMouseEnter(e, order)}
+                              onMouseLeave={handleTriggerMouseLeave}
+                              onFocus={(e) => handleTriggerMouseEnter(e, order)}
+                              onBlur={handleTriggerMouseLeave}
                             >
-                              {order.order_id}
-                            </button>
+                              <button
+                                onClick={() => handleOrderIdClick(order)}
+                                className="cursor-pointer font-bold text-left text-brand-blue hover:underline focus:outline-none focus:ring-1 focus:ring-brand-blue rounded"
+                                aria-haspopup="dialog"
+                                aria-label={`Order ${order.order_id}, click for details, hover for operational preview`}
+                              >
+                                {order.order_id}
+                              </button>
+                            </div>
                           </td>
                           <td className="py-3.5 px-4 sm:px-6 font-semibold text-slate-700 dark:text-slate-300 max-w-[180px] truncate" title={order.customer}>
                             {order.customer}
@@ -1613,6 +1744,23 @@ export default function OrdersPage() {
           }
         }}
       />
+
+      {/* Contextual Order Hover Preview Portal */}
+      {isMounted &&
+        activePreview &&
+        typeof window !== "undefined" &&
+        createPortal(
+          <OrderHoverPreview
+            data={activePreview.data}
+            position={activePreview.position}
+            onAction={handlePreviewAction}
+            onViewDetails={handlePreviewViewDetails}
+            onClose={closePreview}
+            onMouseEnter={handlePreviewMouseEnter}
+            onMouseLeave={handlePreviewMouseLeave}
+          />,
+          document.body
+        )}
     </div>
   );
 }
