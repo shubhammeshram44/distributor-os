@@ -5,6 +5,7 @@ import { MessageSquare, Globe, X, FileSpreadsheet, Loader2, ArrowRight, AlertCir
 import { RecentOrder, OrderDetail } from "@/hooks/useDashboardData";
 import Link from "next/link";
 import { formatDateTime } from "@/utils/datetime";
+import { isOrderConfirmable } from "@/lib/orderLifecycle";
 
 interface RecentOrdersProps {
   orders: RecentOrder[];
@@ -355,7 +356,7 @@ export default function RecentOrders({
 
             {/* Close footer button */}
             <div className="p-6 border-t border-dashboard-border bg-slate-50 dark:bg-dashboard-inset flex items-center justify-between">
-              {selectedOrder && selectedOrder.status === "Pending" ? (
+              {selectedOrder && isOrderConfirmable(selectedOrder.status) ? (
                 <button
                   onClick={handleConfirmOrder}
                   disabled={isConfirming}
