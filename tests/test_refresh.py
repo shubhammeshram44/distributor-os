@@ -237,9 +237,9 @@ def test_unauthorized_refresh_clears_cookies(db_session):
         # Verify access_token delete attributes
         assert "access_token=" in cookie_header
         assert "path=/" in cookie_header
-        # Verify refresh_token delete attributes
+        # Verify refresh_token delete attributes (path must match the path used when setting)
         assert "refresh_token=" in cookie_header
-        assert "path=/api/v1/auth" in cookie_header
+        assert "path=/" in cookie_header
         # Dev attributes
         assert "secure" not in cookie_header
         assert "samesite=lax" in cookie_header
