@@ -96,22 +96,44 @@ def _ensure_utc(dt: datetime) -> datetime:
 
 
 def _set_refresh_cookie(response: Response, refresh_token: str):
+    """Set the HttpOnly refresh token cookie.
+
+    path="/" is required so the browser stores and sends the cookie on all
+    subsequent requests (including after browser restart). A restricted path
+    such as /api/v1/auth caused the cookie to be dropped or not sent reliably.
+    """
     _is_prod = os.getenv("ENVIRONMENT", "development") == "production"
-    response.set_cookie(key="refresh_token", value=refresh_token, httponly=True,
-                        secure=_is_prod, samesite="none" if _is_prod else "lax",
-                        max_age=604800, path="/api/v1/auth")
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        httponly=True,
+        secure=_is_prod,
+        samesite="none" if _is_prod else "lax",
+        max_age=settings.REFRESH_TOKEN_DAYS * 86400,
+        path="/",
+    )
 
 
 def _delete_refresh_cookie(response: Response):
     _is_prod = os.getenv("ENVIRONMENT", "development") == "production"
-    response.delete_cookie(key="refresh_token", httponly=True, secure=_is_prod,
-                           samesite="none" if _is_prod else "lax", path="/api/v1/auth")
+    response.delete_cookie(
+        key="refresh_token",
+        httponly=True,
+        secure=_is_prod,
+        samesite="none" if _is_prod else "lax",
+        path="/",
+    )
 
 
 def _delete_access_cookie(response: Response):
     _is_prod = os.getenv("ENVIRONMENT", "development") == "production"
-    response.delete_cookie(key="access_token", httponly=True, secure=_is_prod,
-                           samesite="none" if _is_prod else "lax", path="/")
+    response.delete_cookie(
+        key="access_token",
+        httponly=True,
+        secure=_is_prod,
+        samesite="none" if _is_prod else "lax",
+        path="/",
+    )
 
 
 def _unauthorized_response(detail: str) -> JSONResponse:
@@ -125,11 +147,18 @@ def _create_refresh_session(db: Session, user_id: uuid.UUID) -> str:
     raw_token = secrets.token_urlsafe(32)
     token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
     now = datetime.now(timezone.utc)
-    db.add(RefreshSession(id=uuid.uuid4(), user_id=user_id, token_hash=token_hash,
-                          previous_token_hash=None, previous_token_valid_until=None,
-                          created_at=now, last_used_at=now,
-                          expires_at=now + timedelta(days=7),
-                          absolute_expires_at=now + timedelta(days=30), revoked_at=None))
+    db.add(RefreshSession(
+        id=uuid.uuid4(),
+        user_id=user_id,
+        token_hash=token_hash,
+        previous_token_hash=None,
+        previous_token_valid_until=None,
+        created_at=now,
+        last_used_at=now,
+        expires_at=now + timedelta(days=settings.REFRESH_TOKEN_DAYS),
+        absolute_expires_at=now + timedelta(days=30),
+        revoked_at=None,
+    ))
     db.commit()
     return raw_token
 
@@ -172,23 +201,40 @@ def _get_firebase_app():
 
 def _issue_session_response(user: User, tenant: DistributorTenant | None, phone_number: str,
                             response: Response, db: Session, is_new_registration: bool) -> dict:
-    token = sign_jwt({"user_id": str(user.id),
-                      "tenant_id": str(user.tenant_id) if user.tenant_id else None,
-                      "sub": user.email_or_phone or phone_number, "role": user.role})
+    token = sign_jwt({
+        "user_id": str(user.id),
+        "tenant_id": str(user.tenant_id) if user.tenant_id else None,
+        "sub": user.email_or_phone or phone_number,
+        "role": user.role,
+    })
     _is_prod = os.getenv("ENVIRONMENT", "development") == "production"
-    response.set_cookie(key="access_token", value=token, httponly=True, secure=_is_prod,
-                        samesite="none" if _is_prod else "lax", max_age=3600 * 24, path="/")
+    response.set_cookie(
+        key="access_token",
+        value=token,
+        httponly=True,
+        secure=_is_prod,
+        samesite="none" if _is_prod else "lax",
+        max_age=3600 * 24,
+        path="/",
+    )
     refresh_token = _create_refresh_session(db, user.id)
     _set_refresh_cookie(response, refresh_token)
     return {
-        "status": "success", "is_new_user": False,
+        "status": "success",
+        "is_new_user": False,
         "is_new_registration": is_new_registration,
-        "token": token, "access_token": token, "token_type": "bearer",
+        "token": token,
+        "access_token": token,
+        "token_type": "bearer",
         "tenant_id": str(user.tenant_id) if user.tenant_id else None,
         "tenant_name": tenant.name if tenant else "My Workspace",
-        "user": {"id": str(user.id), "tenant_id": str(user.tenant_id) if user.tenant_id else None,
-                 "role": user.role, "full_name": user.full_name,
-                 "phone_number": user.phone_number or phone_number},
+        "user": {
+            "id": str(user.id),
+            "tenant_id": str(user.tenant_id) if user.tenant_id else None,
+            "role": user.role,
+            "full_name": user.full_name,
+            "phone_number": user.phone_number or phone_number,
+        },
     }
 
 
@@ -227,10 +273,18 @@ def firebase_login(payload: FirebaseLoginPayload, response: Response, db: Sessio
     user = uid_user or phone_user
 
     if not user:
-        signup_token = sign_jwt({"sub": phone_number, "firebase_uid": uid,
-                                 "phone_number": phone_number, "intent": "signup"}, expires_in=3600)
-        return {"status": "success", "is_new_user": True,
-                "phone_number": phone_number, "signup_token": signup_token}
+        signup_token = sign_jwt({
+            "sub": phone_number,
+            "firebase_uid": uid,
+            "phone_number": phone_number,
+            "intent": "signup",
+        }, expires_in=3600)
+        return {
+            "status": "success",
+            "is_new_user": True,
+            "phone_number": phone_number,
+            "signup_token": signup_token,
+        }
 
     # Never silently overwrite an existing Firebase identity.
     if user.firebase_uid and user.firebase_uid != uid:
@@ -264,13 +318,25 @@ def complete_signup(payload: SignupPayload, response: Response, db: Session = De
     if existing_phone_user or existing_uid_user:
         raise HTTPException(status_code=409, detail="An account with this phone number already exists. Please log in.")
 
-    new_tenant = DistributorTenant(id=uuid.uuid4(), name="My B2B Distribution",
-                                    plan_type="FREE", monthly_order_count=0)
+    new_tenant = DistributorTenant(
+        id=uuid.uuid4(),
+        name="My B2B Distribution",
+        plan_type="FREE",
+        monthly_order_count=0,
+    )
     db.add(new_tenant)
     db.flush()
-    user = User(id=uuid.uuid4(), tenant_id=new_tenant.id, full_name=payload.full_name,
-                phone_number=phone_number, email_or_phone=phone_number, hashed_password=None,
-                role="SUPER_ADMIN", is_active=True, firebase_uid=firebase_uid)
+    user = User(
+        id=uuid.uuid4(),
+        tenant_id=new_tenant.id,
+        full_name=payload.full_name,
+        phone_number=phone_number,
+        email_or_phone=phone_number,
+        hashed_password=None,
+        role="SUPER_ADMIN",
+        is_active=True,
+        firebase_uid=firebase_uid,
+    )
     db.add(user)
     # Fix for AUTH-5: the existence checks above are a plain check-then-insert
     # with no lock -- a classic TOCTOU race. Two near-simultaneous signup
@@ -288,8 +354,11 @@ def complete_signup(payload: SignupPayload, response: Response, db: Session = De
 
 
 @router.get("/me", status_code=status.HTTP_200_OK)
-def get_me(access_token: str | None = Cookie(None), authorization: str | None = Header(None),
-           db: Session = Depends(get_db)):
+def get_me(
+    access_token: str | None = Cookie(None),
+    authorization: str | None = Header(None),
+    db: Session = Depends(get_db),
+):
     token = None
     if authorization and authorization.startswith("Bearer "):
         token = authorization.split(" ")[1]
@@ -312,96 +381,147 @@ def get_me(access_token: str | None = Cookie(None), authorization: str | None = 
     if not user.is_active:
         raise HTTPException(status_code=401, detail="Account has been deactivated")
     tenant = db.get(DistributorTenant, user.tenant_id)
-    return {"id": str(user.id), "full_name": user.full_name,
-            "phone_number": user.phone_number or "", "role": user.role,
-            "tenant": {"id": str(tenant.id) if tenant else None,
-                       "name": tenant.name if tenant else None,
-                       "category": tenant.category if tenant else None}}
+    return {
+        "id": str(user.id),
+        "full_name": user.full_name,
+        "phone_number": user.phone_number or "",
+        "role": user.role,
+        "tenant": {
+            "id": str(tenant.id) if tenant else None,
+            "name": tenant.name if tenant else None,
+            "category": tenant.category if tenant else None,
+        },
+    }
 
 
 @router.post("/refresh", status_code=status.HTTP_200_OK)
-def refresh_session(request: Request, response: Response,
-                    refresh_token: str | None = Cookie(None), db: Session = Depends(get_db)):
+def refresh_session(
+    request: Request,
+    response: Response,
+    refresh_token: str | None = Cookie(None),
+    db: Session = Depends(get_db),
+):
     _validate_origin(request)
     if not refresh_token:
         return _unauthorized_response("Refresh token is missing. Please log in again.")
     token_hash = hashlib.sha256(refresh_token.encode("utf-8")).hexdigest()
     now = datetime.now(timezone.utc)
-    
+
     # Lookup by current token_hash or previous_token_hash
     session_row = db.query(RefreshSession).filter(
         or_(
             RefreshSession.token_hash == token_hash,
-            RefreshSession.previous_token_hash == token_hash
+            RefreshSession.previous_token_hash == token_hash,
         )
     ).with_for_update().first()
-    
+
     if not session_row:
         return _unauthorized_response("Invalid refresh session context.")
-        
-    is_expired = (_ensure_utc(session_row.expires_at) < now or
-                  _ensure_utc(session_row.absolute_expires_at) < now)
+
+    is_expired = (
+        _ensure_utc(session_row.expires_at) < now
+        or _ensure_utc(session_row.absolute_expires_at) < now
+    )
     if session_row.revoked_at is not None or is_expired:
         if is_expired and session_row.revoked_at is None:
             session_row.revoked_at = now
             db.commit()
-        return _unauthorized_response("Session has expired or has been revoked. Please verify your phone to continue.")
-        
+        return _unauthorized_response(
+            "Session has expired or has been revoked. Please verify your phone to continue."
+        )
+
     user = db.get(User, session_row.user_id)
     if not user or not user.is_active:
         return _unauthorized_response("Authenticated user is inactive or not found.")
-        
+
     matched_previous = (session_row.previous_token_hash == token_hash)
     if matched_previous:
         # Check if the previous token's grace window is still valid
-        grace_valid = (session_row.previous_token_valid_until is not None and
-                       _ensure_utc(session_row.previous_token_valid_until) >= now)
+        grace_valid = (
+            session_row.previous_token_valid_until is not None
+            and _ensure_utc(session_row.previous_token_valid_until) >= now
+        )
         if not grace_valid:
             return _unauthorized_response("Previous refresh token has expired. Please log in again.")
-        
+
         # CRITICAL CONCURRENCY FIX: Do NOT rotate the token again.
         # Return a new access token, and do NOT set/overwrite the refresh_token cookie.
-        new_access_token = sign_jwt({"user_id": str(user.id),
-                                     "tenant_id": str(user.tenant_id) if user.tenant_id else None,
-                                     "sub": user.email_or_phone, "role": user.role})
+        new_access_token = sign_jwt({
+            "user_id": str(user.id),
+            "tenant_id": str(user.tenant_id) if user.tenant_id else None,
+            "sub": user.email_or_phone,
+            "role": user.role,
+        })
         _is_prod = os.getenv("ENVIRONMENT", "development") == "production"
-        response.set_cookie(key="access_token", value=new_access_token, httponly=True, secure=_is_prod,
-                            samesite="none" if _is_prod else "lax", max_age=3600 * 24, path="/")
-        return {"status": "success", "token": new_access_token,
-                "access_token": new_access_token, "token_type": "bearer"}
-            
+        response.set_cookie(
+            key="access_token",
+            value=new_access_token,
+            httponly=True,
+            secure=_is_prod,
+            samesite="none" if _is_prod else "lax",
+            max_age=3600 * 24,
+            path="/",
+        )
+        return {
+            "status": "success",
+            "token": new_access_token,
+            "access_token": new_access_token,
+            "token_type": "bearer",
+        }
+
     new_raw_token = secrets.token_urlsafe(32)
     new_hash = hashlib.sha256(new_raw_token.encode("utf-8")).hexdigest()
-    
+
     # Shift current token to previous, and set grace period
     session_row.previous_token_hash = session_row.token_hash
     session_row.previous_token_valid_until = now + timedelta(seconds=60)
     session_row.token_hash = new_hash
     session_row.last_used_at = now
-    session_row.expires_at = min(now + timedelta(days=7), _ensure_utc(session_row.absolute_expires_at))
+    session_row.expires_at = min(
+        now + timedelta(days=settings.REFRESH_TOKEN_DAYS),
+        _ensure_utc(session_row.absolute_expires_at),
+    )
     db.commit()
-    
-    new_access_token = sign_jwt({"user_id": str(user.id),
-                                 "tenant_id": str(user.tenant_id) if user.tenant_id else None,
-                                 "sub": user.email_or_phone, "role": user.role})
+
+    new_access_token = sign_jwt({
+        "user_id": str(user.id),
+        "tenant_id": str(user.tenant_id) if user.tenant_id else None,
+        "sub": user.email_or_phone,
+        "role": user.role,
+    })
     _is_prod = os.getenv("ENVIRONMENT", "development") == "production"
-    response.set_cookie(key="access_token", value=new_access_token, httponly=True, secure=_is_prod,
-                        samesite="none" if _is_prod else "lax", max_age=3600 * 24, path="/")
+    response.set_cookie(
+        key="access_token",
+        value=new_access_token,
+        httponly=True,
+        secure=_is_prod,
+        samesite="none" if _is_prod else "lax",
+        max_age=3600 * 24,
+        path="/",
+    )
     _set_refresh_cookie(response, new_raw_token)
-    return {"status": "success", "token": new_access_token,
-            "access_token": new_access_token, "token_type": "bearer"}
+    return {
+        "status": "success",
+        "token": new_access_token,
+        "access_token": new_access_token,
+        "token_type": "bearer",
+    }
 
 
 @router.post("/logout", status_code=status.HTTP_200_OK)
-def logout(request: Request, response: Response,
-           refresh_token: str | None = Cookie(None), db: Session = Depends(get_db)):
+def logout(
+    request: Request,
+    response: Response,
+    refresh_token: str | None = Cookie(None),
+    db: Session = Depends(get_db),
+):
     _validate_origin(request)
     if refresh_token:
         token_hash = hashlib.sha256(refresh_token.encode("utf-8")).hexdigest()
         session_row = db.query(RefreshSession).filter(
             or_(
                 RefreshSession.token_hash == token_hash,
-                RefreshSession.previous_token_hash == token_hash
+                RefreshSession.previous_token_hash == token_hash,
             )
         ).with_for_update().first()
         if session_row and session_row.revoked_at is None:

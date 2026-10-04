@@ -94,6 +94,7 @@ def test_refresh_token_rotation(db_session):
     raw_token = _create_refresh_session(db_session, user.id)
     
     # Client performs refresh
+    client.cookies.clear()
     client.cookies.set("refresh_token", raw_token)
     response = client.post(
         "/api/v1/auth/refresh",
@@ -125,6 +126,7 @@ def test_refresh_expired_or_revoked_session(db_session):
     session_row.expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
     db_session.commit()
     
+    client.cookies.clear()
     client.cookies.set("refresh_token", raw_token)
     response = client.post(
         "/api/v1/auth/refresh",
@@ -147,6 +149,7 @@ def test_refresh_csrf_origin_check(db_session):
     tenant, user = _seed_user_and_tenant(db_session)
     raw_token = _create_refresh_session(db_session, user.id)
     
+    client.cookies.clear()
     client.cookies.set("refresh_token", raw_token)
     
     # Forbidden Origin
@@ -162,6 +165,7 @@ def test_logout_revokes_and_clears_cookies(db_session):
     tenant, user = _seed_user_and_tenant(db_session)
     raw_token = _create_refresh_session(db_session, user.id)
     
+    client.cookies.clear()
     client.cookies.set("refresh_token", raw_token)
     response = client.post(
         "/api/v1/auth/logout",
@@ -221,6 +225,7 @@ def test_concurrent_refresh_requests(db_session):
     assert session_row.previous_token_hash == hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
 
     # Verify that the new raw token is fully usable for subsequent normal refreshes
+    client.cookies.clear()
     client.cookies.set("refresh_token", new_raw_token)
     subsequent_resp = client.post("/api/v1/auth/refresh", headers={"Origin": "https://distroos.in"})
     assert subsequent_resp.status_code == 200
@@ -237,9 +242,9 @@ def test_unauthorized_refresh_clears_cookies(db_session):
         # Verify access_token delete attributes
         assert "access_token=" in cookie_header
         assert "path=/" in cookie_header
-        # Verify refresh_token delete attributes
+        # Verify refresh_token delete attributes (path must match the path used when setting)
         assert "refresh_token=" in cookie_header
-        assert "path=/api/v1/auth" in cookie_header
+        assert "path=/" in cookie_header
         # Dev attributes
         assert "secure" not in cookie_header
         assert "samesite=lax" in cookie_header
@@ -294,17 +299,22 @@ def test_previous_token_grace_period(db_session):
     raw_token_1 = _create_refresh_session(db_session, user.id)
     
     # 1. First refresh rotates token from 1 to 2
+    client.cookies.clear()
     client.cookies.set("refresh_token", raw_token_1)
     resp_1 = client.post("/api/v1/auth/refresh", headers={"Origin": "https://distroos.in"})
     assert resp_1.status_code == 200
     raw_token_2 = resp_1.cookies["refresh_token"]
     
     # 2. Refreshing again with token 1 (immediately previous token) within grace period should succeed,
-    # but under the concurrency fix it does NOT rotate, so no refresh_token cookie is returned.
+    # but under the concurrency fix it does NOT rotate, so no new refresh_token Set-Cookie is sent.
+    client.cookies.clear()
     client.cookies.set("refresh_token", raw_token_1)
     resp_2 = client.post("/api/v1/auth/refresh", headers={"Origin": "https://distroos.in"})
     assert resp_2.status_code == 200
-    assert "refresh_token" not in resp_2.cookies
+    set_cookie_header = resp_2.headers.get("set-cookie", "")
+    # Must issue a new access_token, but must NOT rotate/re-set the refresh_token cookie
+    assert "access_token=" in set_cookie_header.lower()
+    assert "refresh_token=" not in set_cookie_header.lower()
     
     # 3. Old token 1 outside grace period is rejected
     session_row = db_session.query(RefreshSession).filter(RefreshSession.user_id == user.id).first()
@@ -316,6 +326,7 @@ def test_previous_token_grace_period(db_session):
     assert resp_expired.status_code == 401
     
     # 4. Refreshing with token 2 (the current canonical token) should still succeed normally (rotates 2 -> 3)
+    client.cookies.clear()
     client.cookies.set("refresh_token", raw_token_2)
     resp_3 = client.post("/api/v1/auth/refresh", headers={"Origin": "https://distroos.in"})
     assert resp_3.status_code == 200
@@ -332,6 +343,9 @@ def test_rolling_and_absolute_expiry(db_session):
     
     initial_absolute = _ensure_utc(session_row.absolute_expires_at)
     
+    # Clear any cookies left by prior tests (shared TestClient). Required after
+    # refresh cookie path changed to "/" so delete_cookie actually clears the jar.
+    client.cookies.clear()
     client.cookies.set("refresh_token", raw_token)
     response = client.post("/api/v1/auth/refresh", headers={"Origin": "https://distroos.in"})
     assert response.status_code == 200
