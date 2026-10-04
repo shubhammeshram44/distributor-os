@@ -15,6 +15,7 @@ from app.api.v1.auth import router as auth_router
 from app.api.v1.tenant import router as tenant_router
 from app.api.v1.inventory import router as inventory_router
 from app.api.v1.admin import router as admin_router
+from app.api.v1.table_preferences import router as table_preferences_router
 # import app.api.v1.mocks if needed for other routes later
 
 api_router = APIRouter()
@@ -40,6 +41,7 @@ api_router.include_router(auth_router)
 api_router.include_router(tenant_router)
 api_router.include_router(inventory_router)
 api_router.include_router(admin_router)
+api_router.include_router(table_preferences_router)
 
 # COMMENTED OUT MOCK INTERCEPTOR TO PREVENT RESPONSE HIJACKING:
 # api_router.include_router(mocks_router)

@@ -41,6 +41,13 @@ import {
   ChevronDown,
   ShoppingCart
 } from "lucide-react";
+import { useTableViewPreference } from "@/hooks/useTableViewPreference";
+import {
+  ORDERS_TABLE_DEFINITION,
+  OrderRowContext,
+} from "@/lib/table/ordersTableDefinition";
+import ManageColumnsPopover from "@/components/table/ManageColumnsPopover";
+import OrderRowActions from "@/components/orders/OrderRowActions";
 
 interface OrderItem {
   id: string;
@@ -128,6 +135,19 @@ export default function OrdersPage() {
   const [isVanSalesOpen, setIsVanSalesOpen] = useState(false);
 
   const { toasts, toast: toastQueue, removeToast } = useToast();
+
+  // Reusable Table Framework & Column Preferences
+  const {
+    visibleColumns,
+    orderedColumns,
+    allColumns,
+    visibleColumnIds,
+    isCustom,
+    toggleColumn,
+    moveColumn,
+    resetToDefault,
+    isSaving: isSavingPrefs,
+  } = useTableViewPreference("orders", ORDERS_TABLE_DEFINITION, activeTenantId);
 
   // Hover Preview States
   const [activePreview, setActivePreview] = useState<{
@@ -801,6 +821,13 @@ export default function OrdersPage() {
       maximumFractionDigits: 0
     }).format(val);
   };
+
+  const rowContext: OrderRowContext = {
+    onOrderIdClick: handleOrderIdClick,
+    onTriggerMouseEnter: handleTriggerMouseEnter,
+    onTriggerMouseLeave: handleTriggerMouseLeave,
+    formatCurrency,
+  };
   if (!activeTenantId) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-slate-50 dark:bg-dashboard-inset">
@@ -969,15 +996,29 @@ export default function OrdersPage() {
               </button>
             </div>
 
-            {/* Search input */}
-            <div className="relative w-full sm:max-w-xs">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search order ID or retailer..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-dashboard-border rounded-lg text-sm bg-white dark:bg-dashboard-card focus:outline-none focus:ring-1 focus:ring-brand-blue focus:border-brand-blue text-slate-700 dark:text-slate-300 font-semibold"
+            {/* Search input and Manage Columns */}
+            <div className="flex items-center gap-2.5 w-full sm:w-auto">
+              <div className="relative w-full sm:w-64">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search order ID or retailer..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border border-dashboard-border rounded-lg text-sm bg-white dark:bg-dashboard-card focus:outline-none focus:ring-1 focus:ring-brand-blue focus:border-brand-blue text-slate-700 dark:text-slate-300 font-semibold"
+                />
+              </div>
+
+              <ManageColumnsPopover
+                allColumns={allColumns}
+                orderedColumns={orderedColumns}
+                visibleColumnIds={visibleColumnIds}
+                isCustom={isCustom}
+                requiredColumns={ORDERS_TABLE_DEFINITION.requiredColumns}
+                onToggleColumn={toggleColumn}
+                onMoveColumn={moveColumn}
+                onResetToDefault={resetToDefault}
+                isSaving={isSavingPrefs}
               />
             </div>
           </div>
@@ -989,19 +1030,27 @@ export default function OrdersPage() {
                 <table className="w-full text-left text-sm border-collapse">
                   <thead>
                     <tr className="text-slate-400 font-semibold text-xs border-b border-dashboard-border bg-slate-50/50 dark:bg-transparent">
-                      <th className="py-3 px-4 sm:px-6">Order ID</th>
-                      <th className="py-3 px-4 sm:px-6">Customer</th>
-                      <th className="py-3 px-3 text-center">Channel</th>
-                      <th className="py-3 px-4 text-right">Amount</th>
-                      <th className="py-3 px-4 text-left">Lifecycle</th>
-                      <th className="py-3 px-4 text-left">Current Stage</th>
-                      <th className="py-3 px-3 text-center">PAYMENT</th>
-                      <th className="py-3 px-3 text-center">Invoice Type</th>
-                      <th className="py-3 px-4">Created On</th>
+                      {visibleColumns.map((col) => (
+                        <th
+                          key={col.id}
+                          className={`py-3 px-4 ${
+                            col.id === "order" || col.id === "customer" ? "sm:px-6" : ""
+                          } ${
+                            col.align === "right"
+                              ? "text-right"
+                              : col.align === "center"
+                              ? "text-center"
+                              : "text-left"
+                          }`}
+                          style={{ minWidth: col.minWidth }}
+                        >
+                          {col.label}
+                        </th>
+                      ))}
                       <th className="py-3 px-4 text-right">Actions</th>
                     </tr>
                   </thead>
-                  <SkeletonTable rows={8} cols={10} />
+                  <SkeletonTable rows={8} cols={visibleColumns.length + 1} />
                 </table>
               ) : error ? (
                 <div className="flex flex-col items-center justify-center py-24 gap-3 text-rose-600 dark:text-rose-400">
@@ -1060,160 +1109,72 @@ export default function OrdersPage() {
                 <table className="w-full text-left text-sm border-collapse">
                   <thead>
                     <tr className="text-slate-400 font-semibold text-xs border-b border-dashboard-border bg-slate-50/50 dark:bg-transparent">
-                      <th className="py-3 px-4 sm:px-6">Order ID</th>
-                      <th className="py-3 px-4 sm:px-6">Customer</th>
-                      <th className="py-3 px-3 text-center">Channel</th>
-                      <th className="py-3 px-4 text-right">Amount</th>
-                      <th className="py-3 px-4 text-left">Lifecycle</th>
-                      <th className="py-3 px-4 text-left">Current Stage</th>
-                      <th className="py-3 px-3 text-center">PAYMENT</th>
-                      <th className="py-3 px-3 text-center">Invoice Type</th>
-                      <th className="py-3 px-4">Created On</th>
+                      {visibleColumns.map((col) => (
+                        <th
+                          key={col.id}
+                          className={`py-3 px-4 ${
+                            col.id === "order" || col.id === "customer" ? "sm:px-6" : ""
+                          } ${
+                            col.align === "right"
+                              ? "text-right"
+                              : col.align === "center"
+                              ? "text-center"
+                              : "text-left"
+                          }`}
+                          style={{ minWidth: col.minWidth }}
+                        >
+                          {col.label}
+                        </th>
+                      ))}
                       <th className="py-3 px-4 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-white/5">
-                    {filteredOrders.map((order) => {
-                      const { progress, currentStage, exception, isCancelled } = adaptOrderToLifecycle(
-                        order,
-                        DEFAULT_ORDER_LIFECYCLE
-                      );
-                      const primaryAction = getOrderPrimaryAction(order);
-
-                      return (
-                        <tr key={order.id} className="hover:bg-slate-50/70 dark:hover:bg-white/5 transition-colors group">
-                          <td className="py-3.5 px-4 sm:px-6 whitespace-nowrap">
-                            <div
-                              className="inline-flex items-center gap-1.5 cursor-pointer"
-                              onMouseEnter={(e) => handleTriggerMouseEnter(e, order)}
-                              onMouseLeave={handleTriggerMouseLeave}
-                              onFocus={(e) => handleTriggerMouseEnter(e, order)}
-                              onBlur={handleTriggerMouseLeave}
-                            >
-                              <button
-                                onClick={() => handleOrderIdClick(order)}
-                                className="cursor-pointer font-bold text-left text-brand-blue hover:underline focus:outline-none focus:ring-1 focus:ring-brand-blue rounded"
-                                aria-haspopup="dialog"
-                                aria-label={`Order ${order.order_id}, click for details, hover for operational preview`}
-                              >
-                                {order.order_id}
-                              </button>
-                            </div>
+                    {filteredOrders.map((order) => (
+                      <tr key={order.id} className="hover:bg-slate-50/70 dark:hover:bg-white/5 transition-colors group">
+                        {visibleColumns.map((col) => (
+                          <td
+                            key={col.id}
+                            className={`py-3.5 px-4 ${
+                              col.id === "order" || col.id === "customer" ? "sm:px-6" : ""
+                            } ${
+                              col.align === "right"
+                                ? "text-right"
+                                : col.align === "center"
+                                ? "text-center"
+                                : "text-left"
+                            }`}
+                          >
+                            {col.renderCell(order, rowContext)}
                           </td>
-                          <td className="py-3.5 px-4 sm:px-6 font-semibold text-slate-700 dark:text-slate-300 max-w-[180px] truncate" title={order.customer}>
-                            {order.customer}
-                          </td>
-                          <td className="py-3.5 px-3 text-center">
-                            <div className="flex items-center justify-center">
-                              {order.channel.toLowerCase() === "whatsapp" ? (
-                                <div className="w-7 h-7 rounded-full bg-emerald-50 dark:bg-emerald-500/10 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shadow-sm" title="WhatsApp Channel">
-                                  <MessageSquare className="w-4 h-4" />
-                                </div>
-                              ) : (
-                                <div className="w-7 h-7 rounded-full bg-blue-50 dark:bg-blue-500/10 flex items-center justify-center text-blue-600 dark:text-blue-400 shadow-sm" title="Portal Channel">
-                                  <Globe className="w-4 h-4" />
-                                </div>
-                              )}
-                            </div>
-                          </td>
-                          <td className="py-3.5 px-4 text-right font-extrabold text-slate-800 dark:text-slate-100 whitespace-nowrap">
-                            {formatCurrency(order.amount)}
-                          </td>
-                          <td className="py-3.5 px-4 text-left min-w-[130px]">
-                            <OrderLifecycleProgress
-                              stages={DEFAULT_ORDER_LIFECYCLE.stages}
-                              currentStageId={progress.currentStageId}
-                              completedStageIds={progress.completedStageIds}
-                              isCancelled={isCancelled}
-                            />
-                          </td>
-                          <td className="py-3.5 px-4 text-left min-w-[140px]">
-                            <OrderCurrentStage
-                              stage={currentStage}
-                              exception={exception}
-                              isCancelled={isCancelled}
-                            />
-                          </td>
-                          <td className="py-3.5 px-3 text-center">
-                            <span className={`inline-flex items-center justify-center gap-1.5 whitespace-nowrap w-24 px-2.5 py-1 rounded-full text-xs font-bold leading-none border ${order.payment_status === "PAID"
-                              ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20"
-                              : order.payment_status === "PARTIALLY_PAID"
-                                ? "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/20"
-                                : "bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-500/20"
-                              }`}>
-                              <span className={`w-1.5 h-1.5 rounded-full ${order.payment_status === "PAID"
-                                ? "bg-emerald-500"
-                                : order.payment_status === "PARTIALLY_PAID"
-                                  ? "bg-amber-500"
-                                  : "bg-rose-500"
-                                }`} />
-                              {order.payment_status === "PAID"
-                                ? "Paid"
-                                : order.payment_status === "PARTIALLY_PAID"
-                                  ? "Partial"
-                                  : "Unpaid"}
-                            </span>
-                          </td>
-                          <td className="py-3.5 px-3 text-center">
-                            {renderInvoiceTypeBadge(order.invoice_type)}
-                          </td>
-                          <td className="py-3.5 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                            {formatDateTime(order.created_on, "datetime")}
-                          </td>
-                          <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                            <div className="flex items-center justify-end gap-1.5">
-                              {primaryAction === "deliver" && (
-                                <button
-                                  onClick={() => handleOrderIdClick(order)}
-                                  className="px-2 py-1 text-[11px] font-bold rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-700 border border-teal-200 dark:bg-teal-500/10 dark:hover:bg-teal-500/20 dark:text-teal-400 dark:border-teal-500/20 transition-all cursor-pointer shadow-2xs"
-                                  title="Mark order as delivered"
-                                >
-                                  Deliver
-                                </button>
-                              )}
-                              {primaryAction === "invoice" && (
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-                                    window.open(`${apiBase}/api/v1/orders/${order.id}/invoice`, "_blank");
-                                  }}
-                                  className="px-2 py-1 text-[11px] font-bold rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-500/10 dark:hover:bg-blue-500/20 dark:text-blue-400 dark:border-blue-500/20 transition-all cursor-pointer shadow-2xs"
-                                  title="Download B2B Invoice"
-                                >
-                                  Invoice
-                                </button>
-                              )}
-                              {primaryAction === "confirm" && (
-                                <button
-                                  onClick={() => handleOrderIdClick(order)}
-                                  className="px-2 py-1 text-[11px] font-bold rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/10 dark:hover:bg-emerald-500/20 dark:text-emerald-400 dark:border-emerald-500/20 transition-all cursor-pointer shadow-2xs"
-                                  title="Review & Confirm order"
-                                >
-                                  Confirm
-                                </button>
-                              )}
-                              {primaryAction === "review" && (
-                                <button
-                                  onClick={() => handleOrderIdClick(order)}
-                                  className="px-2 py-1 text-[11px] font-bold rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 dark:bg-amber-500/10 dark:hover:bg-amber-500/20 dark:text-amber-400 dark:border-amber-500/20 transition-all cursor-pointer shadow-2xs"
-                                  title="Review & map unmatched SKUs"
-                                >
-                                  Review
-                                </button>
-                              )}
-                              <button
-                                onClick={() => handleOrderIdClick(order)}
-                                className="inline-flex items-center gap-0.5 text-xs font-bold text-brand-blue hover:text-brand-blueHover cursor-pointer py-1 px-1.5 rounded hover:bg-brand-blue/5 transition-all"
-                              >
-                                <span>Details</span>
-                                <ChevronRight className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
+                        ))}
+                        <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                          <OrderRowActions
+                            order={order}
+                            onOpenDetails={handleOrderIdClick}
+                            onDownloadInvoice={(o) => {
+                              const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+                              window.open(`${apiBase}/api/v1/orders/${o.id}/invoice`, "_blank");
+                            }}
+                            onChangeInvoiceType={(o) => {
+                              handleOrderIdClick(o);
+                              setIsEditingInvoiceType(true);
+                            }}
+                            onCancelOrder={(o) => {
+                              setSelectedOrderId(o.id);
+                              setSelectedOrderNo(o.order_id);
+                              setIsCancelDialogOpen(true);
+                            }}
+                            onCopyOrderId={(o) => {
+                              if (typeof navigator !== "undefined" && navigator.clipboard) {
+                                navigator.clipboard.writeText(o.order_id);
+                                showToast(`Order ID ${o.order_id} copied to clipboard`, "success");
+                              }
+                            }}
+                          />
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               )}
