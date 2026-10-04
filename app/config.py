@@ -23,6 +23,12 @@ class Settings(BaseSettings):
     # does not otherwise change app behavior.
     ENVIRONMENT: str = "development"
 
+    # Refresh token sliding window in days. Controls how long a user stays
+    # logged in without re-authenticating. Default is 7 days. Do not reduce
+    # the effective session lifetime without an explicit product decision.
+    # Absolute maximum remains 30 days (hard-coded for now).
+    REFRESH_TOKEN_DAYS: int = 7
+
     # Allow configuration via environment variables or .env file
     model_config = SettingsConfigDict(
         env_file=".env",
