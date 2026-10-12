@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { TrendingUp, AlertTriangle, Wallet } from "lucide-react";
+import MetricInfo from "@/components/ui/MetricInfo";
 
 interface CashFlowForecast {
   expected_collections_this_week: number;
@@ -52,17 +53,18 @@ export default function CashFlowForecastCard({ activeTenantId }: CashFlowForecas
 
   return (
     <div className="bg-white dark:bg-dashboard-card p-5 rounded-xl border border-dashboard-border shadow-sm h-full w-full flex flex-col">
-      {/* Card header */}
       <div className="flex items-start justify-between pb-4 border-b border-dashboard-border mb-4">
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 flex items-center justify-center text-emerald-500 shrink-0">
             <Wallet className="w-4 h-4" />
           </div>
-          <h3 className="font-bold text-slate-800 dark:text-slate-100 text-base">Cash Flow Forecast</h3>
+          <h3 className="font-bold text-slate-800 dark:text-slate-100 text-base flex items-center">
+            Expected collections
+            <MetricInfo text="Money you can expect from customers this week. At risk means overdue or unlikely without follow-up." />
+          </h3>
         </div>
       </div>
 
-      {/* Card body */}
       <div className="flex-1 flex flex-col justify-center gap-3">
         {loading && (
           <div className="flex flex-col items-center justify-center h-32 gap-2">
