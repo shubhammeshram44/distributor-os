@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { TrendingDown, AlertTriangle, CreditCard, Package } from "lucide-react";
+import MetricInfo from "@/components/ui/MetricInfo";
 
 /**
  * Maps a reason_code string to a colour palette token and an icon component.
@@ -118,7 +119,7 @@ export default function DemandGapCard({ activeTenantId }: DemandGapCardProps) {
     if (total_revenue_at_risk === 0) {
       return (
         <p className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold mt-1">
-          No demand gaps recorded in the last{" "}
+          No missed sales recorded in the last{" "}
           <span className="font-bold">{window_days}</span>{" "}
           {window_days === 1 ? "day" : "days"} ✓
         </p>
@@ -144,20 +145,21 @@ export default function DemandGapCard({ activeTenantId }: DemandGapCardProps) {
 
   return (
     <div className="bg-white dark:bg-dashboard-card p-5 rounded-xl border border-dashboard-border shadow-sm h-full w-full flex flex-col">
-      {/* Card header */}
       <div className="flex items-start justify-between pb-4 border-b border-dashboard-border mb-4">
         <div>
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-lg bg-rose-50 dark:bg-rose-500/10 flex items-center justify-center text-rose-500 shrink-0">
               <TrendingDown className="w-4 h-4" />
             </div>
-            <h3 className="font-bold text-slate-800 dark:text-slate-100 text-base">Demand Gap</h3>
+            <h3 className="font-bold text-slate-800 dark:text-slate-100 text-base flex items-center">
+              Missed sales
+              <MetricInfo text="Orders you could not fully supply—mainly due to low stock—and the sales value at risk." />
+            </h3>
           </div>
           {!loading && !error && headline()}
         </div>
       </div>
 
-      {/* Card body */}
       <div className="flex-1 flex flex-col justify-start gap-3">
         {loading && (
           <div className="flex flex-col items-center justify-center h-32 gap-2">
@@ -182,7 +184,6 @@ export default function DemandGapCard({ activeTenantId }: DemandGapCardProps) {
           </div>
         )}
 
-        {/* Generic reason breakdown — renders whatever the API returns */}
         {!loading && !error && summary && summary.by_reason.length > 0 && (
           <div className="space-y-2.5">
             {summary.by_reason.map((entry) => {
