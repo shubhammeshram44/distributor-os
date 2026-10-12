@@ -107,7 +107,7 @@ export default function CollectionsDonut({ data, viewReportHref, overdue60Count 
         <div className="mt-3 p-2.5 bg-amber-50/70 dark:bg-amber-500/[0.08] border border-amber-200 dark:border-amber-500/20 rounded-xl flex items-center justify-between text-[11px] gap-2">
           <div className="flex items-center gap-2 text-amber-800 dark:text-amber-300">
             <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
-            <span className="font-semibold">{overdue60Count} customers have outstanding balances > 60 days</span>
+            <span className="font-semibold">{overdue60Count} customers have balances older than 60 days</span>
           </div>
           <Link href="/dashboard/customers?filter=overdue_60" className="text-brand-blue hover:text-brand-blueHover font-bold shrink-0 hover:underline">
             View customers
