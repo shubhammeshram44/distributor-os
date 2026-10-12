@@ -37,6 +37,8 @@ function getFirebaseErrorMessage(err: unknown): string {
       "auth/missing-verification-code": "Please enter the 6-digit verification code.",
       "auth/network-request-failed": "Network error. Please check your connection and try again.",
       "auth/user-disabled": "This account has been disabled. Please contact support.",
+      "auth/billing-not-enabled":
+        "Phone login is temporarily unavailable. Please try again later or contact support.",
     };
     if (code && firebaseMessages[code]) return firebaseMessages[code];
     if (err.message) return err.message;
